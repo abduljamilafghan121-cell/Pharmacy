@@ -1,45 +1,53 @@
-# [Project name]
+# Pharmacy Management System
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
-
-## Run & Operate
-
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+A full-stack pharmacy management system built as a pnpm monorepo.
 
 ## Stack
 
-- pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- **Frontend**: React 19, Vite, TailwindCSS v4, TanStack Query, Wouter (routing), shadcn/ui
+- **Backend**: Node.js, Express, TypeScript, Pino (logging)
+- **Database**: PostgreSQL via Drizzle ORM
+- **API contract**: OpenAPI 3.1 spec → Orval codegen (typed client + Zod schemas)
 
-## Where things live
+## Monorepo layout
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+```
+artifacts/
+  api-server/   Express API server (entry: src/index.ts)
+  web/          React frontend (entry: src/main.tsx)
+  mockup-sandbox/ UI component sandbox (internal tooling)
 
-## Architecture decisions
+lib/
+  db/           Drizzle schema + migrations
+  api-spec/     openapi.yaml + Orval codegen config
+  api-client-react/ Generated TanStack Query hooks
+  api-zod/      Generated Zod validation schemas
+```
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+## Key domain areas
 
-## Product
+| Area | API routes | DB schema |
+|------|-----------|-----------|
+| Auth / Users | `/api/auth/*` | `lib/db/src/schema/users.ts` |
+| Medicines / Inventory | `/api/medicines/*` | `lib/db/src/schema/medicines.ts` |
+| Categories | `/api/categories/*` | `lib/db/src/schema/categories.ts` |
+| Suppliers | `/api/suppliers/*` | `lib/db/src/schema/suppliers.ts` |
+| Patients | `/api/patients/*` | `lib/db/src/schema/patients.ts` |
+| Prescriptions | `/api/prescriptions/*` | `lib/db/src/schema/prescriptions.ts` |
+| Orders / Sales | `/api/orders/*` | `lib/db/src/schema/orders.ts` |
+| Payments | `/api/payments/*` | `lib/db/src/schema/payments.ts` |
+| Purchase Orders | `/api/purchase-orders/*` | `lib/db/src/schema/purchase-orders.ts` |
+| Reports | `/api/reports/*` | (aggregation queries) |
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+## Running locally on Replit
+
+The project needs a PostgreSQL database before it can run. To get it fully running:
+
+1. Provision a Replit PostgreSQL database (the `DATABASE_URL` secret must be set)
+2. Run migrations: `pnpm --filter @workspace/db run db:push`
+3. Start the API server: `PORT=8080 pnpm --filter @workspace/api-server run dev`
+4. Start the web frontend: `pnpm --filter @workspace/web run dev`
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
-
-## Gotchas
-
-_Populate as you build — sharp edges, "always run X before Y" rules._
-
-## Pointers
-
-- See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+<!-- Agent: record user preferences here -->
