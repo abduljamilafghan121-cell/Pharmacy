@@ -1,4 +1,5 @@
 export * from "./users";
+export * from "./patients";
 export * from "./categories";
 export * from "./suppliers";
 export * from "./medicines";

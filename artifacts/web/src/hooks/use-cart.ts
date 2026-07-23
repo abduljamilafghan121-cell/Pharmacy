@@ -1,64 +1,23 @@
-import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
-import { Medicine } from "@workspace/api-client-react/src/generated/api.schemas";
+// Cart is no longer used — this is a POS system.
+// Sales are processed directly on the New Sale screen.
+// This file is kept as a stub to avoid breaking any stale imports.
 
-export interface CartItem extends Medicine {
+export interface CartItem {
+  id: number;
+  name: string;
+  price: string;
+  quantity: number;
+  prescriptionRequired: boolean;
   selectedQuantity: number;
+  [key: string]: unknown;
 }
 
-interface CartStore {
-  items: CartItem[];
-  addToCart: (item: CartItem) => void;
-  removeFromCart: (medicineId: number) => void;
-  updateQuantity: (medicineId: number, quantity: number) => void;
-  clearCart: () => void;
-  getCartTotal: () => number;
-  requiresPrescription: () => boolean;
-}
-
-export const useCart = create<CartStore>()(
-  persist(
-    (set, get) => ({
-      items: [],
-      
-      addToCart: (item) => set((state) => {
-        const existing = state.items.find((i) => i.id === item.id);
-        if (existing) {
-          return {
-            items: state.items.map((i) => 
-              i.id === item.id 
-                ? { ...i, selectedQuantity: i.selectedQuantity + item.selectedQuantity }
-                : i
-            )
-          };
-        }
-        return { items: [...state.items, item] };
-      }),
-      
-      removeFromCart: (id) => set((state) => ({
-        items: state.items.filter((i) => i.id !== id)
-      })),
-      
-      updateQuantity: (id, quantity) => set((state) => ({
-        items: state.items.map((i) => 
-          i.id === id ? { ...i, selectedQuantity: quantity } : i
-        )
-      })),
-      
-      clearCart: () => set({ items: [] }),
-      
-      getCartTotal: () => {
-        const { items } = get();
-        return items.reduce((total, item) => total + (parseFloat(item.price) * item.selectedQuantity), 0);
-      },
-      
-      requiresPrescription: () => {
-        const { items } = get();
-        return items.some(item => item.prescriptionRequired);
-      }
-    }),
-    {
-      name: 'pharma-cart-storage',
-    }
-  )
-);
+export const useCart = () => ({
+  items: [] as CartItem[],
+  addToCart: (_item: CartItem) => {},
+  removeFromCart: (_id: number) => {},
+  updateQuantity: (_id: number, _qty: number) => {},
+  clearCart: () => {},
+  getCartTotal: () => 0,
+  requiresPrescription: () => false,
+});

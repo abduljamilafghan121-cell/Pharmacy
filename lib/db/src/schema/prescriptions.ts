@@ -2,13 +2,15 @@ import { pgTable, text, serial, timestamp, integer, pgEnum } from "drizzle-orm/p
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { usersTable } from "./users";
+import { patientsTable } from "./patients";
 
 export const prescriptionStatusEnum = pgEnum("prescription_status", ["pending", "verified", "rejected"]);
 
 export const prescriptionsTable = pgTable("prescriptions", {
   id: serial("id").primaryKey(),
-  customerId: integer("customer_id").notNull().references(() => usersTable.id),
-  imageUrl: text("image_url"),
+  patientId: integer("patient_id").references(() => patientsTable.id),
+  patientName: text("patient_name"),       // quick name if no patient record
+  doctorName: text("doctor_name"),
   status: prescriptionStatusEnum("status").notNull().default("pending"),
   verifiedBy: integer("verified_by").references(() => usersTable.id),
   notes: text("notes"),

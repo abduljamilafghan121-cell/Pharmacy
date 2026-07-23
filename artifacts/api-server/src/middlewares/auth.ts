@@ -5,7 +5,7 @@ const JWT_SECRET = process.env["JWT_SECRET"] ?? "pharma-dev-secret-change-in-pro
 
 export interface AuthPayload {
   userId: number;
-  role: "admin" | "pharmacist" | "customer";
+  role: "admin" | "pharmacist";
 }
 
 declare global {
@@ -36,7 +36,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
   }
 }
 
-export function requireRole(...roles: Array<"admin" | "pharmacist" | "customer">) {
+export function requireRole(...roles: Array<"admin" | "pharmacist">) {
   return (req: Request, res: Response, next: NextFunction): void => {
     if (!req.auth) {
       res.status(401).json({ error: "Unauthorized" });

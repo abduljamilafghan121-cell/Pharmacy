@@ -57,10 +57,7 @@ export default function Login() {
               Sign in to your account
             </h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              Or{" "}
-              <Link href="/register" className="font-medium text-primary hover:text-primary/80 transition-colors">
-                create a new customer account
-              </Link>
+              Staff login — contact your administrator for access.
             </p>
           </div>
 

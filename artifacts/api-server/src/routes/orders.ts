@@ -1,50 +1,49 @@
 import { Router, type IRouter } from "express";
 import { eq, sql } from "drizzle-orm";
-import { db, ordersTable, orderItemsTable, medicinesTable, usersTable } from "@workspace/db";
+import { db, ordersTable, orderItemsTable, medicinesTable, usersTable, paymentsTable } from "@workspace/db";
 import {
   CreateOrderBody, UpdateOrderStatusBody,
   GetOrderParams, UpdateOrderStatusParams,
 } from "@workspace/api-zod";
-import { requireAuth, requireRole } from "../middlewares/auth";
+import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
 
 router.get("/orders", requireAuth, async (req, res): Promise<void> => {
-  const { role, userId } = req.auth!;
   const rows = await db
     .select({
       id: ordersTable.id,
-      customerId: ordersTable.customerId,
-      customerName: usersTable.name,
-      prescriptionId: ordersTable.prescriptionId,
+      patientId: ordersTable.patientId,
+      patientName: ordersTable.patientName,
+      servedByName: usersTable.name,
       status: ordersTable.status,
       subtotal: ordersTable.subtotal,
       total: ordersTable.total,
       paymentStatus: ordersTable.paymentStatus,
+      notes: ordersTable.notes,
       createdAt: ordersTable.createdAt,
     })
     .from(ordersTable)
-    .leftJoin(usersTable, eq(ordersTable.customerId, usersTable.id))
-    .where(role === "customer" ? eq(ordersTable.customerId, userId) : undefined)
+    .leftJoin(usersTable, eq(ordersTable.servedBy, usersTable.id))
     .orderBy(sql`${ordersTable.createdAt} DESC`);
   res.json(rows);
 });
 
-router.post("/orders", requireAuth, requireRole("customer"), async (req, res): Promise<void> => {
+router.post("/orders", requireAuth, async (req, res): Promise<void> => {
   const parsed = CreateOrderBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const { items, prescriptionId } = parsed.data;
+  const { items, patientId, patientName, paymentMethod, notes } = parsed.data;
 
   // Fetch all medicines
-  const medicineIds = items.map((i) => i.medicineId);
+  const medicineIds = items.map((i: { medicineId: number; quantity: number }) => i.medicineId);
   const medicines = await db.select().from(medicinesTable).where(
     sql`${medicinesTable.id} = ANY(${medicineIds})`
   );
 
-  // Validate stock and prescription requirement
+  // Validate stock
   for (const item of items) {
     const med = medicines.find((m) => m.id === item.medicineId);
     if (!med) {
@@ -52,11 +51,7 @@ router.post("/orders", requireAuth, requireRole("customer"), async (req, res): P
       return;
     }
     if (med.quantity < item.quantity) {
-      res.status(400).json({ error: `Insufficient stock for ${med.name}` });
-      return;
-    }
-    if (med.prescriptionRequired && !prescriptionId) {
-      res.status(400).json({ error: `${med.name} requires a verified prescription` });
+      res.status(400).json({ error: `Insufficient stock for ${med.name} (available: ${med.quantity})` });
       return;
     }
   }
@@ -71,27 +66,45 @@ router.post("/orders", requireAuth, requireRole("customer"), async (req, res): P
 
   // Create order
   const [order] = await db.insert(ordersTable).values({
-    customerId: req.auth!.userId,
-    prescriptionId: prescriptionId ?? null,
+    patientId: patientId ?? null,
+    patientName: patientName ?? null,
+    servedBy: req.auth!.userId,
     subtotal: subtotal.toFixed(2),
     total: total.toFixed(2),
+    status: "dispensed",
+    paymentStatus: "paid",
+    notes: notes ?? null,
   }).returning();
 
   // Create items and decrement stock
   const orderItems = [];
   for (const item of items) {
     const med = medicines.find((m) => m.id === item.medicineId)!;
+    const unitPrice = parseFloat(med.price);
     const [oi] = await db.insert(orderItemsTable).values({
       orderId: order.id,
       medicineId: item.medicineId,
       quantity: item.quantity,
-      price: (parseFloat(med.price) * item.quantity).toFixed(2),
+      price: (unitPrice * item.quantity).toFixed(2),
     }).returning();
     orderItems.push({ ...oi, medicineName: med.name });
-    await db.update(medicinesTable).set({ quantity: med.quantity - item.quantity }).where(eq(medicinesTable.id, med.id));
+    await db.update(medicinesTable)
+      .set({ quantity: med.quantity - item.quantity })
+      .where(eq(medicinesTable.id, med.id));
   }
 
-  res.status(201).json({ ...order, customerName: null, items: orderItems });
+  // Create payment record
+  await db.insert(paymentsTable).values({
+    orderId: order.id,
+    amount: total.toFixed(2),
+    method: paymentMethod,
+    status: "completed",
+  });
+
+  // Fetch servedBy name
+  const [staff] = await db.select({ name: usersTable.name }).from(usersTable).where(eq(usersTable.id, req.auth!.userId));
+
+  res.status(201).json({ ...order, servedByName: staff?.name ?? null, items: orderItems });
 });
 
 router.get("/orders/:id", requireAuth, async (req, res): Promise<void> => {
@@ -103,19 +116,20 @@ router.get("/orders/:id", requireAuth, async (req, res): Promise<void> => {
   const [order] = await db
     .select({
       id: ordersTable.id,
-      customerId: ordersTable.customerId,
-      customerName: usersTable.name,
-      prescriptionId: ordersTable.prescriptionId,
+      patientId: ordersTable.patientId,
+      patientName: ordersTable.patientName,
+      servedByName: usersTable.name,
       status: ordersTable.status,
       subtotal: ordersTable.subtotal,
       total: ordersTable.total,
       paymentStatus: ordersTable.paymentStatus,
+      notes: ordersTable.notes,
       createdAt: ordersTable.createdAt,
     })
     .from(ordersTable)
-    .leftJoin(usersTable, eq(ordersTable.customerId, usersTable.id))
+    .leftJoin(usersTable, eq(ordersTable.servedBy, usersTable.id))
     .where(eq(ordersTable.id, params.data.id));
-  if (!order) { res.status(404).json({ error: "Order not found" }); return; }
+  if (!order) { res.status(404).json({ error: "Sale not found" }); return; }
 
   const items = await db
     .select({
@@ -133,7 +147,7 @@ router.get("/orders/:id", requireAuth, async (req, res): Promise<void> => {
   res.json({ ...order, items });
 });
 
-router.patch("/orders/:id/status", requireAuth, requireRole("admin", "pharmacist"), async (req, res): Promise<void> => {
+router.patch("/orders/:id/status", requireAuth, async (req, res): Promise<void> => {
   const params = UpdateOrderStatusParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -147,8 +161,8 @@ router.patch("/orders/:id/status", requireAuth, requireRole("admin", "pharmacist
   const [row] = await db
     .update(ordersTable).set({ status: parsed.data.status })
     .where(eq(ordersTable.id, params.data.id)).returning();
-  if (!row) { res.status(404).json({ error: "Order not found" }); return; }
-  res.json({ ...row, customerName: null });
+  if (!row) { res.status(404).json({ error: "Sale not found" }); return; }
+  res.json({ ...row, servedByName: null });
 });
 
 export default router;

@@ -1,46 +1,53 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
-import { db, prescriptionsTable, usersTable } from "@workspace/db";
+import { db, prescriptionsTable, patientsTable } from "@workspace/db";
 import {
   CreatePrescriptionBody, VerifyPrescriptionBody, RejectPrescriptionBody,
   GetPrescriptionParams, VerifyPrescriptionParams, RejectPrescriptionParams,
 } from "@workspace/api-zod";
-import { requireAuth, requireRole } from "../middlewares/auth";
+import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
 
 router.get("/prescriptions", requireAuth, async (req, res): Promise<void> => {
-  const { role, userId } = req.auth!;
   const rows = await db
     .select({
       id: prescriptionsTable.id,
-      customerId: prescriptionsTable.customerId,
-      customerName: usersTable.name,
-      imageUrl: prescriptionsTable.imageUrl,
+      patientId: prescriptionsTable.patientId,
+      patientName: prescriptionsTable.patientName,
+      doctorName: prescriptionsTable.doctorName,
       status: prescriptionsTable.status,
       verifiedBy: prescriptionsTable.verifiedBy,
       notes: prescriptionsTable.notes,
       createdAt: prescriptionsTable.createdAt,
     })
     .from(prescriptionsTable)
-    .leftJoin(usersTable, eq(prescriptionsTable.customerId, usersTable.id))
-    .where(role === "customer" ? eq(prescriptionsTable.customerId, userId) : undefined)
     .orderBy(prescriptionsTable.createdAt);
   res.json(rows);
 });
 
-router.post("/prescriptions", requireAuth, requireRole("customer"), async (req, res): Promise<void> => {
+router.post("/prescriptions", requireAuth, async (req, res): Promise<void> => {
   const parsed = CreatePrescriptionBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
+
+  let resolvedPatientName = parsed.data.patientName ?? null;
+
+  // If patientId provided but no name, resolve from patients table
+  if (parsed.data.patientId && !resolvedPatientName) {
+    const [patient] = await db.select().from(patientsTable).where(eq(patientsTable.id, parsed.data.patientId));
+    resolvedPatientName = patient?.name ?? null;
+  }
+
   const [row] = await db.insert(prescriptionsTable).values({
-    customerId: req.auth!.userId,
-    imageUrl: parsed.data.imageUrl ?? null,
+    patientId: parsed.data.patientId ?? null,
+    patientName: resolvedPatientName,
+    doctorName: parsed.data.doctorName ?? null,
     notes: parsed.data.notes ?? null,
   }).returning();
-  res.status(201).json({ ...row, customerName: null });
+  res.status(201).json(row);
 });
 
 router.get("/prescriptions/:id", requireAuth, async (req, res): Promise<void> => {
@@ -52,22 +59,21 @@ router.get("/prescriptions/:id", requireAuth, async (req, res): Promise<void> =>
   const [row] = await db
     .select({
       id: prescriptionsTable.id,
-      customerId: prescriptionsTable.customerId,
-      customerName: usersTable.name,
-      imageUrl: prescriptionsTable.imageUrl,
+      patientId: prescriptionsTable.patientId,
+      patientName: prescriptionsTable.patientName,
+      doctorName: prescriptionsTable.doctorName,
       status: prescriptionsTable.status,
       verifiedBy: prescriptionsTable.verifiedBy,
       notes: prescriptionsTable.notes,
       createdAt: prescriptionsTable.createdAt,
     })
     .from(prescriptionsTable)
-    .leftJoin(usersTable, eq(prescriptionsTable.customerId, usersTable.id))
     .where(eq(prescriptionsTable.id, params.data.id));
   if (!row) { res.status(404).json({ error: "Prescription not found" }); return; }
   res.json(row);
 });
 
-router.patch("/prescriptions/:id/verify", requireAuth, requireRole("admin", "pharmacist"), async (req, res): Promise<void> => {
+router.patch("/prescriptions/:id/verify", requireAuth, async (req, res): Promise<void> => {
   const params = VerifyPrescriptionParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -84,10 +90,10 @@ router.patch("/prescriptions/:id/verify", requireAuth, requireRole("admin", "pha
     .where(eq(prescriptionsTable.id, params.data.id))
     .returning();
   if (!row) { res.status(404).json({ error: "Prescription not found" }); return; }
-  res.json({ ...row, customerName: null });
+  res.json(row);
 });
 
-router.patch("/prescriptions/:id/reject", requireAuth, requireRole("admin", "pharmacist"), async (req, res): Promise<void> => {
+router.patch("/prescriptions/:id/reject", requireAuth, async (req, res): Promise<void> => {
   const params = RejectPrescriptionParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -104,7 +110,7 @@ router.patch("/prescriptions/:id/reject", requireAuth, requireRole("admin", "pha
     .where(eq(prescriptionsTable.id, params.data.id))
     .returning();
   if (!row) { res.status(404).json({ error: "Prescription not found" }); return; }
-  res.json({ ...row, customerName: null });
+  res.json(row);
 });
 
 export default router;

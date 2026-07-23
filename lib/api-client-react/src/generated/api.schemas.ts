@@ -20,6 +20,7 @@ export interface UserRegisterInput {
   /** @minLength 6 */
   password: string;
   phone?: string;
+  role?: 'admin' | 'pharmacist';
 }
 
 export interface UserLoginInput {
@@ -33,7 +34,6 @@ export type UserRole = typeof UserRole[keyof typeof UserRole];
 export const UserRole = {
   admin: 'admin',
   pharmacist: 'pharmacist',
-  customer: 'customer',
 } as const;
 
 export interface User {
@@ -49,6 +49,23 @@ export interface User {
 export interface AuthResponse {
   token: string;
   user: User;
+}
+
+export interface Patient {
+  id: number;
+  name: string;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  createdAt: string;
+}
+
+export interface PatientInput {
+  /** @minLength 1 */
+  name: string;
+  phone?: string;
+  notes?: string;
 }
 
 export interface Category {
@@ -173,11 +190,12 @@ export const PrescriptionStatus = {
 
 export interface Prescription {
   id: number;
-  customerId: number;
   /** @nullable */
-  customerName?: string | null;
+  patientId?: number | null;
   /** @nullable */
-  imageUrl?: string | null;
+  patientName?: string | null;
+  /** @nullable */
+  doctorName?: string | null;
   status: PrescriptionStatus;
   /** @nullable */
   verifiedBy?: number | null;
@@ -187,7 +205,9 @@ export interface Prescription {
 }
 
 export interface PrescriptionInput {
-  imageUrl?: string;
+  patientId?: number;
+  patientName?: string;
+  doctorName?: string;
   notes?: string;
 }
 
@@ -216,9 +236,7 @@ export type OrderStatus = typeof OrderStatus[keyof typeof OrderStatus];
 
 export const OrderStatus = {
   pending: 'pending',
-  processing: 'processing',
   dispensed: 'dispensed',
-  delivered: 'delivered',
   cancelled: 'cancelled',
 } as const;
 
@@ -233,15 +251,18 @@ export const OrderPaymentStatus = {
 
 export interface Order {
   id: number;
-  customerId: number;
   /** @nullable */
-  customerName?: string | null;
+  patientId?: number | null;
   /** @nullable */
-  prescriptionId?: number | null;
+  patientName?: string | null;
+  /** @nullable */
+  servedByName?: string | null;
   status: OrderStatus;
   subtotal?: string;
   total: string;
   paymentStatus: OrderPaymentStatus;
+  /** @nullable */
+  notes?: string | null;
   createdAt: string;
 }
 
@@ -250,9 +271,7 @@ export type OrderDetailStatus = typeof OrderDetailStatus[keyof typeof OrderDetai
 
 export const OrderDetailStatus = {
   pending: 'pending',
-  processing: 'processing',
   dispensed: 'dispensed',
-  delivered: 'delivered',
   cancelled: 'cancelled',
 } as const;
 
@@ -267,21 +286,27 @@ export const OrderDetailPaymentStatus = {
 
 export interface OrderDetail {
   id: number;
-  customerId: number;
   /** @nullable */
-  customerName?: string | null;
+  patientId?: number | null;
   /** @nullable */
-  prescriptionId?: number | null;
+  patientName?: string | null;
+  /** @nullable */
+  servedByName?: string | null;
   status: OrderDetailStatus;
   subtotal?: string;
   total: string;
   paymentStatus: OrderDetailPaymentStatus;
+  /** @nullable */
+  notes?: string | null;
   items: OrderItem[];
   createdAt: string;
 }
 
 export interface OrderInput {
-  prescriptionId?: number;
+  patientId?: number;
+  patientName?: string;
+  paymentMethod: 'cash' | 'card' | 'insurance';
+  notes?: string;
   /** @minItems 1 */
   items: OrderItemInput[];
 }
@@ -291,9 +316,7 @@ export type OrderStatusUpdateStatus = typeof OrderStatusUpdateStatus[keyof typeo
 
 export const OrderStatusUpdateStatus = {
   pending: 'pending',
-  processing: 'processing',
   dispensed: 'dispensed',
-  delivered: 'delivered',
   cancelled: 'cancelled',
 } as const;
 
@@ -442,4 +465,3 @@ export type GetRevenueReportParams = {
 from?: string;
 to?: string;
 };
-

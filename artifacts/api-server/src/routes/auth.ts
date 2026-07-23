@@ -22,7 +22,7 @@ router.post("/auth/register", async (req, res): Promise<void> => {
   }
 
   const passwordHash = await bcrypt.hash(password, 10);
-  const [user] = await db.insert(usersTable).values({ name, email, passwordHash, phone: phone ?? null, role: "customer" }).returning();
+  const [user] = await db.insert(usersTable).values({ name, email, passwordHash, phone: phone ?? null, role: parsed.data.role ?? "pharmacist" }).returning();
 
   const token = signToken({ userId: user.id, role: user.role });
   res.status(201).json({

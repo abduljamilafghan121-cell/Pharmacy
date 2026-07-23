@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Search, Plus, Filter, AlertCircle, ShoppingCart } from "lucide-react";
+import { Search, Plus, Filter, AlertCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/use-toast";
 import { formatCurrency } from "@/lib/utils";
@@ -18,20 +18,10 @@ export default function Medicines() {
   const [search, setSearch] = useState("");
   const [categoryId, setCategoryId] = useState<number | "">("");
   
-  const { data: medicines, isLoading } = useListMedicines({
-    query: {
-      queryKey: ['medicines', search, categoryId]
-    },
-    request: {
-      url: `/api/medicines?search=${search}${categoryId ? `&categoryId=${categoryId}` : ''}`
-    } as any // quick workaround for params 
-  });
-  
-  // Real params if generated properly:
-  // useListMedicines({ search, categoryId: categoryId || undefined }) 
-  // Let's use standard:
-  // wait, looking at schema: useListMedicines(params?)
-  
+  const { data: medicines, isLoading } = useListMedicines(
+    { search: search || undefined, categoryId: categoryId || undefined }
+  );
+
   const { data: categories } = useListCategories();
   const isAdmin = user?.role === "admin" || user?.role === "pharmacist";
 
@@ -141,10 +131,8 @@ function MedicineCard({ medicine, isAdmin }: { medicine: any, isAdmin: boolean }
             )}
           </div>
           
-          <Button size="icon" variant={isOutOfStock ? "outline" : "default"} disabled={isOutOfStock} title="Add to cart" asChild>
-             <Link href={`/medicines/${medicine.id}`}>
-               <ShoppingCart size={18} />
-             </Link>
+          <Button size="sm" variant="outline" asChild>
+            <Link href={`/medicines/${medicine.id}`}>Details</Link>
           </Button>
         </div>
       </CardContent>

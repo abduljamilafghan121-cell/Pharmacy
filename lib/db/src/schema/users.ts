@@ -2,7 +2,7 @@ import { pgTable, text, serial, timestamp, pgEnum } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
-export const roleEnum = pgEnum("role", ["admin", "pharmacist", "customer"]);
+export const roleEnum = pgEnum("role", ["admin", "pharmacist"]);
 
 export const usersTable = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -10,7 +10,7 @@ export const usersTable = pgTable("users", {
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   phone: text("phone"),
-  role: roleEnum("role").notNull().default("customer"),
+  role: roleEnum("role").notNull().default("pharmacist"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

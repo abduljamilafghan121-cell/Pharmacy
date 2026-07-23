@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { useGetMe } from "@workspace/api-client-react";
-import { User } from "@workspace/api-client-react/src/generated/api.schemas";
+import type { User } from "@workspace/api-client-react";
 import { useLocation } from "wouter";
 
 interface AuthContextType {
@@ -21,12 +21,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     query: {
       enabled: !!token,
       retry: false,
-    }
+    } as any
   });
 
   useEffect(() => {
     if (isError) {
-      // Token might be invalid
       localStorage.removeItem("pharma_token");
       setToken(null);
     }

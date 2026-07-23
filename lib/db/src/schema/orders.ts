@@ -1,21 +1,23 @@
-import { pgTable, serial, timestamp, integer, numeric, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, serial, timestamp, integer, numeric, text, pgEnum } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { usersTable } from "./users";
-import { prescriptionsTable } from "./prescriptions";
+import { patientsTable } from "./patients";
 import { medicinesTable } from "./medicines";
 
-export const orderStatusEnum = pgEnum("order_status", ["pending", "processing", "dispensed", "delivered", "cancelled"]);
+export const orderStatusEnum = pgEnum("order_status", ["pending", "dispensed", "cancelled"]);
 export const paymentStatusEnum = pgEnum("payment_status", ["unpaid", "paid", "refunded"]);
 
 export const ordersTable = pgTable("orders", {
   id: serial("id").primaryKey(),
-  customerId: integer("customer_id").notNull().references(() => usersTable.id),
-  prescriptionId: integer("prescription_id").references(() => prescriptionsTable.id),
-  status: orderStatusEnum("status").notNull().default("pending"),
+  patientId: integer("patient_id").references(() => patientsTable.id),
+  patientName: text("patient_name"),             // quick walk-in name if no patient record
+  servedBy: integer("served_by").references(() => usersTable.id), // pharmacist who made the sale
+  status: orderStatusEnum("status").notNull().default("dispensed"),
   subtotal: numeric("subtotal", { precision: 10, scale: 2 }).notNull().default("0"),
   total: numeric("total", { precision: 10, scale: 2 }).notNull().default("0"),
   paymentStatus: paymentStatusEnum("payment_status").notNull().default("unpaid"),
+  notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

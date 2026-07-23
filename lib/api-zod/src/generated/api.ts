@@ -17,18 +17,17 @@ export const HealthCheckResponse = zod.object({
 
 
 /**
- * @summary Register a new customer account
+ * @summary Register a new staff account (admin only)
  */
 
 export const registerUserBodyPasswordMin = 6;
-
-
 
 export const RegisterUserBody = zod.object({
   "name": zod.string().min(1),
   "email": zod.string(),
   "password": zod.string().min(registerUserBodyPasswordMin),
-  "phone": zod.string().optional()
+  "phone": zod.string().optional(),
+  "role": zod.enum(['admin', 'pharmacist']).optional()
 })
 
 export const RegisterUserResponse = zod.object({
@@ -38,7 +37,7 @@ export const RegisterUserResponse = zod.object({
   "name": zod.string(),
   "email": zod.string(),
   "phone": zod.string().nullish(),
-  "role": zod.enum(['admin', 'pharmacist', 'customer']),
+  "role": zod.enum(['admin', 'pharmacist']),
   "createdAt": zod.coerce.date()
 })
 })
@@ -59,7 +58,7 @@ export const LoginUserResponse = zod.object({
   "name": zod.string(),
   "email": zod.string(),
   "phone": zod.string().nullish(),
-  "role": zod.enum(['admin', 'pharmacist', 'customer']),
+  "role": zod.enum(['admin', 'pharmacist']),
   "createdAt": zod.coerce.date()
 })
 })
@@ -73,7 +72,7 @@ export const GetMeResponse = zod.object({
   "name": zod.string(),
   "email": zod.string(),
   "phone": zod.string().nullish(),
-  "role": zod.enum(['admin', 'pharmacist', 'customer']),
+  "role": zod.enum(['admin', 'pharmacist']),
   "createdAt": zod.coerce.date()
 })
 
@@ -93,8 +92,6 @@ export const ListCategoriesResponse = zod.array(ListCategoriesResponseItem)
  * @summary Create a category (admin)
  */
 
-
-
 export const CreateCategoryBody = zod.object({
   "name": zod.string().min(1),
   "description": zod.string().optional()
@@ -113,9 +110,6 @@ export const CreateCategoryResponse = zod.object({
 export const UpdateCategoryParams = zod.object({
   "id": zod.coerce.number()
 })
-
-
-
 
 export const UpdateCategoryBody = zod.object({
   "name": zod.string().min(1).optional(),
@@ -156,8 +150,6 @@ export const ListSuppliersResponse = zod.array(ListSuppliersResponseItem)
 /**
  * @summary Create a supplier
  */
-
-
 
 export const CreateSupplierBody = zod.object({
   "name": zod.string().min(1),
@@ -200,9 +192,6 @@ export const GetSupplierResponse = zod.object({
 export const UpdateSupplierParams = zod.object({
   "id": zod.coerce.number()
 })
-
-
-
 
 export const UpdateSupplierBody = zod.object({
   "name": zod.string().min(1).optional(),
@@ -382,10 +371,7 @@ export const UpdateMedicineParams = zod.object({
   "id": zod.coerce.number()
 })
 
-
 export const updateMedicineBodyQuantityMin = 0;
-
-
 
 export const UpdateMedicineBody = zod.object({
   "name": zod.string().min(1).optional(),
@@ -432,13 +418,82 @@ export const DeleteMedicineResponse = zod.void()
 
 
 /**
- * @summary List prescriptions (admin/pharmacist see all; customers see their own)
+ * @summary List patients
+ */
+export const ListPatientsResponseItem = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "phone": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+export const ListPatientsResponse = zod.array(ListPatientsResponseItem)
+
+
+/**
+ * @summary Create a patient record
+ */
+export const CreatePatientBody = zod.object({
+  "name": zod.string().min(1),
+  "phone": zod.string().optional(),
+  "notes": zod.string().optional()
+})
+
+export const CreatePatientResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "phone": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Get patient by ID
+ */
+export const GetPatientParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetPatientResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "phone": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Update a patient
+ */
+export const UpdatePatientParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdatePatientBody = zod.object({
+  "name": zod.string().min(1).optional(),
+  "phone": zod.string().optional(),
+  "notes": zod.string().optional()
+})
+
+export const UpdatePatientResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "phone": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary List prescriptions (staff sees all)
  */
 export const ListPrescriptionsResponseItem = zod.object({
   "id": zod.number(),
-  "customerId": zod.number(),
-  "customerName": zod.string().nullish(),
-  "imageUrl": zod.string().nullish(),
+  "patientId": zod.number().nullish(),
+  "patientName": zod.string().nullish(),
+  "doctorName": zod.string().nullish(),
   "status": zod.enum(['pending', 'verified', 'rejected']),
   "verifiedBy": zod.number().nullish(),
   "notes": zod.string().nullish(),
@@ -448,18 +503,20 @@ export const ListPrescriptionsResponse = zod.array(ListPrescriptionsResponseItem
 
 
 /**
- * @summary Upload a prescription (customer)
+ * @summary Create a prescription (staff)
  */
 export const CreatePrescriptionBody = zod.object({
-  "imageUrl": zod.string().optional(),
+  "patientId": zod.number().optional(),
+  "patientName": zod.string().optional(),
+  "doctorName": zod.string().optional(),
   "notes": zod.string().optional()
 })
 
 export const CreatePrescriptionResponse = zod.object({
   "id": zod.number(),
-  "customerId": zod.number(),
-  "customerName": zod.string().nullish(),
-  "imageUrl": zod.string().nullish(),
+  "patientId": zod.number().nullish(),
+  "patientName": zod.string().nullish(),
+  "doctorName": zod.string().nullish(),
   "status": zod.enum(['pending', 'verified', 'rejected']),
   "verifiedBy": zod.number().nullish(),
   "notes": zod.string().nullish(),
@@ -476,9 +533,9 @@ export const GetPrescriptionParams = zod.object({
 
 export const GetPrescriptionResponse = zod.object({
   "id": zod.number(),
-  "customerId": zod.number(),
-  "customerName": zod.string().nullish(),
-  "imageUrl": zod.string().nullish(),
+  "patientId": zod.number().nullish(),
+  "patientName": zod.string().nullish(),
+  "doctorName": zod.string().nullish(),
   "status": zod.enum(['pending', 'verified', 'rejected']),
   "verifiedBy": zod.number().nullish(),
   "notes": zod.string().nullish(),
@@ -499,9 +556,9 @@ export const VerifyPrescriptionBody = zod.object({
 
 export const VerifyPrescriptionResponse = zod.object({
   "id": zod.number(),
-  "customerId": zod.number(),
-  "customerName": zod.string().nullish(),
-  "imageUrl": zod.string().nullish(),
+  "patientId": zod.number().nullish(),
+  "patientName": zod.string().nullish(),
+  "doctorName": zod.string().nullish(),
   "status": zod.enum(['pending', 'verified', 'rejected']),
   "verifiedBy": zod.number().nullish(),
   "notes": zod.string().nullish(),
@@ -522,9 +579,9 @@ export const RejectPrescriptionBody = zod.object({
 
 export const RejectPrescriptionResponse = zod.object({
   "id": zod.number(),
-  "customerId": zod.number(),
-  "customerName": zod.string().nullish(),
-  "imageUrl": zod.string().nullish(),
+  "patientId": zod.number().nullish(),
+  "patientName": zod.string().nullish(),
+  "doctorName": zod.string().nullish(),
   "status": zod.enum(['pending', 'verified', 'rejected']),
   "verifiedBy": zod.number().nullish(),
   "notes": zod.string().nullish(),
@@ -533,31 +590,32 @@ export const RejectPrescriptionResponse = zod.object({
 
 
 /**
- * @summary List orders (admin/pharmacist see all; customers see their own)
+ * @summary List sales (staff sees all)
  */
 export const ListOrdersResponseItem = zod.object({
   "id": zod.number(),
-  "customerId": zod.number(),
-  "customerName": zod.string().nullish(),
-  "prescriptionId": zod.number().nullish(),
-  "status": zod.enum(['pending', 'processing', 'dispensed', 'delivered', 'cancelled']),
+  "patientId": zod.number().nullish(),
+  "patientName": zod.string().nullish(),
+  "servedByName": zod.string().nullish(),
+  "status": zod.enum(['pending', 'dispensed', 'cancelled']),
   "subtotal": zod.string().optional(),
   "total": zod.string(),
   "paymentStatus": zod.enum(['unpaid', 'paid', 'refunded']),
+  "notes": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 })
 export const ListOrdersResponse = zod.array(ListOrdersResponseItem)
 
 
 /**
- * @summary Place a new order (customer)
+ * @summary Create a new sale (staff only)
  */
 
-
-
-
 export const CreateOrderBody = zod.object({
-  "prescriptionId": zod.number().optional(),
+  "patientId": zod.number().optional(),
+  "patientName": zod.string().optional(),
+  "paymentMethod": zod.enum(['cash', 'card', 'insurance']),
+  "notes": zod.string().optional(),
   "items": zod.array(zod.object({
   "medicineId": zod.number(),
   "quantity": zod.number().min(1)
@@ -566,13 +624,14 @@ export const CreateOrderBody = zod.object({
 
 export const CreateOrderResponse = zod.object({
   "id": zod.number(),
-  "customerId": zod.number(),
-  "customerName": zod.string().nullish(),
-  "prescriptionId": zod.number().nullish(),
-  "status": zod.enum(['pending', 'processing', 'dispensed', 'delivered', 'cancelled']),
+  "patientId": zod.number().nullish(),
+  "patientName": zod.string().nullish(),
+  "servedByName": zod.string().nullish(),
+  "status": zod.enum(['pending', 'dispensed', 'cancelled']),
   "subtotal": zod.string().optional(),
   "total": zod.string(),
   "paymentStatus": zod.enum(['unpaid', 'paid', 'refunded']),
+  "notes": zod.string().nullish(),
   "items": zod.array(zod.object({
   "id": zod.number(),
   "orderId": zod.number(),
@@ -586,7 +645,7 @@ export const CreateOrderResponse = zod.object({
 
 
 /**
- * @summary Get order with line items
+ * @summary Get sale with line items
  */
 export const GetOrderParams = zod.object({
   "id": zod.coerce.number()
@@ -594,13 +653,14 @@ export const GetOrderParams = zod.object({
 
 export const GetOrderResponse = zod.object({
   "id": zod.number(),
-  "customerId": zod.number(),
-  "customerName": zod.string().nullish(),
-  "prescriptionId": zod.number().nullish(),
-  "status": zod.enum(['pending', 'processing', 'dispensed', 'delivered', 'cancelled']),
+  "patientId": zod.number().nullish(),
+  "patientName": zod.string().nullish(),
+  "servedByName": zod.string().nullish(),
+  "status": zod.enum(['pending', 'dispensed', 'cancelled']),
   "subtotal": zod.string().optional(),
   "total": zod.string(),
   "paymentStatus": zod.enum(['unpaid', 'paid', 'refunded']),
+  "notes": zod.string().nullish(),
   "items": zod.array(zod.object({
   "id": zod.number(),
   "orderId": zod.number(),
@@ -614,31 +674,32 @@ export const GetOrderResponse = zod.object({
 
 
 /**
- * @summary Update order status (pharmacist/admin)
+ * @summary Update sale status (pharmacist/admin)
  */
 export const UpdateOrderStatusParams = zod.object({
   "id": zod.coerce.number()
 })
 
 export const UpdateOrderStatusBody = zod.object({
-  "status": zod.enum(['pending', 'processing', 'dispensed', 'delivered', 'cancelled'])
+  "status": zod.enum(['pending', 'dispensed', 'cancelled'])
 })
 
 export const UpdateOrderStatusResponse = zod.object({
   "id": zod.number(),
-  "customerId": zod.number(),
-  "customerName": zod.string().nullish(),
-  "prescriptionId": zod.number().nullish(),
-  "status": zod.enum(['pending', 'processing', 'dispensed', 'delivered', 'cancelled']),
+  "patientId": zod.number().nullish(),
+  "patientName": zod.string().nullish(),
+  "servedByName": zod.string().nullish(),
+  "status": zod.enum(['pending', 'dispensed', 'cancelled']),
   "subtotal": zod.string().optional(),
   "total": zod.string(),
   "paymentStatus": zod.enum(['unpaid', 'paid', 'refunded']),
+  "notes": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 })
 
 
 /**
- * @summary Process payment for an order
+ * @summary Process payment for a sale
  */
 export const CreatePaymentBody = zod.object({
   "orderId": zod.number(),
@@ -701,9 +762,6 @@ export const ListPurchaseOrdersResponse = zod.array(ListPurchaseOrdersResponseIt
 /**
  * @summary Create a restock order
  */
-
-
-
 
 export const CreatePurchaseOrderBody = zod.object({
   "supplierId": zod.number(),
@@ -840,5 +898,3 @@ export const GetRevenueReportResponse = zod.object({
   "revenue": zod.string()
 }))
 })
-
-
