@@ -47,17 +47,17 @@ vercel.json     Vercel deployment configuration
 
 ### Step 1 — Apply the database schema to Supabase
 
-Replit can't connect directly to Supabase, so apply the schema manually:
+Migrations must be applied manually via the Supabase SQL Editor (build machines can't reach Supabase's DB port):
 
 1. Open your Supabase project → **SQL Editor**
-2. Paste the contents of **`lib/db/drizzle/0000_greedy_plazm.sql`** and run it
+2. Paste the contents of **`lib/db/drizzle/0000_greedy_plazm.sql`** and click **Run**
 3. That creates all 11 tables, enums, and foreign keys
 
 For future schema changes:
 ```bash
 pnpm --filter @workspace/db run generate   # generates a new SQL file in lib/db/drizzle/
 ```
-Then paste the new file into Supabase's SQL Editor.
+Then paste the new file into Supabase's SQL Editor and run it.
 
 ### Step 2 — Push code to GitHub
 
