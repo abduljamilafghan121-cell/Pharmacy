@@ -20,6 +20,8 @@ export interface OrderDetail {
   subtotal?: string;
   total: string;
   paymentStatus: OrderDetailPaymentStatus;
+  /** @nullable */
+  notes?: string | null;
   items: OrderItem[];
   createdAt: Date;
 }

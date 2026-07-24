@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useListMedicines, useCreateOrder } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import { Search, Plus, Minus, Trash2, ShoppingBag, Pill, CheckCircle2, Loader2, 
 import { formatCurrency } from "@/lib/utils";
 import { getErrorMessage } from "@/lib/errors";
 import { useToast } from "@/components/ui/use-toast";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import type { Medicine } from "@workspace/api-client-react";
 
 interface SaleItem {
@@ -35,8 +35,10 @@ export default function NewSale() {
 
   const { toast } = useToast();
   const [, setLocation] = useLocation();
+  const searchParams = new URLSearchParams(useSearch());
   const queryClient = useQueryClient();
   const searchRef = useRef<HTMLInputElement>(null);
+  const initialMedicineHandled = useRef(false);
 
   const { data: medicines } = useListMedicines({ search: search || undefined });
   const createOrderMutation = useCreateOrder();
@@ -47,6 +49,17 @@ export default function NewSale() {
         (m.genericName ?? "").toLowerCase().includes(search.toLowerCase())
       )
     : [];
+
+  useEffect(() => {
+    if (initialMedicineHandled.current) return;
+    const medicineId = Number(searchParams.get("medicineId"));
+    if (!medicineId || !medicines) return;
+    const selected = medicines.find((medicine) => medicine.id === medicineId);
+    if (selected) {
+      initialMedicineHandled.current = true;
+      addItem(selected);
+    }
+  }, [medicines]);
 
   const addItem = (medicine: Medicine) => {
     setSaleItems(prev => {
@@ -60,6 +73,10 @@ export default function NewSale() {
       }
       if (medicine.quantity === 0) {
         toast({ title: "Out of stock", description: `${medicine.name} is currently unavailable.`, variant: "destructive" });
+        return prev;
+      }
+      if (medicine.expiryDate && medicine.expiryDate < new Date().toISOString().slice(0, 10)) {
+        toast({ title: "Expired medicine", description: `${medicine.name} cannot be sold because it has expired.`, variant: "destructive" });
         return prev;
       }
       return [...prev, { medicine, quantity: 1 }];

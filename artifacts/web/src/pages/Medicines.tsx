@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Search, Plus, Filter, AlertCircle } from "lucide-react";
+import { Search, Plus, Filter, AlertCircle, CalendarClock } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { ErrorState } from "@/components/ui/error-state";
 import { useToast } from "@/components/ui/use-toast";
@@ -97,6 +97,13 @@ export default function Medicines() {
 
 function MedicineCard({ medicine, isAdmin: _isAdmin }: { medicine: any, isAdmin: boolean }) {
   const isOutOfStock = medicine.quantity === 0;
+  const today = new Date().toISOString().slice(0, 10);
+  const isExpired = Boolean(medicine.expiryDate && medicine.expiryDate < today);
+  const isExpiringSoon = Boolean(
+    medicine.expiryDate &&
+    !isExpired &&
+    medicine.expiryDate <= new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10),
+  );
 
   return (
     <Card className="flex flex-col overflow-hidden hover-elevate transition-all group">
@@ -123,18 +130,26 @@ function MedicineCard({ medicine, isAdmin: _isAdmin }: { medicine: any, isAdmin:
             {medicine.genericName || "—"}
           </p>
         </div>
-        <div className="mt-auto pt-4 flex items-end justify-between">
-          <div>
-            <p className="text-xl font-bold text-primary">{formatCurrency(medicine.price)}</p>
-            {isOutOfStock ? (
-              <p className="text-xs font-semibold text-destructive mt-1">Out of stock</p>
-            ) : (
-              <p className="text-xs text-muted-foreground mt-1">{medicine.quantity} in stock</p>
-            )}
+        <div className="mt-auto space-y-3 pt-4">
+          {medicine.expiryDate && (
+            <div className={`flex items-center gap-1.5 text-xs ${isExpired ? "font-semibold text-destructive" : isExpiringSoon ? "font-semibold text-amber-600" : "text-muted-foreground"}`}>
+              <CalendarClock size={14} />
+              {isExpired ? "Expired" : `Expires ${new Date(`${medicine.expiryDate}T00:00:00`).toLocaleDateString()}`}
+            </div>
+          )}
+          <div className="flex items-end justify-between">
+            <div>
+              <p className="text-xl font-bold text-primary">{formatCurrency(medicine.price)}</p>
+              {isOutOfStock ? (
+                <p className="mt-1 text-xs font-semibold text-destructive">Out of stock</p>
+              ) : (
+                <p className="mt-1 text-xs text-muted-foreground">{medicine.quantity} in stock</p>
+              )}
+            </div>
+            <Button size="sm" variant="outline" asChild>
+              <Link href={`/medicines/${medicine.id}`}>Details</Link>
+            </Button>
           </div>
-          <Button size="sm" variant="outline" asChild>
-            <Link href={`/medicines/${medicine.id}`}>Details</Link>
-          </Button>
         </div>
       </CardContent>
     </Card>
@@ -170,6 +185,7 @@ function MedicineFormDialog() {
         categoryId: fd.get("categoryId") ? Number(fd.get("categoryId")) : undefined,
         quantity: Number(fd.get("quantity")),
         price: fd.get("price") as string,
+        expiryDate: fd.get("expiryDate") as string,
         prescriptionRequired: fd.get("prescriptionRequired") === "on",
         description: fd.get("description") as string,
       },
@@ -203,6 +219,11 @@ function MedicineFormDialog() {
               <Label htmlFor="quantity">Initial Stock *</Label>
               <Input id="quantity" name="quantity" type="number" required placeholder="100" />
             </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="expiryDate">Expiry date *</Label>
+            <Input id="expiryDate" name="expiryDate" type="date" min={new Date().toISOString().slice(0, 10)} required />
+            <p className="text-xs text-muted-foreground">Expired medicines are blocked at checkout.</p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="categoryId">Category</Label>

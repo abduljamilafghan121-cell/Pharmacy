@@ -32,8 +32,6 @@ export const pool = new Pool({
   idleTimeoutMillis: 0,        // release connections immediately when idle
 });
 
-// prepare: false is required when connecting through Supabase's PgBouncer
-// transaction pooler (port 6543). It is harmless on direct connections.
-export const db = drizzle(pool, { schema, casing: "snake_case", prepare: false });
+export const db = drizzle(pool, { schema, casing: "snake_case" });
 
 export * from "./schema";

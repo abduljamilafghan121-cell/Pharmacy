@@ -5,9 +5,14 @@
  * Pharmacy Management System API
  * OpenAPI spec version: 0.1.0
  */
+import type { OrderInputPaymentMethod } from './orderInputPaymentMethod';
 import type { OrderItemInput } from './orderItemInput';
 
 export interface OrderInput {
+  patientId?: number;
+  patientName?: string;
+  paymentMethod?: OrderInputPaymentMethod;
+  notes?: string;
   prescriptionId?: number;
   /** @minItems 1 */
   items: OrderItemInput[];

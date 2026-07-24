@@ -5,14 +5,10 @@
  * Pharmacy Management System API
  * OpenAPI spec version: 0.1.0
  */
-import type { UserRegisterInputRole } from './userRegisterInputRole';
 
-export interface UserRegisterInput {
+export interface PatientInput {
   /** @minLength 1 */
   name: string;
-  email: string;
-  /** @minLength 6 */
-  password: string;
   phone?: string;
-  role?: UserRegisterInputRole;
+  notes?: string;
 }

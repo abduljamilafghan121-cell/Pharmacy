@@ -13,6 +13,38 @@ export interface ErrorResponse {
   error: string;
 }
 
+export interface Patient {
+  id: number;
+  name: string;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  createdAt: string;
+}
+
+export interface PatientInput {
+  /** @minLength 1 */
+  name: string;
+  phone?: string;
+  notes?: string;
+}
+
+export interface PatientUpdate {
+  /** @minLength 1 */
+  name?: string;
+  phone?: string;
+  notes?: string;
+}
+
+export type UserRegisterInputRole = typeof UserRegisterInputRole[keyof typeof UserRegisterInputRole];
+
+
+export const UserRegisterInputRole = {
+  admin: 'admin',
+  pharmacist: 'pharmacist',
+} as const;
+
 export interface UserRegisterInput {
   /** @minLength 1 */
   name: string;
@@ -20,7 +52,7 @@ export interface UserRegisterInput {
   /** @minLength 6 */
   password: string;
   phone?: string;
-  role?: 'admin' | 'pharmacist';
+  role?: UserRegisterInputRole;
 }
 
 export interface UserLoginInput {
@@ -49,23 +81,6 @@ export interface User {
 export interface AuthResponse {
   token: string;
   user: User;
-}
-
-export interface Patient {
-  id: number;
-  name: string;
-  /** @nullable */
-  phone?: string | null;
-  /** @nullable */
-  notes?: string | null;
-  createdAt: string;
-}
-
-export interface PatientInput {
-  /** @minLength 1 */
-  name: string;
-  phone?: string;
-  notes?: string;
 }
 
 export interface Category {
@@ -153,7 +168,7 @@ export interface MedicineInput {
   supplierId?: number;
   manufacturer?: string;
   batchNumber?: string;
-  expiryDate?: string;
+  expiryDate: string;
   /** @minimum 0 */
   quantity: number;
   price: string;
@@ -190,12 +205,11 @@ export const PrescriptionStatus = {
 
 export interface Prescription {
   id: number;
+  customerId: number;
   /** @nullable */
-  patientId?: number | null;
+  customerName?: string | null;
   /** @nullable */
-  patientName?: string | null;
-  /** @nullable */
-  doctorName?: string | null;
+  imageUrl?: string | null;
   status: PrescriptionStatus;
   /** @nullable */
   verifiedBy?: number | null;
@@ -236,7 +250,9 @@ export type OrderStatus = typeof OrderStatus[keyof typeof OrderStatus];
 
 export const OrderStatus = {
   pending: 'pending',
+  processing: 'processing',
   dispensed: 'dispensed',
+  delivered: 'delivered',
   cancelled: 'cancelled',
 } as const;
 
@@ -251,18 +267,15 @@ export const OrderPaymentStatus = {
 
 export interface Order {
   id: number;
+  customerId: number;
   /** @nullable */
-  patientId?: number | null;
+  customerName?: string | null;
   /** @nullable */
-  patientName?: string | null;
-  /** @nullable */
-  servedByName?: string | null;
+  prescriptionId?: number | null;
   status: OrderStatus;
   subtotal?: string;
   total: string;
   paymentStatus: OrderPaymentStatus;
-  /** @nullable */
-  notes?: string | null;
   createdAt: string;
 }
 
@@ -271,7 +284,9 @@ export type OrderDetailStatus = typeof OrderDetailStatus[keyof typeof OrderDetai
 
 export const OrderDetailStatus = {
   pending: 'pending',
+  processing: 'processing',
   dispensed: 'dispensed',
+  delivered: 'delivered',
   cancelled: 'cancelled',
 } as const;
 
@@ -286,12 +301,11 @@ export const OrderDetailPaymentStatus = {
 
 export interface OrderDetail {
   id: number;
+  customerId: number;
   /** @nullable */
-  patientId?: number | null;
+  customerName?: string | null;
   /** @nullable */
-  patientName?: string | null;
-  /** @nullable */
-  servedByName?: string | null;
+  prescriptionId?: number | null;
   status: OrderDetailStatus;
   subtotal?: string;
   total: string;
@@ -302,11 +316,21 @@ export interface OrderDetail {
   createdAt: string;
 }
 
+export type OrderInputPaymentMethod = typeof OrderInputPaymentMethod[keyof typeof OrderInputPaymentMethod];
+
+
+export const OrderInputPaymentMethod = {
+  cash: 'cash',
+  card: 'card',
+  insurance: 'insurance',
+} as const;
+
 export interface OrderInput {
   patientId?: number;
   patientName?: string;
-  paymentMethod: 'cash' | 'card' | 'insurance';
+  paymentMethod?: OrderInputPaymentMethod;
   notes?: string;
+  prescriptionId?: number;
   /** @minItems 1 */
   items: OrderItemInput[];
 }
@@ -450,6 +474,10 @@ export interface RevenueReport {
   byDate: RevenueByRange[];
 }
 
+export type ListPatientsParams = {
+search?: string;
+};
+
 export type ListMedicinesParams = {
 search?: string;
 categoryId?: number;
@@ -465,3 +493,4 @@ export type GetRevenueReportParams = {
 from?: string;
 to?: string;
 };
+

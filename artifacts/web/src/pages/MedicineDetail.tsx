@@ -6,7 +6,7 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Pill, ArrowLeft, Trash2, Info, AlertTriangle } from "lucide-react";
+import { Pill, ArrowLeft, Trash2, Info, AlertTriangle, CalendarClock } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useToast } from "@/components/ui/use-toast";
 import { Link } from "wouter";
@@ -39,6 +39,7 @@ export default function MedicineDetail() {
 
   const isOutOfStock = medicine.quantity === 0;
   const isLowStock = medicine.quantity > 0 && medicine.quantity <= 10;
+  const isExpired = medicine.expiryDate && medicine.expiryDate < new Date().toISOString().slice(0, 10);
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto animate-in fade-in duration-300">
@@ -84,7 +85,12 @@ export default function MedicineDetail() {
           </div>
 
           {/* Stock status */}
-          {isOutOfStock ? (
+          {isExpired ? (
+            <div className="mb-6 flex items-center gap-2 rounded-xl bg-destructive/10 p-4 text-destructive">
+              <CalendarClock size={18} />
+              <span className="font-medium">Expired on {new Date(`${medicine.expiryDate}T00:00:00`).toLocaleDateString()} — not available for sale</span>
+            </div>
+          ) : isOutOfStock ? (
             <div className="flex items-center gap-2 p-4 rounded-xl bg-destructive/10 text-destructive mb-6">
               <AlertTriangle size={18} />
               <span className="font-medium">Out of Stock</span>
@@ -102,8 +108,8 @@ export default function MedicineDetail() {
           )}
 
           {/* Quick sale link */}
-          <Button size="lg" className="mb-4" asChild>
-            <Link href="/new-sale">Add to Sale</Link>
+          <Button size="lg" className="mb-4" asChild disabled={isExpired || isOutOfStock}>
+            <Link href={`/new-sale?medicineId=${medicine.id}`}>Add to Checkout</Link>
           </Button>
 
           {/* Admin actions */}

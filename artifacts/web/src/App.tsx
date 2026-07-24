@@ -23,6 +23,7 @@ import Suppliers from '@/pages/Suppliers';
 import PurchaseOrders from '@/pages/PurchaseOrders';
 import Reports from '@/pages/Reports';
 import Settings from '@/pages/Settings';
+import Users from '@/pages/Users';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -129,6 +130,9 @@ function Router() {
         </Route>
         <Route path="/settings">
           <ProtectedRoute component={Settings} />
+        </Route>
+        <Route path="/users">
+          <ProtectedRoute component={Users} roles={['admin']} />
         </Route>
         <Route component={NotFound} />
       </Switch>

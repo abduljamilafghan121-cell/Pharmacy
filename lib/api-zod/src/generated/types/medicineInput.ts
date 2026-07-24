@@ -14,7 +14,7 @@ export interface MedicineInput {
   supplierId?: number;
   manufacturer?: string;
   batchNumber?: string;
-  expiryDate?: Date;
+  expiryDate: Date;
   /** @minimum 0 */
   quantity: number;
   price: string;

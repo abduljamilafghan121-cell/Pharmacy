@@ -35,7 +35,7 @@ router.post("/orders", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const { items, patientId, patientName, paymentMethod, notes } = parsed.data;
+  const { items, patientId, patientName, paymentMethod = "cash", notes } = parsed.data;
 
   // Fetch all medicines
   const medicineIds = items.map((i: { medicineId: number; quantity: number }) => i.medicineId);
@@ -52,6 +52,10 @@ router.post("/orders", requireAuth, async (req, res): Promise<void> => {
     }
     if (med.quantity < item.quantity) {
       res.status(400).json({ error: `Insufficient stock for ${med.name} (available: ${med.quantity})` });
+      return;
+    }
+    if (med.expiryDate && med.expiryDate < new Date().toISOString().slice(0, 10)) {
+      res.status(400).json({ error: `${med.name} has expired and cannot be sold.` });
       return;
     }
   }

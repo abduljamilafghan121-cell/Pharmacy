@@ -21,6 +21,8 @@ tags:
     description: Prescription handling
   - name: orders
     description: Orders and billing
+  - name: patients
+    description: Patient records
   - name: payments
     description: Payments
   - name: purchase-orders
@@ -118,6 +120,56 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /users:
+    get:
+      operationId: listUsers
+      tags: [auth]
+      summary: List staff accounts (admin only)
+      responses:
+        "200":
+          description: Staff accounts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: createUser
+      tags: [auth]
+      summary: Create a staff account with a role (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserRegisterInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Email already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   # ── Categories ────────────────────────────────────────────────────────────
   /categories:
     get:
@@ -181,6 +233,92 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  # ── Patients ─────────────────────────────────────────────────────────────
+  /patients:
+    get:
+      operationId: listPatients
+      tags: [patients]
+      summary: List registered patients
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Patients
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Patient"
+    post:
+      operationId: createPatient
+      tags: [patients]
+      summary: Register a patient
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PatientInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Patient"
+
+  /patients/{id}:
+    get:
+      operationId: getPatient
+      tags: [patients]
+      summary: Get a patient
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Patient
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Patient"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updatePatient
+      tags: [patients]
+      summary: Update a patient
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PatientUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Patient"
     delete:
       operationId: deleteCategory
       tags: [categories]
@@ -881,6 +1019,45 @@ components:
           type: string
       required: [error]
 
+    Patient:
+      type: object
+      required: [id, name, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        phone:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    PatientInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        phone:
+          type: string
+        notes:
+          type: string
+
+    PatientUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        phone:
+          type: string
+        notes:
+          type: string
+
     # ── Auth ──────────────────────────────────────────────────────────────
     UserRegisterInput:
       type: object
@@ -897,6 +1074,9 @@ components:
           minLength: 6
         phone:
           type: string
+        role:
+          type: string
+          enum: [admin, pharmacist]
 
     UserLoginInput:
       type: object
@@ -931,7 +1111,7 @@ components:
           type: ["string", "null"]
         role:
           type: string
-          enum: [admin, pharmacist, customer]
+          enum: [admin, pharmacist]
         createdAt:
           type: string
           format: date-time
@@ -1056,7 +1236,7 @@ components:
 
     MedicineInput:
       type: object
-      required: [name, quantity, price]
+      required: [name, quantity, price, expiryDate]
       properties:
         name:
           type: string
@@ -1145,7 +1325,11 @@ components:
     PrescriptionInput:
       type: object
       properties:
-        imageUrl:
+        patientId:
+          type: integer
+        patientName:
+          type: string
+        doctorName:
           type: string
         notes:
           type: string
@@ -1232,6 +1416,8 @@ components:
         paymentStatus:
           type: string
           enum: [unpaid, paid, refunded]
+        notes:
+          type: ["string", "null"]
         items:
           type: array
           items:
@@ -1244,6 +1430,15 @@ components:
       type: object
       required: [items]
       properties:
+        patientId:
+          type: integer
+        patientName:
+          type: string
+        paymentMethod:
+          type: string
+          enum: [cash, card, insurance]
+        notes:
+          type: string
         prescriptionId:
           type: integer
         items:
@@ -1258,7 +1453,7 @@ components:
       properties:
         status:
           type: string
-          enum: [pending, processing, dispensed, delivered, cancelled]
+          enum: [pending, dispensed, cancelled]
 
     # ── Payment ───────────────────────────────────────────────────────────
     Payment:

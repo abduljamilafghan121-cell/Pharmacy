@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
 import { RegisterUserBody, LoginUserBody } from "@workspace/api-zod";
-import { signToken, requireAuth } from "../middlewares/auth";
+import { signToken, requireAuth, requireRole } from "../middlewares/auth";
 import { logger } from "../lib/logger";
 import { formatZodError, getDbErrorMessage } from "../lib/api-errors";
 
@@ -24,8 +24,8 @@ router.post("/auth/register", async (req, res): Promise<void> => {
   try {
     const [existing] = await db.select().from(usersTable).where(eq(usersTable.email, email));
     if (existing) {
-      logger.warn({ email }, "register: email already registered");
-      res.status(409).json({ error: "An account with this email already exists." });
+      logger.warn({ email }, "register: public registration blocked after initial setup");
+      res.status(403).json({ error: "Public registration is closed. Ask an administrator to create your account." });
       return;
     }
 
@@ -35,7 +35,7 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     logger.info({ email }, "register: inserting user");
     const [user] = await db
       .insert(usersTable)
-      .values({ name, email, passwordHash, phone: phone ?? null, role: parsed.data.role ?? "pharmacist" })
+      .values({ name, email, passwordHash, phone: phone ?? null, role: "admin" })
       .returning();
 
     logger.info({ userId: user.id, email }, "register: user created successfully");
@@ -93,6 +93,63 @@ router.get("/auth/me", requireAuth, async (req, res): Promise<void> => {
   } catch (err) {
     logger.error({ err }, "auth/me: unexpected error");
     res.status(500).json({ error: "Failed to load account. Please try again." });
+  }
+});
+
+router.get("/users", requireAuth, requireRole("admin"), async (_req, res): Promise<void> => {
+  try {
+    const users = await db
+      .select({
+        id: usersTable.id,
+        name: usersTable.name,
+        email: usersTable.email,
+        phone: usersTable.phone,
+        role: usersTable.role,
+        createdAt: usersTable.createdAt,
+      })
+      .from(usersTable)
+      .orderBy(usersTable.createdAt);
+    res.json(users);
+  } catch (err) {
+    logger.error({ err }, "users: failed to list staff");
+    res.status(500).json({ error: "Failed to load staff accounts.", detail: getDbErrorMessage(err) });
+  }
+});
+
+router.post("/users", requireAuth, requireRole("admin"), async (req, res): Promise<void> => {
+  const parsed = RegisterUserBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: formatZodError(parsed.error) });
+    return;
+  }
+
+  const { name, email, password, phone, role = "pharmacist" } = parsed.data;
+  try {
+    const [existing] = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.email, email));
+    if (existing) {
+      res.status(409).json({ error: "An account with this email already exists." });
+      return;
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const [user] = await db.insert(usersTable).values({
+      name,
+      email,
+      passwordHash,
+      phone: phone ?? null,
+      role,
+    }).returning({
+      id: usersTable.id,
+      name: usersTable.name,
+      email: usersTable.email,
+      phone: usersTable.phone,
+      role: usersTable.role,
+      createdAt: usersTable.createdAt,
+    });
+    res.status(201).json(user);
+  } catch (err) {
+    logger.error({ err, email }, "users: failed to create staff account");
+    res.status(500).json({ error: "Failed to create staff account.", detail: getDbErrorMessage(err) });
   }
 });
 

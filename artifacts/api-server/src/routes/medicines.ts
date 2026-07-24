@@ -89,7 +89,11 @@ router.post("/medicines", requireAuth, requireRole("admin", "pharmacist"), async
     return;
   }
   try {
-    const [row] = await db.insert(medicinesTable).values(parsed.data).returning();
+    const values = {
+      ...parsed.data,
+      expiryDate: parsed.data.expiryDate ? parsed.data.expiryDate.toISOString().slice(0, 10) : null,
+    };
+    const [row] = await db.insert(medicinesTable).values(values).returning();
     const [full] = await db.select(MEDICINE_SELECT).from(medicinesTable)
       .leftJoin(categoriesTable, eq(medicinesTable.categoryId, categoriesTable.id))
       .where(eq(medicinesTable.id, row.id));
@@ -122,7 +126,14 @@ router.patch("/medicines/:id", requireAuth, requireRole("admin", "pharmacist"), 
   const parsed = UpdateMedicineBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: formatZodError(parsed.error) }); return; }
   try {
-    const [updated] = await db.update(medicinesTable).set(parsed.data).where(eq(medicinesTable.id, params.data.id)).returning();
+    const { expiryDate, ...medicineFields } = parsed.data;
+    const values = {
+      ...medicineFields,
+      ...(expiryDate !== undefined
+        ? { expiryDate: expiryDate ? expiryDate.toISOString().slice(0, 10) : null }
+        : {}),
+    };
+    const [updated] = await db.update(medicinesTable).set(values).where(eq(medicinesTable.id, params.data.id)).returning();
     if (!updated) { res.status(404).json({ error: "Medicine not found." }); return; }
     const [full] = await db.select(MEDICINE_SELECT).from(medicinesTable)
       .leftJoin(categoriesTable, eq(medicinesTable.categoryId, categoriesTable.id))

@@ -6,9 +6,9 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface PrescriptionInput {
-  patientId?: number;
-  patientName?: string;
-  doctorName?: string;
+export interface PatientUpdate {
+  /** @minLength 1 */
+  name?: string;
+  phone?: string;
   notes?: string;
 }

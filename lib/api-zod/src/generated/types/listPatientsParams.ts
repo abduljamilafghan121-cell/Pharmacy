@@ -6,9 +6,6 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface PrescriptionInput {
-  patientId?: number;
-  patientName?: string;
-  doctorName?: string;
-  notes?: string;
-}
+export type ListPatientsParams = {
+search?: string;
+};

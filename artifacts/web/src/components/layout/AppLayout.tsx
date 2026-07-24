@@ -13,8 +13,17 @@ import {
   Settings,
   LogOut,
   Users,
+  Menu,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 
 interface NavItem {
   label: string;
@@ -33,6 +42,7 @@ const navItems: NavItem[] = [
   { label: "Suppliers", href: "/suppliers", icon: Truck, roles: ["admin", "pharmacist"] },
   { label: "Purchase Orders", href: "/purchase-orders", icon: PackageSearch, roles: ["admin", "pharmacist"] },
   { label: "Reports", href: "/reports", icon: BarChart3, roles: ["admin", "pharmacist"] },
+  { label: "User Management", href: "/users", icon: Users, roles: ["admin"] },
 ];
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
@@ -105,21 +115,70 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
       {/* Mobile header */}
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-16 border-b border-border bg-card flex items-center justify-between px-6 md:hidden">
+          <header className="h-16 border-b border-border bg-card flex items-center justify-between px-4 sm:px-6 md:hidden">
           <div className="flex items-center gap-2 text-primary font-bold text-xl tracking-tight">
             <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground">
               <Pill size={18} />
             </div>
             PharmaCore
           </div>
-          <Button variant="ghost" size="sm" onClick={() => logout()}>
-            <LogOut size={16} />
-          </Button>
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon" aria-label="Open navigation menu">
+                <Menu size={20} />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left" className="w-[min(88vw,320px)] p-0">
+              <SheetHeader className="border-b border-border px-6 py-5 text-left">
+                <SheetTitle className="flex items-center gap-2 text-primary">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                    <Pill size={18} />
+                  </span>
+                  PharmaCore
+                </SheetTitle>
+                <SheetDescription>Pharmacy workspace navigation</SheetDescription>
+              </SheetHeader>
+              <nav className="space-y-1 overflow-y-auto px-4 py-5">
+                {filteredNav.map((item) => {
+                  const isActive = location === item.href || location.startsWith(item.href + '/');
+                  return (
+                    <Link key={item.href} href={item.href} className="block">
+                      <div className={cn(
+                        "flex items-center gap-3 rounded-md px-3 py-3 text-sm font-medium transition-colors",
+                        isActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      )}>
+                        <item.icon size={18} />
+                        {item.label}
+                      </div>
+                    </Link>
+                  );
+                })}
+                <Link href="/settings" className="block">
+                  <div className={cn(
+                    "flex items-center gap-3 rounded-md px-3 py-3 text-sm font-medium transition-colors",
+                    location === "/settings" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  )}>
+                    <Settings size={18} />
+                    Settings
+                  </div>
+                </Link>
+              </nav>
+              <div className="absolute inset-x-0 bottom-0 border-t border-border p-4">
+                <div className="mb-3 px-3">
+                  <p className="truncate text-sm font-medium">{user.name}</p>
+                  <p className="text-xs capitalize text-muted-foreground">{user.role}</p>
+                </div>
+                <Button variant="outline" className="w-full justify-start" onClick={() => logout()}>
+                  <LogOut size={16} className="mr-2" /> Log Out
+                </Button>
+              </div>
+            </SheetContent>
+          </Sheet>
         </header>
 
         {/* Mobile bottom nav */}
-        <div className="fixed bottom-0 left-0 right-0 z-50 bg-card border-t border-border flex md:hidden overflow-x-auto">
-          {filteredNav.slice(0, 5).map((item) => {
+        <div className="fixed bottom-0 left-0 right-0 z-50 bg-card border-t border-border flex md:hidden">
+          {filteredNav.slice(0, 4).map((item) => {
             const isActive = location === item.href || location.startsWith(item.href + '/');
             return (
               <Link key={item.href} href={item.href} className="flex-1 min-w-[64px]">
@@ -133,6 +192,47 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               </Link>
             );
           })}
+          <Sheet>
+            <SheetTrigger asChild>
+              <button className="flex-1 min-w-[64px] text-muted-foreground" aria-label="Open all navigation">
+                <div className="flex flex-col items-center gap-1 px-1 py-2 text-xs font-medium">
+                  <Menu size={20} />
+                  <span>More</span>
+                </div>
+              </button>
+            </SheetTrigger>
+            <SheetContent side="bottom" className="max-h-[82dvh] rounded-t-2xl px-4 pb-8">
+              <SheetHeader className="text-left">
+                <SheetTitle>All navigation</SheetTitle>
+                <SheetDescription>Open any pharmacy workspace area.</SheetDescription>
+              </SheetHeader>
+              <nav className="mt-4 grid grid-cols-2 gap-2 overflow-y-auto">
+                {filteredNav.slice(4).map((item) => {
+                  const isActive = location === item.href || location.startsWith(item.href + '/');
+                  return (
+                    <Link key={item.href} href={item.href} className="block">
+                      <div className={cn(
+                        "flex min-h-16 items-center gap-3 rounded-xl border px-3 text-sm font-medium",
+                        isActive ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"
+                      )}>
+                        <item.icon size={18} />
+                        <span>{item.label}</span>
+                      </div>
+                    </Link>
+                  );
+                })}
+                <Link href="/settings" className="block">
+                  <div className={cn(
+                    "flex min-h-16 items-center gap-3 rounded-xl border px-3 text-sm font-medium",
+                    location === "/settings" ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"
+                  )}>
+                    <Settings size={18} />
+                    <span>Settings</span>
+                  </div>
+                </Link>
+              </nav>
+            </SheetContent>
+          </Sheet>
         </div>
 
         <main className="flex-1 flex flex-col min-w-0 pb-16 md:pb-0">
