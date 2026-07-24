@@ -4,17 +4,22 @@ import * as schema from "./schema";
 
 const { Pool } = pg;
 
-if (!process.env.DATABASE_URL) {
+// Vercel/Supabase deployments commonly use SUPABASE_DATABASE_URL, while
+// Replit's managed database uses DATABASE_URL. Keep the runtime connection
+// behavior aligned with drizzle.config.ts and support either name.
+const databaseUrl = process.env.SUPABASE_DATABASE_URL ?? process.env.DATABASE_URL;
+
+if (!databaseUrl) {
   throw new Error(
-    "DATABASE_URL must be set. Did you forget to provision a database?",
+    "Database connection is not configured. Set SUPABASE_DATABASE_URL (Supabase) or DATABASE_URL.",
   );
 }
 
 export const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: databaseUrl,
   // Supabase (and most hosted Postgres providers) require SSL.
   // Replit's managed DB is on localhost so SSL is not needed there.
-  ssl: process.env.DATABASE_URL?.includes("localhost") || process.env.DATABASE_URL?.includes("127.0.0.1")
+  ssl: databaseUrl.includes("localhost") || databaseUrl.includes("127.0.0.1")
     ? false
     : { rejectUnauthorized: false },
 });

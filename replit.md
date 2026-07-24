@@ -77,7 +77,8 @@ git push -u origin main
 
 | Variable | Value |
 |----------|-------|
-| `DATABASE_URL` | Your Supabase PostgreSQL connection string (same as `SUPABASE_DATABASE_URL`) |
+| `SUPABASE_DATABASE_URL` | Your Supabase PostgreSQL connection string |
+| `DATABASE_URL` | Your Replit-managed PostgreSQL connection string (use this instead of `SUPABASE_DATABASE_URL` when applicable) |
 | `JWT_SECRET` | Your JWT secret (same value as the `JWT_SECRET` Replit secret) |
 | `NODE_ENV` | `production` |
 
@@ -104,7 +105,7 @@ The API server is configured via the "API Server" workflow (port 8080).
 The web frontend is configured via the "artifacts/web: web" workflow (port 22333).
 
 Environment variables needed:
-- `DATABASE_URL` (Replit-managed or `SUPABASE_DATABASE_URL` to use Supabase)
+- `DATABASE_URL` (Replit-managed) or `SUPABASE_DATABASE_URL` (Supabase)
 - `JWT_SECRET`
 
 ## Updating the API
