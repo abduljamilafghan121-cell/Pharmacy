@@ -25,9 +25,10 @@ export default function Register() {
         setLocation("/dashboard");
       },
       onError: (err: any) => {
+        const detail = err?.data?.detail || err?.data?.error || err?.message || "Something went wrong.";
         toast({
           title: "Registration failed",
-          description: err.response?.data?.error || "Something went wrong.",
+          description: detail,
           variant: "destructive",
         });
       },
