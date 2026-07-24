@@ -8,6 +8,31 @@ import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 
+function getDatabaseErrorMessage(error: unknown): string {
+  let current: unknown = error;
+  const visited = new Set<object>();
+
+  while (current instanceof Error) {
+    const currentObject = current as Error & { cause?: unknown; code?: string };
+    if (!current.message.startsWith("Failed query:")) {
+      return currentObject.code
+        ? `${current.message} (code ${currentObject.code})`
+        : current.message;
+    }
+
+    if (!currentObject.cause || typeof currentObject.cause !== "object") {
+      break;
+    }
+    if (visited.has(currentObject.cause)) {
+      break;
+    }
+    visited.add(currentObject.cause);
+    current = currentObject.cause;
+  }
+
+  return error instanceof Error ? error.message : String(error);
+}
+
 router.post("/auth/register", async (req, res): Promise<void> => {
   logger.info({ body: { ...req.body, password: "[REDACTED]" } }, "register: request received");
 
@@ -42,7 +67,10 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     });
   } catch (err) {
     logger.error({ err, email }, "register: unexpected error");
-    res.status(500).json({ error: "Registration failed", detail: err instanceof Error ? err.message : String(err) });
+    res.status(500).json({
+      error: "Registration failed",
+      detail: getDatabaseErrorMessage(err),
+    });
   }
 });
 
