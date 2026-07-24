@@ -55,7 +55,7 @@ function ProtectedRoute({ component: Component, roles }: { component: React.Elem
  * If no users exist yet, forces the user to /setup regardless of the current route.
  */
 function SetupGate({ children }: { children: React.ReactNode }) {
-  const { data, isLoading } = useSetupCheck();
+  const { data, isLoading, error } = useSetupCheck();
   const [location] = useLocation();
 
   if (isLoading) {
@@ -66,13 +66,20 @@ function SetupGate({ children }: { children: React.ReactNode }) {
     );
   }
 
+  // If the API is unreachable, assume no users and send to setup
+  // so a fresh deployment never silently falls through to login.
+  if (error || !data) {
+    if (location !== '/setup') return <Redirect to="/setup" />;
+    return <>{children}</>;
+  }
+
   // No users yet — send to setup unless already there
-  if (data && !data.hasUsers && location !== '/setup') {
+  if (!data.hasUsers && location !== '/setup') {
     return <Redirect to="/setup" />;
   }
 
   // Users exist — don't allow accessing setup page
-  if (data?.hasUsers && location === '/setup') {
+  if (data.hasUsers && location === '/setup') {
     return <Redirect to="/login" />;
   }
 
