@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Search, Plus, Minus, Trash2, ShoppingBag, Pill, CheckCircle2, Loader2, Receipt } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
+import { getErrorMessage } from "@/lib/errors";
 import { useToast } from "@/components/ui/use-toast";
 import { useLocation } from "wouter";
 import type { Medicine } from "@workspace/api-client-react";
@@ -37,10 +38,7 @@ export default function NewSale() {
   const queryClient = useQueryClient();
   const searchRef = useRef<HTMLInputElement>(null);
 
-  const { data: medicines } = useListMedicines(
-    { search: search || undefined }
-  );
-
+  const { data: medicines } = useListMedicines({ search: search || undefined });
   const createOrderMutation = useCreateOrder();
 
   const filteredMedicines = search.trim()
@@ -55,15 +53,13 @@ export default function NewSale() {
       const existing = prev.find(i => i.medicine.id === medicine.id);
       if (existing) {
         if (existing.quantity >= medicine.quantity) {
-          toast({ title: "Stock limit reached", variant: "destructive" });
+          toast({ title: "Stock limit reached", description: `Only ${medicine.quantity} units available.`, variant: "destructive" });
           return prev;
         }
-        return prev.map(i =>
-          i.medicine.id === medicine.id ? { ...i, quantity: i.quantity + 1 } : i
-        );
+        return prev.map(i => i.medicine.id === medicine.id ? { ...i, quantity: i.quantity + 1 } : i);
       }
       if (medicine.quantity === 0) {
-        toast({ title: "Out of stock", variant: "destructive" });
+        toast({ title: "Out of stock", description: `${medicine.name} is currently unavailable.`, variant: "destructive" });
         return prev;
       }
       return [...prev, { medicine, quantity: 1 }];
@@ -88,7 +84,7 @@ export default function NewSale() {
 
   const handleProcessSale = async () => {
     if (saleItems.length === 0) {
-      toast({ title: "Add at least one item", variant: "destructive" });
+      toast({ title: "Cart is empty", description: "Add at least one medicine to process a sale.", variant: "destructive" });
       return;
     }
 
@@ -102,14 +98,13 @@ export default function NewSale() {
           items: saleItems.map(i => ({ medicineId: i.medicine.id, quantity: i.quantity })),
         },
       });
-
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
       queryClient.invalidateQueries({ queryKey: ["/api/medicines"] });
       setCompletedSale(result);
-    } catch (err: any) {
+    } catch (err) {
       toast({
         title: "Sale failed",
-        description: err.response?.data?.error || "An error occurred",
+        description: getErrorMessage(err),
         variant: "destructive",
       });
     } finally {
@@ -189,8 +184,6 @@ export default function NewSale() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
-
-        {/* Left: Medicine Search */}
         <div className="lg:col-span-3 space-y-4">
           <Card>
             <CardContent className="pt-4 pb-4">
@@ -240,7 +233,6 @@ export default function NewSale() {
             </CardContent>
           </Card>
 
-          {/* Sale Items */}
           <Card>
             <CardHeader className="border-b border-border pb-4">
               <CardTitle className="text-base flex items-center gap-2">
@@ -298,7 +290,6 @@ export default function NewSale() {
           </Card>
         </div>
 
-        {/* Right: Patient + Payment */}
         <div className="lg:col-span-2 space-y-4">
           <Card>
             <CardHeader className="border-b border-border pb-4">
@@ -337,7 +328,6 @@ export default function NewSale() {
                   </button>
                 ))}
               </div>
-
               <div className="space-y-1">
                 <Label htmlFor="notes">Notes <span className="text-muted-foreground font-normal">(optional)</span></Label>
                 <Input

@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Users, Plus, Search, Phone } from "lucide-react";
+import { ErrorState } from "@/components/ui/error-state";
 import { useToast } from "@/components/ui/use-toast";
 import { formatDate } from "@/lib/utils";
 
@@ -16,7 +17,10 @@ function getAuthHeaders(): HeadersInit {
 
 async function apiFetch<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, { ...init, headers: { ...getAuthHeaders(), ...init?.headers } });
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.error || body?.detail || `Request failed (${res.status})`);
+  }
   return res.json() as Promise<T>;
 }
 
@@ -26,6 +30,7 @@ export default function Patients() {
   const [search, setSearch] = useState("");
   const [patients, setPatients] = useState<Patient[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const { toast } = useToast();
 
@@ -36,12 +41,15 @@ export default function Patients() {
 
   const loadPatients = async (q?: string) => {
     setIsLoading(true);
+    setLoadError(null);
     try {
       const url = q ? `/api/patients?search=${encodeURIComponent(q)}` : "/api/patients";
       const data = await apiFetch<Patient[]>(url);
       setPatients(data);
-    } catch {
-      toast({ title: "Failed to load patients", variant: "destructive" });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to load patients.";
+      setLoadError(msg);
+      toast({ title: "Failed to load patients", description: msg, variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
@@ -63,12 +71,13 @@ export default function Patients() {
         method: "POST",
         body: JSON.stringify({ name: newName.trim(), phone: newPhone.trim() || undefined, notes: newNotes.trim() || undefined }),
       });
-      toast({ title: "Patient added" });
+      toast({ title: "Patient registered successfully." });
       setNewName(""); setNewPhone(""); setNewNotes("");
       setDialogOpen(false);
       loadPatients(search);
-    } catch {
-      toast({ title: "Failed to add patient", variant: "destructive" });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to register patient.";
+      toast({ title: "Failed to register patient", description: msg, variant: "destructive" });
     } finally {
       setIsSaving(false);
     }
@@ -105,7 +114,9 @@ export default function Patients() {
               </div>
               <div className="flex gap-2 justify-end pt-2">
                 <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-                <Button type="submit" disabled={isSaving || !newName.trim()}>Save</Button>
+                <Button type="submit" disabled={isSaving || !newName.trim()}>
+                  {isSaving ? "Saving…" : "Save"}
+                </Button>
               </div>
             </form>
           </DialogContent>
@@ -125,55 +136,63 @@ export default function Patients() {
         <Button type="submit" variant="outline">Search</Button>
       </form>
 
-      <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/50">
-                <TableHead>ID</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Phone</TableHead>
-                <TableHead>Notes</TableHead>
-                <TableHead>Registered</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Loading patients…</TableCell>
+      {loadError ? (
+        <ErrorState
+          title="Failed to load patients"
+          message={loadError}
+          onRetry={() => loadPatients(search)}
+        />
+      ) : (
+        <Card>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/50">
+                  <TableHead>ID</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Phone</TableHead>
+                  <TableHead>Notes</TableHead>
+                  <TableHead>Registered</TableHead>
                 </TableRow>
-              ) : patients.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">
-                    <div className="flex flex-col items-center gap-3">
-                      <Users className="w-12 h-12 text-muted-foreground/50" />
-                      <p>No patients found.</p>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                patients.map((p) => (
-                  <TableRow key={p.id} className="hover:bg-muted/30 transition-colors">
-                    <TableCell className="font-medium">#{p.id}</TableCell>
-                    <TableCell className="font-medium text-foreground">{p.name}</TableCell>
-                    <TableCell>
-                      {p.phone ? (
-                        <span className="flex items-center gap-1 text-sm text-muted-foreground">
-                          <Phone size={12} />{p.phone}
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground/50 text-sm">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground text-sm max-w-xs truncate">{p.notes ?? "—"}</TableCell>
-                    <TableCell className="text-muted-foreground text-sm">{formatDate(p.createdAt)}</TableCell>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Loading patients…</TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+                ) : patients.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">
+                      <div className="flex flex-col items-center gap-3">
+                        <Users className="w-12 h-12 text-muted-foreground/50" />
+                        <p>No patients found.</p>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  patients.map((p) => (
+                    <TableRow key={p.id} className="hover:bg-muted/30 transition-colors">
+                      <TableCell className="font-medium">#{p.id}</TableCell>
+                      <TableCell className="font-medium text-foreground">{p.name}</TableCell>
+                      <TableCell>
+                        {p.phone ? (
+                          <span className="flex items-center gap-1 text-sm text-muted-foreground">
+                            <Phone size={12} />{p.phone}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground/50 text-sm">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-sm max-w-xs truncate">{p.notes ?? "—"}</TableCell>
+                      <TableCell className="text-muted-foreground text-sm">{formatDate(p.createdAt)}</TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

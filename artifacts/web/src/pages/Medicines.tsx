@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
-import { useListMedicines, useListCategories, useCreateMedicine, useUpdateMedicine, useDeleteMedicine } from "@workspace/api-client-react";
+import { useListMedicines, useListCategories, useCreateMedicine, getListMedicinesQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,18 +10,19 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Search, Plus, Filter, AlertCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { ErrorState } from "@/components/ui/error-state";
 import { useToast } from "@/components/ui/use-toast";
 import { formatCurrency } from "@/lib/utils";
+import { getErrorMessage } from "@/lib/errors";
 
 export default function Medicines() {
   const { user } = useAuth();
   const [search, setSearch] = useState("");
   const [categoryId, setCategoryId] = useState<number | "">("");
-  
-  const { data: medicines, isLoading } = useListMedicines(
+
+  const { data: medicines, isLoading, isError, error, refetch } = useListMedicines(
     { search: search || undefined, categoryId: categoryId || undefined }
   );
-
   const { data: categories } = useListCategories();
   const isAdmin = user?.role === "admin" || user?.role === "pharmacist";
 
@@ -32,19 +33,16 @@ export default function Medicines() {
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Medicines</h1>
           <p className="text-muted-foreground mt-1">Browse our full catalog of pharmaceutical products.</p>
         </div>
-        
         <div className="flex items-center gap-3">
-          {isAdmin && (
-            <MedicineFormDialog />
-          )}
+          {isAdmin && <MedicineFormDialog />}
         </div>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-4 bg-card p-4 rounded-xl border border-card-border shadow-sm">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
-          <Input 
-            placeholder="Search medicines by name or generic name..." 
+          <Input
+            placeholder="Search medicines by name or generic name..."
             className="pl-9 bg-transparent"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -52,7 +50,7 @@ export default function Medicines() {
         </div>
         <div className="flex items-center gap-2">
           <Filter className="text-muted-foreground w-4 h-4 ml-2" />
-          <select 
+          <select
             className="h-11 rounded-md border border-input bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             value={categoryId}
             onChange={(e) => setCategoryId(e.target.value ? Number(e.target.value) : "")}
@@ -65,9 +63,15 @@ export default function Medicines() {
         </div>
       </div>
 
-      {isLoading ? (
+      {isError ? (
+        <ErrorState
+          title="Failed to load medicines"
+          message={getErrorMessage(error)}
+          onRetry={() => refetch()}
+        />
+      ) : isLoading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {[1,2,3,4,5,6,7,8].map(i => (
+          {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
             <div key={i} className="h-[300px] rounded-xl bg-muted/50 animate-pulse" />
           ))}
         </div>
@@ -91,7 +95,7 @@ export default function Medicines() {
   );
 }
 
-function MedicineCard({ medicine, isAdmin }: { medicine: any, isAdmin: boolean }) {
+function MedicineCard({ medicine, isAdmin: _isAdmin }: { medicine: any, isAdmin: boolean }) {
   const isOutOfStock = medicine.quantity === 0;
 
   return (
@@ -110,7 +114,6 @@ function MedicineCard({ medicine, isAdmin }: { medicine: any, isAdmin: boolean }
           </div>
         )}
       </Link>
-      
       <CardContent className="p-5 flex-1 flex flex-col">
         <div className="mb-2">
           <Link href={`/medicines/${medicine.id}`} className="text-lg font-bold hover:text-primary transition-colors line-clamp-1">
@@ -120,7 +123,6 @@ function MedicineCard({ medicine, isAdmin }: { medicine: any, isAdmin: boolean }
             {medicine.genericName || "—"}
           </p>
         </div>
-        
         <div className="mt-auto pt-4 flex items-end justify-between">
           <div>
             <p className="text-xl font-bold text-primary">{formatCurrency(medicine.price)}</p>
@@ -130,7 +132,6 @@ function MedicineCard({ medicine, isAdmin }: { medicine: any, isAdmin: boolean }
               <p className="text-xs text-muted-foreground mt-1">{medicine.quantity} in stock</p>
             )}
           </div>
-          
           <Button size="sm" variant="outline" asChild>
             <Link href={`/medicines/${medicine.id}`}>Details</Link>
           </Button>
@@ -145,34 +146,34 @@ function MedicineFormDialog() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data: categories } = useListCategories();
-  
+
   const createMutation = useCreateMedicine({
     mutation: {
       onSuccess: () => {
-        toast({ title: "Medicine created successfully." });
-        queryClient.invalidateQueries({ queryKey: ['/api/medicines'] });
+        toast({ title: "Medicine added successfully." });
+        queryClient.invalidateQueries({ queryKey: getListMedicinesQueryKey() });
         setOpen(false);
       },
-      onError: (err: any) => {
-        toast({ title: "Error", description: err.response?.data?.error || "Failed to create", variant: "destructive" });
-      }
-    }
+      onError: (err) => {
+        toast({ title: "Failed to add medicine", description: getErrorMessage(err), variant: "destructive" });
+      },
+    },
   });
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    const data = {
-      name: fd.get("name") as string,
-      genericName: fd.get("genericName") as string,
-      categoryId: Number(fd.get("categoryId")),
-      quantity: Number(fd.get("quantity")),
-      price: fd.get("price") as string,
-      prescriptionRequired: fd.get("prescriptionRequired") === "on",
-      description: fd.get("description") as string,
-    };
-    
-    createMutation.mutate({ data });
+    createMutation.mutate({
+      data: {
+        name: fd.get("name") as string,
+        genericName: fd.get("genericName") as string,
+        categoryId: fd.get("categoryId") ? Number(fd.get("categoryId")) : undefined,
+        quantity: Number(fd.get("quantity")),
+        price: fd.get("price") as string,
+        prescriptionRequired: fd.get("prescriptionRequired") === "on",
+        description: fd.get("description") as string,
+      },
+    });
   };
 
   return (
@@ -211,12 +212,15 @@ function MedicineFormDialog() {
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </select>
+            {categories?.length === 0 && (
+              <p className="text-xs text-muted-foreground">No categories yet — add some in Settings first.</p>
+            )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="description">Description</Label>
-            <textarea 
-              id="description" 
-              name="description" 
+            <textarea
+              id="description"
+              name="description"
               className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               placeholder="Dosage instructions, side effects, etc."
             />
@@ -227,7 +231,9 @@ function MedicineFormDialog() {
           </div>
           <div className="flex justify-end gap-3 pt-4">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button type="submit" disabled={createMutation.isPending}>Save Medicine</Button>
+            <Button type="submit" disabled={createMutation.isPending}>
+              {createMutation.isPending ? "Saving…" : "Save Medicine"}
+            </Button>
           </div>
         </form>
       </DialogContent>

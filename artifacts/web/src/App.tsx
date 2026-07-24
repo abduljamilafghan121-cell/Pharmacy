@@ -6,6 +6,7 @@ import { Route, Switch, Router as WouterRouter, Redirect, useLocation } from 'wo
 import { AuthProvider, useAuth } from '@/hooks/use-auth';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useSetupCheck } from '@/hooks/use-setup-check';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Loader2 } from 'lucide-react';
 
 import Login from '@/pages/Login';
@@ -26,7 +27,7 @@ import Settings from '@/pages/Settings';
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: false,
+      retry: 1,
       refetchOnWindowFocus: false,
     }
   }
@@ -45,15 +46,13 @@ function ProtectedRoute({ component: Component, roles }: { component: React.Elem
 
   return (
     <AppLayout>
-      <Component />
+      <ErrorBoundary>
+        <Component />
+      </ErrorBoundary>
     </AppLayout>
   );
 }
 
-/**
- * Checks setup status on every page load.
- * If no users exist yet, forces the user to /setup regardless of the current route.
- */
 function SetupGate({ children }: { children: React.ReactNode }) {
   const { data, isLoading, error } = useSetupCheck();
   const [location] = useLocation();
@@ -66,19 +65,15 @@ function SetupGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // If the API is unreachable, assume no users and send to setup
-  // so a fresh deployment never silently falls through to login.
   if (error || !data) {
     if (location !== '/setup') return <Redirect to="/setup" />;
     return <>{children}</>;
   }
 
-  // No users yet — send to setup unless already there
   if (!data.hasUsers && location !== '/setup') {
     return <Redirect to="/setup" />;
   }
 
-  // Users exist — don't allow accessing setup page
   if (data.hasUsers && location === '/setup') {
     return <Redirect to="/login" />;
   }
@@ -92,9 +87,7 @@ function Router() {
   return (
     <SetupGate>
       <Switch>
-        {/* First-run setup */}
         <Route path="/setup" component={Register} />
-
         <Route path="/login">
           {user ? <Redirect to="/dashboard" /> : <Login />}
         </Route>

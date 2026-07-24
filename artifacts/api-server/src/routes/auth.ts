@@ -5,33 +5,9 @@ import { db, usersTable } from "@workspace/db";
 import { RegisterUserBody, LoginUserBody } from "@workspace/api-zod";
 import { signToken, requireAuth } from "../middlewares/auth";
 import { logger } from "../lib/logger";
+import { formatZodError, getDbErrorMessage } from "../lib/api-errors";
 
 const router: IRouter = Router();
-
-function getDatabaseErrorMessage(error: unknown): string {
-  let current: unknown = error;
-  const visited = new Set<object>();
-
-  while (current instanceof Error) {
-    const currentObject = current as Error & { cause?: unknown; code?: string };
-    if (!current.message.startsWith("Failed query:")) {
-      return currentObject.code
-        ? `${current.message} (code ${currentObject.code})`
-        : current.message;
-    }
-
-    if (!currentObject.cause || typeof currentObject.cause !== "object") {
-      break;
-    }
-    if (visited.has(currentObject.cause)) {
-      break;
-    }
-    visited.add(currentObject.cause);
-    current = currentObject.cause;
-  }
-
-  return error instanceof Error ? error.message : String(error);
-}
 
 router.post("/auth/register", async (req, res): Promise<void> => {
   logger.info({ body: { ...req.body, password: "[REDACTED]" } }, "register: request received");
@@ -39,7 +15,7 @@ router.post("/auth/register", async (req, res): Promise<void> => {
   const parsed = RegisterUserBody.safeParse(req.body);
   if (!parsed.success) {
     logger.warn({ error: parsed.error.flatten() }, "register: validation failed");
-    res.status(400).json({ error: parsed.error.message });
+    res.status(400).json({ error: formatZodError(parsed.error) });
     return;
   }
   const { name, email, password, phone } = parsed.data;
@@ -49,7 +25,7 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     const [existing] = await db.select().from(usersTable).where(eq(usersTable.email, email));
     if (existing) {
       logger.warn({ email }, "register: email already registered");
-      res.status(409).json({ error: "Email already registered" });
+      res.status(409).json({ error: "An account with this email already exists." });
       return;
     }
 
@@ -57,7 +33,10 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     const passwordHash = await bcrypt.hash(password, 10);
 
     logger.info({ email }, "register: inserting user");
-    const [user] = await db.insert(usersTable).values({ name, email, passwordHash, phone: phone ?? null, role: parsed.data.role ?? "pharmacist" }).returning();
+    const [user] = await db
+      .insert(usersTable)
+      .values({ name, email, passwordHash, phone: phone ?? null, role: parsed.data.role ?? "pharmacist" })
+      .returning();
 
     logger.info({ userId: user.id, email }, "register: user created successfully");
     const token = signToken({ userId: user.id, role: user.role });
@@ -67,47 +46,54 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     });
   } catch (err) {
     logger.error({ err, email }, "register: unexpected error");
-    res.status(500).json({
-      error: "Registration failed",
-      detail: getDatabaseErrorMessage(err),
-    });
+    res.status(500).json({ error: "Registration failed", detail: getDbErrorMessage(err) });
   }
 });
 
 router.post("/auth/login", async (req, res): Promise<void> => {
   const parsed = LoginUserBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+    res.status(400).json({ error: formatZodError(parsed.error) });
     return;
   }
   const { email, password } = parsed.data;
 
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.email, email));
-  if (!user) {
-    res.status(401).json({ error: "Invalid credentials" });
-    return;
-  }
+  try {
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.email, email));
+    if (!user) {
+      res.status(401).json({ error: "No account found with that email address." });
+      return;
+    }
 
-  const valid = await bcrypt.compare(password, user.passwordHash);
-  if (!valid) {
-    res.status(401).json({ error: "Invalid credentials" });
-    return;
-  }
+    const valid = await bcrypt.compare(password, user.passwordHash);
+    if (!valid) {
+      res.status(401).json({ error: "Incorrect password. Please try again." });
+      return;
+    }
 
-  const token = signToken({ userId: user.id, role: user.role });
-  res.json({
-    token,
-    user: { id: user.id, name: user.name, email: user.email, phone: user.phone, role: user.role, createdAt: user.createdAt },
-  });
+    const token = signToken({ userId: user.id, role: user.role });
+    res.json({
+      token,
+      user: { id: user.id, name: user.name, email: user.email, phone: user.phone, role: user.role, createdAt: user.createdAt },
+    });
+  } catch (err) {
+    logger.error({ err, email }, "login: unexpected error");
+    res.status(500).json({ error: "Login failed. Please try again.", detail: getDbErrorMessage(err) });
+  }
 });
 
 router.get("/auth/me", requireAuth, async (req, res): Promise<void> => {
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.auth!.userId));
-  if (!user) {
-    res.status(404).json({ error: "User not found" });
-    return;
+  try {
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.auth!.userId));
+    if (!user) {
+      res.status(404).json({ error: "User account not found." });
+      return;
+    }
+    res.json({ id: user.id, name: user.name, email: user.email, phone: user.phone, role: user.role, createdAt: user.createdAt });
+  } catch (err) {
+    logger.error({ err }, "auth/me: unexpected error");
+    res.status(500).json({ error: "Failed to load account. Please try again." });
   }
-  res.json({ id: user.id, name: user.name, email: user.email, phone: user.phone, role: user.role, createdAt: user.createdAt });
 });
 
 export default router;

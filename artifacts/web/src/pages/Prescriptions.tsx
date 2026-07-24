@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useListPrescriptions, useVerifyPrescription, useRejectPrescription, useCreatePrescription } from "@workspace/api-client-react";
+import { useListPrescriptions, useVerifyPrescription, useRejectPrescription, useCreatePrescription, getListPrescriptionsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -8,11 +8,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FileText, CheckCircle, XCircle, Plus, User, Stethoscope } from "lucide-react";
 import { formatDate } from "@/lib/utils";
+import { getErrorMessage } from "@/lib/errors";
 import { useToast } from "@/components/ui/use-toast";
+import { ErrorState } from "@/components/ui/error-state";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
 export default function Prescriptions() {
-  const { data: prescriptions, isLoading } = useListPrescriptions();
+  const { data: prescriptions, isLoading, isError, error, refetch } = useListPrescriptions();
   const [dialogOpen, setDialogOpen] = useState(false);
 
   return (
@@ -31,9 +33,15 @@ export default function Prescriptions() {
         </Dialog>
       </div>
 
-      {isLoading ? (
+      {isError ? (
+        <ErrorState
+          title="Failed to load prescriptions"
+          message={getErrorMessage(error)}
+          onRetry={() => refetch()}
+        />
+      ) : isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {[1,2,3].map(i => <div key={i} className="h-[200px] bg-muted/50 animate-pulse rounded-xl" />)}
+          {[1, 2, 3].map(i => <div key={i} className="h-[200px] bg-muted/50 animate-pulse rounded-xl" />)}
         </div>
       ) : prescriptions?.length === 0 ? (
         <div className="text-center py-16 bg-card rounded-xl border border-border">
@@ -62,11 +70,13 @@ function NewPrescriptionDialog({ onClose }: { onClose: () => void }) {
   const createMutation = useCreatePrescription({
     mutation: {
       onSuccess: () => {
-        toast({ title: "Prescription recorded" });
-        queryClient.invalidateQueries({ queryKey: ["/api/prescriptions"] });
+        toast({ title: "Prescription recorded successfully." });
+        queryClient.invalidateQueries({ queryKey: getListPrescriptionsQueryKey() });
         onClose();
       },
-      onError: () => toast({ title: "Failed to save", variant: "destructive" }),
+      onError: (err) => {
+        toast({ title: "Failed to save prescription", description: getErrorMessage(err), variant: "destructive" });
+      },
     },
   });
 
@@ -101,7 +111,9 @@ function NewPrescriptionDialog({ onClose }: { onClose: () => void }) {
         </div>
         <div className="flex gap-2 justify-end pt-2">
           <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-          <Button type="submit" disabled={createMutation.isPending}>Save</Button>
+          <Button type="submit" disabled={createMutation.isPending}>
+            {createMutation.isPending ? "Saving…" : "Save"}
+          </Button>
         </div>
       </form>
     </DialogContent>
@@ -111,12 +123,17 @@ function NewPrescriptionDialog({ onClose }: { onClose: () => void }) {
 function PrescriptionCard({ rx }: { rx: any }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
 
   const verifyMutation = useVerifyPrescription({
     mutation: {
       onSuccess: () => {
-        toast({ title: "Prescription verified" });
-        queryClient.invalidateQueries({ queryKey: ["/api/prescriptions"] });
+        toast({ title: "Prescription verified." });
+        queryClient.invalidateQueries({ queryKey: getListPrescriptionsQueryKey() });
+      },
+      onError: (err) => {
+        toast({ title: "Failed to verify prescription", description: getErrorMessage(err), variant: "destructive" });
       },
     },
   });
@@ -124,8 +141,13 @@ function PrescriptionCard({ rx }: { rx: any }) {
   const rejectMutation = useRejectPrescription({
     mutation: {
       onSuccess: () => {
-        toast({ title: "Prescription rejected" });
-        queryClient.invalidateQueries({ queryKey: ["/api/prescriptions"] });
+        toast({ title: "Prescription rejected." });
+        queryClient.invalidateQueries({ queryKey: getListPrescriptionsQueryKey() });
+        setRejectDialogOpen(false);
+        setRejectReason("");
+      },
+      onError: (err) => {
+        toast({ title: "Failed to reject prescription", description: getErrorMessage(err), variant: "destructive" });
       },
     },
   });
@@ -159,9 +181,7 @@ function PrescriptionCard({ rx }: { rx: any }) {
               <span>Dr. {rx.doctorName}</span>
             </p>
           )}
-          <p className="text-sm text-muted-foreground">
-            Recorded: {formatDate(rx.createdAt)}
-          </p>
+          <p className="text-sm text-muted-foreground">Recorded: {formatDate(rx.createdAt)}</p>
           {rx.notes && (
             <div className="bg-muted/50 p-3 rounded-md text-sm border border-border">
               <p className="text-muted-foreground mb-1">Notes:</p>
@@ -180,17 +200,40 @@ function PrescriptionCard({ rx }: { rx: any }) {
             >
               <CheckCircle className="w-4 h-4 mr-2" /> Verify
             </Button>
-            <Button
-              variant="destructive"
-              className="flex-1"
-              disabled={rejectMutation.isPending}
-              onClick={() => {
-                const reason = prompt("Reason for rejection:");
-                if (reason) rejectMutation.mutate({ id: rx.id, data: { notes: reason } });
-              }}
-            >
-              <XCircle className="w-4 h-4 mr-2" /> Reject
-            </Button>
+
+            <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="destructive" className="flex-1">
+                  <XCircle className="w-4 h-4 mr-2" /> Reject
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Reject Prescription</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 mt-2">
+                  <div className="space-y-1">
+                    <Label htmlFor="rejectReason">Reason for rejection *</Label>
+                    <Input
+                      id="rejectReason"
+                      value={rejectReason}
+                      onChange={e => setRejectReason(e.target.value)}
+                      placeholder="e.g. Illegible, expired, missing signature…"
+                    />
+                  </div>
+                  <div className="flex gap-2 justify-end">
+                    <Button variant="outline" onClick={() => setRejectDialogOpen(false)}>Cancel</Button>
+                    <Button
+                      variant="destructive"
+                      disabled={!rejectReason.trim() || rejectMutation.isPending}
+                      onClick={() => rejectMutation.mutate({ id: rx.id, data: { notes: rejectReason } })}
+                    >
+                      {rejectMutation.isPending ? "Rejecting…" : "Confirm Rejection"}
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
           </div>
         )}
       </CardContent>
