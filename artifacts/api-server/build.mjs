@@ -126,9 +126,9 @@ globalThis.__dirname = __bannerPath.dirname(globalThis.__filename);
     entryPoints: [path.resolve(artifactDir, "src/vercel.ts")],
     platform: "node",
     bundle: true,
-    format: "esm",
+    format: "cjs",
     outdir: distDir,
-    outExtension: { ".js": ".mjs" },
+    outExtension: { ".js": ".cjs" },
     logLevel: "info",
     external: [
       "*.node",
@@ -209,14 +209,9 @@ globalThis.__dirname = __bannerPath.dirname(globalThis.__filename);
       esbuildPluginPino({ transports: ["pino-pretty"] })
     ],
     banner: {
-      js: `import { createRequire as __bannerCrReq } from 'node:module';
-import __bannerPath from 'node:path';
-import __bannerUrl from 'node:url';
-
-globalThis.require = __bannerCrReq(import.meta.url);
-globalThis.__filename = __bannerUrl.fileURLToPath(import.meta.url);
-globalThis.__dirname = __bannerPath.dirname(globalThis.__filename);
-    `,
+      js: `globalThis.__filename = __filename;
+globalThis.__dirname = __dirname;
+     `,
     },
   });
 }
