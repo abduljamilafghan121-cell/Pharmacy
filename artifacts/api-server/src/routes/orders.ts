@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, inArray } from "drizzle-orm";
 import { db, ordersTable, orderItemsTable, medicinesTable, usersTable, paymentsTable } from "@workspace/db";
 import {
   CreateOrderBody, UpdateOrderStatusBody,
@@ -40,7 +40,7 @@ router.post("/orders", requireAuth, async (req, res): Promise<void> => {
   // Fetch all medicines
   const medicineIds = items.map((i: { medicineId: number; quantity: number }) => i.medicineId);
   const medicines = await db.select().from(medicinesTable).where(
-    sql`${medicinesTable.id} = ANY(${medicineIds})`
+    inArray(medicinesTable.id, medicineIds)
   );
 
   // Validate stock
