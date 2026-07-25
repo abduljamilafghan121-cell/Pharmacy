@@ -48,6 +48,10 @@ import type {
   PrescriptionReviewInput,
   PurchaseOrder,
   PurchaseOrderInput,
+  SupplierLedgerDetail,
+  SupplierLedgerSummary,
+  SupplierPayment,
+  SupplierPaymentInput,
   RevenueReport,
   SalesReport,
   Supplier,
@@ -3131,6 +3135,99 @@ export const useReceivePurchaseOrder = <TError = ErrorType<ErrorResponse>,
       > => {
       return useMutation(getReceivePurchaseOrderMutationOptions(options));
     }
+
+// ── Supplier Ledger ──────────────────────────────────────────────────────────
+
+export const getListSupplierLedgerUrl = () => `/api/supplier-ledger`;
+
+export const listSupplierLedger = async (options?: RequestInit): Promise<SupplierLedgerSummary[]> => {
+  return customFetch<SupplierLedgerSummary[]>(getListSupplierLedgerUrl(), { ...options, method: 'GET' });
+};
+
+export const getListSupplierLedgerQueryKey = () => [`/api/supplier-ledger`] as const;
+
+export const getListSupplierLedgerQueryOptions = <TData = Awaited<ReturnType<typeof listSupplierLedger>>, TError = ErrorType<unknown>>(
+  options?: { query?: UseQueryOptions<Awaited<ReturnType<typeof listSupplierLedger>>, TError, TData>; request?: SecondParameter<typeof customFetch> }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getListSupplierLedgerQueryKey();
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listSupplierLedger>>> = ({ signal }) =>
+    listSupplierLedger({ signal, ...requestOptions });
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<Awaited<ReturnType<typeof listSupplierLedger>>, TError, TData> & { queryKey: QueryKey };
+};
+
+export type ListSupplierLedgerQueryResult = NonNullable<Awaited<ReturnType<typeof listSupplierLedger>>>;
+export type ListSupplierLedgerQueryError = ErrorType<unknown>;
+
+export function useListSupplierLedger<TData = Awaited<ReturnType<typeof listSupplierLedger>>, TError = ErrorType<unknown>>(
+  options?: { query?: UseQueryOptions<Awaited<ReturnType<typeof listSupplierLedger>>, TError, TData>; request?: SecondParameter<typeof customFetch> }
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListSupplierLedgerQueryOptions(options);
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+export const getGetSupplierLedgerUrl = (supplierId: number) => `/api/supplier-ledger/${supplierId}`;
+
+export const getSupplierLedger = async (supplierId: number, options?: RequestInit): Promise<SupplierLedgerDetail> => {
+  return customFetch<SupplierLedgerDetail>(getGetSupplierLedgerUrl(supplierId), { ...options, method: 'GET' });
+};
+
+export const getGetSupplierLedgerQueryKey = (supplierId: number) => [`/api/supplier-ledger/${supplierId}`] as const;
+
+export const getGetSupplierLedgerQueryOptions = <TData = Awaited<ReturnType<typeof getSupplierLedger>>, TError = ErrorType<unknown>>(
+  supplierId: number,
+  options?: { query?: UseQueryOptions<Awaited<ReturnType<typeof getSupplierLedger>>, TError, TData>; request?: SecondParameter<typeof customFetch> }
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getGetSupplierLedgerQueryKey(supplierId);
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getSupplierLedger>>> = ({ signal }) =>
+    getSupplierLedger(supplierId, { signal, ...requestOptions });
+  return { queryKey, queryFn, enabled: !!supplierId, ...queryOptions } as UseQueryOptions<Awaited<ReturnType<typeof getSupplierLedger>>, TError, TData> & { queryKey: QueryKey };
+};
+
+export type GetSupplierLedgerQueryResult = NonNullable<Awaited<ReturnType<typeof getSupplierLedger>>>;
+export type GetSupplierLedgerQueryError = ErrorType<ErrorResponse>;
+
+export function useGetSupplierLedger<TData = Awaited<ReturnType<typeof getSupplierLedger>>, TError = ErrorType<ErrorResponse>>(
+  supplierId: number,
+  options?: { query?: UseQueryOptions<Awaited<ReturnType<typeof getSupplierLedger>>, TError, TData>; request?: SecondParameter<typeof customFetch> }
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetSupplierLedgerQueryOptions(supplierId, options);
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+export const getCreateSupplierPaymentMutationOptions = <TError = ErrorType<unknown>, TContext = unknown>(
+  options?: { mutation?: UseMutationOptions<Awaited<ReturnType<typeof createSupplierPayment>>, TError, { data: BodyType<SupplierPaymentInput> }, TContext>; request?: SecondParameter<typeof customFetch> }
+): UseMutationOptions<Awaited<ReturnType<typeof createSupplierPayment>>, TError, { data: BodyType<SupplierPaymentInput> }, TContext> => {
+  const { mutation: mutationOptions, request: requestOptions } = options ?? {};
+  const mutationFn: MutationFunction<Awaited<ReturnType<typeof createSupplierPayment>>, { data: BodyType<SupplierPaymentInput> }> = (props) => {
+    const { data } = props ?? {};
+    return createSupplierPayment(data, requestOptions);
+  };
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateSupplierPaymentMutationResult = NonNullable<Awaited<ReturnType<typeof createSupplierPayment>>>;
+export type CreateSupplierPaymentMutationBody = BodyType<SupplierPaymentInput>;
+export type CreateSupplierPaymentMutationError = ErrorType<unknown>;
+
+export const useCreateSupplierPayment = <TError = ErrorType<unknown>, TContext = unknown>(
+  options?: { mutation?: UseMutationOptions<Awaited<ReturnType<typeof createSupplierPayment>>, TError, { data: BodyType<SupplierPaymentInput> }, TContext>; request?: SecondParameter<typeof customFetch> }
+): UseMutationResult<Awaited<ReturnType<typeof createSupplierPayment>>, TError, { data: BodyType<SupplierPaymentInput> }, TContext> => {
+  const mutationOptions = getCreateSupplierPaymentMutationOptions(options);
+  return useMutation(mutationOptions);
+};
+
+export const createSupplierPayment = async (supplierPaymentInput: SupplierPaymentInput, options?: RequestInit): Promise<SupplierPayment> => {
+  return customFetch<SupplierPayment>(`/api/supplier-payments`, {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(supplierPaymentInput),
+  });
+};
 
 export const getGetSalesReportUrl = (params?: GetSalesReportParams,) => {
   const normalizedParams = new URLSearchParams();

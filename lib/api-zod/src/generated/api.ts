@@ -911,6 +911,70 @@ export const ReceivePurchaseOrderResponse = zod.object({
 
 
 /**
+ * @summary List all suppliers with balance summaries
+ */
+export const ListSupplierLedgerResponseItem = zod.object({
+  "supplierId": zod.number(),
+  "supplierName": zod.string(),
+  "totalOrdered": zod.string(),
+  "totalPaid": zod.string(),
+  "balance": zod.string(),
+  "lastActivity": zod.string().nullish()
+})
+export const ListSupplierLedgerResponse = zod.array(ListSupplierLedgerResponseItem)
+
+/**
+ * @summary Get full ledger for a single supplier
+ */
+export const GetSupplierLedgerParams = zod.object({
+  "supplierId": zod.number()
+})
+
+export const GetSupplierLedgerResponse = zod.object({
+  "supplierId": zod.number(),
+  "supplierName": zod.string(),
+  "contactName": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "totalOrdered": zod.string(),
+  "totalPaid": zod.string(),
+  "balance": zod.string(),
+  "entries": zod.array(zod.object({
+    "id": zod.number(),
+    "entryType": zod.enum(["purchase_order", "payment"]),
+    "purchaseOrderId": zod.number().nullish(),
+    "paymentId": zod.number().nullish(),
+    "date": zod.string(),
+    "description": zod.string(),
+    "debit": zod.string(),
+    "credit": zod.string(),
+    "runningBalance": zod.string()
+  }))
+})
+
+/**
+ * @summary Record a payment made to a supplier
+ */
+export const CreateSupplierPaymentBody = zod.object({
+  "supplierId": zod.number(),
+  "purchaseOrderId": zod.number().nullish(),
+  "amount": zod.string(),
+  "method": zod.enum(["cash", "bank", "cheque", "transfer"]),
+  "note": zod.string().nullish()
+})
+
+export const CreateSupplierPaymentResponse = zod.object({
+  "id": zod.number(),
+  "supplierId": zod.number(),
+  "supplierName": zod.string().nullish(),
+  "purchaseOrderId": zod.number().nullish(),
+  "amount": zod.string(),
+  "method": zod.string(),
+  "note": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+
+/**
  * @summary Sales summary — orders by day/range
  */
 export const GetSalesReportQueryParams = zod.object({

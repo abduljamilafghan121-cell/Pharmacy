@@ -474,6 +474,58 @@ export interface RevenueReport {
   byDate: RevenueByRange[];
 }
 
+export interface SupplierLedgerSummary {
+  supplierId: number;
+  supplierName: string;
+  totalOrdered: string;
+  totalPaid: string;
+  balance: string;
+  lastActivity?: string | null;
+}
+
+export interface SupplierLedgerEntry {
+  id: number;
+  entryType: 'purchase_order' | 'payment';
+  purchaseOrderId?: number | null;
+  paymentId?: number | null;
+  date: string;
+  description: string;
+  debit: string;
+  credit: string;
+  runningBalance: string;
+}
+
+export interface SupplierLedgerDetail {
+  supplierId: number;
+  supplierName: string;
+  contactName?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  totalOrdered: string;
+  totalPaid: string;
+  balance: string;
+  entries: SupplierLedgerEntry[];
+}
+
+export interface SupplierPaymentInput {
+  supplierId: number;
+  purchaseOrderId?: number | null;
+  amount: string;
+  method: 'cash' | 'bank' | 'cheque' | 'transfer';
+  note?: string | null;
+}
+
+export interface SupplierPayment {
+  id: number;
+  supplierId: number;
+  supplierName?: string | null;
+  purchaseOrderId?: number | null;
+  amount: string;
+  method: string;
+  note?: string | null;
+  createdAt: string;
+}
+
 export type ListPatientsParams = {
 search?: string;
 };

@@ -27,6 +27,8 @@ tags:
     description: Payments
   - name: purchase-orders
     description: Purchase / restock orders
+  - name: supplier-ledger
+    description: Supplier ledger and payment tracking
   - name: reports
     description: Analytics and reports
 
@@ -925,6 +927,66 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  # ── Supplier Ledger ───────────────────────────────────────────────────────
+  /supplier-ledger:
+    get:
+      operationId: listSupplierLedger
+      tags: [supplier-ledger]
+      summary: List all suppliers with balance summaries
+      responses:
+        "200":
+          description: Supplier ledger summaries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SupplierLedgerSummary"
+
+  /supplier-ledger/{supplierId}:
+    get:
+      operationId: getSupplierLedger
+      tags: [supplier-ledger]
+      summary: Get full ledger for a single supplier
+      parameters:
+        - name: supplierId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Supplier ledger detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierLedgerDetail"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /supplier-payments:
+    post:
+      operationId: createSupplierPayment
+      tags: [supplier-ledger]
+      summary: Record a payment made to a supplier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupplierPaymentInput"
+      responses:
+        "201":
+          description: Payment recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierPayment"
+
   # ── Reports ───────────────────────────────────────────────────────────────
   /reports/sales:
     get:
@@ -1556,6 +1618,113 @@ components:
           items:
             $ref: "#/components/schemas/PurchaseOrderItemInput"
           minItems: 1
+
+    # ── Supplier Ledger ───────────────────────────────────────────────────
+    SupplierLedgerSummary:
+      type: object
+      required: [supplierId, supplierName, totalOrdered, totalPaid, balance]
+      properties:
+        supplierId:
+          type: integer
+        supplierName:
+          type: string
+        totalOrdered:
+          type: string
+        totalPaid:
+          type: string
+        balance:
+          type: string
+        lastActivity:
+          type: ["string", "null"]
+          format: date-time
+
+    SupplierLedgerEntry:
+      type: object
+      required: [id, entryType, date, description, debit, credit, runningBalance]
+      properties:
+        id:
+          type: integer
+        entryType:
+          type: string
+          enum: [purchase_order, payment]
+        purchaseOrderId:
+          type: ["integer", "null"]
+        paymentId:
+          type: ["integer", "null"]
+        date:
+          type: string
+          format: date-time
+        description:
+          type: string
+        debit:
+          type: string
+        credit:
+          type: string
+        runningBalance:
+          type: string
+
+    SupplierLedgerDetail:
+      type: object
+      required: [supplierId, supplierName, totalOrdered, totalPaid, balance, entries]
+      properties:
+        supplierId:
+          type: integer
+        supplierName:
+          type: string
+        contactName:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        totalOrdered:
+          type: string
+        totalPaid:
+          type: string
+        balance:
+          type: string
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/SupplierLedgerEntry"
+
+    SupplierPaymentInput:
+      type: object
+      required: [supplierId, amount, method]
+      properties:
+        supplierId:
+          type: integer
+        purchaseOrderId:
+          type: ["integer", "null"]
+        amount:
+          type: string
+        method:
+          type: string
+          enum: [cash, bank, cheque, transfer]
+        note:
+          type: ["string", "null"]
+
+    SupplierPayment:
+      type: object
+      required: [id, supplierId, amount, method, createdAt]
+      properties:
+        id:
+          type: integer
+        supplierId:
+          type: integer
+        supplierName:
+          type: ["string", "null"]
+        purchaseOrderId:
+          type: ["integer", "null"]
+        amount:
+          type: string
+        method:
+          type: string
+        note:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
 
     # ── Reports ───────────────────────────────────────────────────────────
     SalesByDay:

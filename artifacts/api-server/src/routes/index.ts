@@ -10,6 +10,7 @@ import prescriptionsRouter from "./prescriptions";
 import ordersRouter from "./orders";
 import paymentsRouter from "./payments";
 import purchaseOrdersRouter from "./purchase-orders";
+import supplierLedgerRouter from "./supplier-ledger";
 import reportsRouter from "./reports";
 
 const router: IRouter = Router();
@@ -25,6 +26,7 @@ router.use(prescriptionsRouter);
 router.use(ordersRouter);
 router.use(paymentsRouter);
 router.use(purchaseOrdersRouter);
+router.use(supplierLedgerRouter);
 router.use(reportsRouter);
 
 export default router;

@@ -14,6 +14,7 @@ import {
   LogOut,
   Users,
   Menu,
+  BookOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -41,6 +42,7 @@ const navItems: NavItem[] = [
   { label: "Patients", href: "/patients", icon: Users, roles: ["admin", "pharmacist"] },
   { label: "Suppliers", href: "/suppliers", icon: Truck, roles: ["admin", "pharmacist"] },
   { label: "Purchase Orders", href: "/purchase-orders", icon: PackageSearch, roles: ["admin", "pharmacist"] },
+  { label: "Supplier Ledger", href: "/supplier-ledger", icon: BookOpen, roles: ["admin"] },
   { label: "Reports", href: "/reports", icon: BarChart3, roles: ["admin", "pharmacist"] },
   { label: "User Management", href: "/users", icon: Users, roles: ["admin"] },
 ];

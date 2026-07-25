@@ -24,6 +24,7 @@ import PurchaseOrders from '@/pages/PurchaseOrders';
 import Reports from '@/pages/Reports';
 import Settings from '@/pages/Settings';
 import Users from '@/pages/Users';
+import SupplierLedger from '@/pages/SupplierLedger';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -120,7 +121,10 @@ function Router() {
           <ProtectedRoute component={Patients} />
         </Route>
         <Route path="/suppliers">
-          <ProtectedRoute component={Suppliers} roles={['admin']} />
+          <ProtectedRoute component={Suppliers} />
+        </Route>
+        <Route path="/supplier-ledger">
+          <ProtectedRoute component={SupplierLedger} roles={['admin']} />
         </Route>
         <Route path="/purchase-orders">
           <ProtectedRoute component={PurchaseOrders} />
