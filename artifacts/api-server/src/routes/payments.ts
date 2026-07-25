@@ -13,18 +13,23 @@ router.post("/payments", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  // Simulate payment processing (mock/sandbox)
-  const transactionId = parsed.data.transactionId ?? `TXN-${Date.now()}`;
+  const status = parsed.data.status ?? "completed";
+  const transactionId = parsed.data.transactionId ?? null;
+
   const [payment] = await db.insert(paymentsTable).values({
     orderId: parsed.data.orderId,
     amount: parsed.data.amount,
     method: parsed.data.method,
-    status: "completed",
+    status,
     transactionId,
   }).returning();
 
-  // Update order payment status
-  await db.update(ordersTable).set({ paymentStatus: "paid" }).where(eq(ordersTable.id, parsed.data.orderId));
+  // Only mark the order as paid when the payment actually completed
+  if (status === "completed") {
+    await db.update(ordersTable).set({ paymentStatus: "paid" }).where(eq(ordersTable.id, parsed.data.orderId));
+  } else if (status === "failed") {
+    await db.update(ordersTable).set({ paymentStatus: "unpaid" }).where(eq(ordersTable.id, parsed.data.orderId));
+  }
 
   res.status(201).json(payment);
 });

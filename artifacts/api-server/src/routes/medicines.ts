@@ -22,7 +22,7 @@ const MEDICINE_SELECT = {
   createdAt: medicinesTable.createdAt,
 };
 
-router.get("/medicines/low-stock", async (_req, res): Promise<void> => {
+router.get("/medicines/low-stock", requireAuth, async (_req, res): Promise<void> => {
   try {
     const rows = await db
       .select(MEDICINE_SELECT)
@@ -35,10 +35,10 @@ router.get("/medicines/low-stock", async (_req, res): Promise<void> => {
   }
 });
 
-router.get("/medicines/expiring", async (_req, res): Promise<void> => {
+router.get("/medicines/expiring", requireAuth, async (_req, res): Promise<void> => {
   try {
     const ninety = new Date();
-    ninety.setDate(ninety.getDate() + 90);
+    ninety.setDate(ninety.getDate() + 30);
     const cutoff = ninety.toISOString().split("T")[0];
     const today = new Date().toISOString().split("T")[0];
     const rows = await db

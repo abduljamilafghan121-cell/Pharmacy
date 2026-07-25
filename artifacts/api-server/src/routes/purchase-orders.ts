@@ -64,21 +64,25 @@ router.post("/purchase-orders", requireAuth, requireRole("admin", "pharmacist"),
   const { supplierId, items } = parsed.data;
   const total = items.reduce((sum, i) => sum + parseFloat(i.unitPrice) * i.quantity, 0);
 
-  const [po] = await db.insert(purchaseOrdersTable).values({
-    supplierId,
-    total: total.toFixed(2),
-  }).returning();
+  const poId = await db.transaction(async (tx) => {
+    const [po] = await tx.insert(purchaseOrdersTable).values({
+      supplierId,
+      total: total.toFixed(2),
+    }).returning();
 
-  for (const item of items) {
-    await db.insert(purchaseOrderItemsTable).values({
-      purchaseOrderId: po.id,
-      medicineId: item.medicineId,
-      quantity: item.quantity,
-      unitPrice: item.unitPrice,
-    });
-  }
+    for (const item of items) {
+      await tx.insert(purchaseOrderItemsTable).values({
+        purchaseOrderId: po.id,
+        medicineId: item.medicineId,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+      });
+    }
 
-  const full = await fetchPurchaseOrder(po.id);
+    return po.id;
+  });
+
+  const full = await fetchPurchaseOrder(poId);
   res.status(201).json(full);
 });
 

@@ -68,47 +68,48 @@ router.post("/orders", requireAuth, async (req, res): Promise<void> => {
   }
   const total = subtotal;
 
-  // Create order
-  const [order] = await db.insert(ordersTable).values({
-    patientId: patientId ?? null,
-    patientName: patientName ?? null,
-    servedBy: req.auth!.userId,
-    subtotal: subtotal.toFixed(2),
-    total: total.toFixed(2),
-    status: "dispensed",
-    paymentStatus: "paid",
-    notes: notes ?? null,
-  }).returning();
-
-  // Create items and decrement stock
-  const orderItems = [];
-  for (const item of items) {
-    const med = medicines.find((m) => m.id === item.medicineId)!;
-    const unitPrice = parseFloat(med.price);
-    const [oi] = await db.insert(orderItemsTable).values({
-      orderId: order.id,
-      medicineId: item.medicineId,
-      quantity: item.quantity,
-      price: (unitPrice * item.quantity).toFixed(2),
+  // Run order creation, stock decrement, and payment inside a single transaction
+  const { order, orderItems, staffName } = await db.transaction(async (tx) => {
+    const [order] = await tx.insert(ordersTable).values({
+      patientId: patientId ?? null,
+      patientName: patientName ?? null,
+      servedBy: req.auth!.userId,
+      subtotal: subtotal.toFixed(2),
+      total: total.toFixed(2),
+      status: "dispensed",
+      paymentStatus: "paid",
+      notes: notes ?? null,
     }).returning();
-    orderItems.push({ ...oi, medicineName: med.name });
-    await db.update(medicinesTable)
-      .set({ quantity: med.quantity - item.quantity })
-      .where(eq(medicinesTable.id, med.id));
-  }
 
-  // Create payment record
-  await db.insert(paymentsTable).values({
-    orderId: order.id,
-    amount: total.toFixed(2),
-    method: paymentMethod,
-    status: "completed",
+    const orderItems = [];
+    for (const item of items) {
+      const med = medicines.find((m) => m.id === item.medicineId)!;
+      const unitPrice = parseFloat(med.price);
+      const [oi] = await tx.insert(orderItemsTable).values({
+        orderId: order.id,
+        medicineId: item.medicineId,
+        quantity: item.quantity,
+        price: (unitPrice * item.quantity).toFixed(2),
+      }).returning();
+      orderItems.push({ ...oi, medicineName: med.name });
+      await tx.update(medicinesTable)
+        .set({ quantity: med.quantity - item.quantity })
+        .where(eq(medicinesTable.id, med.id));
+    }
+
+    await tx.insert(paymentsTable).values({
+      orderId: order.id,
+      amount: total.toFixed(2),
+      method: paymentMethod,
+      status: "completed",
+    });
+
+    const [staff] = await tx.select({ name: usersTable.name }).from(usersTable).where(eq(usersTable.id, req.auth!.userId));
+
+    return { order, orderItems, staffName: staff?.name ?? null };
   });
 
-  // Fetch servedBy name
-  const [staff] = await db.select({ name: usersTable.name }).from(usersTable).where(eq(usersTable.id, req.auth!.userId));
-
-  res.status(201).json({ ...order, servedByName: staff?.name ?? null, items: orderItems });
+  res.status(201).json({ ...order, servedByName: staffName, items: orderItems });
 });
 
 router.get("/orders/:id", requireAuth, async (req, res): Promise<void> => {
@@ -162,9 +163,42 @@ router.patch("/orders/:id/status", requireAuth, async (req, res): Promise<void> 
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [row] = await db
-    .update(ordersTable).set({ status: parsed.data.status })
-    .where(eq(ordersTable.id, params.data.id)).returning();
+
+  const row = await db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select()
+      .from(ordersTable)
+      .where(eq(ordersTable.id, params.data.id));
+    if (!existing) return null;
+
+    // Restore stock when cancelling a dispensed order
+    if (parsed.data.status === "cancelled" && existing.status === "dispensed") {
+      const items = await tx
+        .select()
+        .from(orderItemsTable)
+        .where(eq(orderItemsTable.orderId, existing.id));
+      for (const item of items) {
+        const [med] = await tx
+          .select({ quantity: medicinesTable.quantity })
+          .from(medicinesTable)
+          .where(eq(medicinesTable.id, item.medicineId));
+        if (med) {
+          await tx
+            .update(medicinesTable)
+            .set({ quantity: med.quantity + item.quantity })
+            .where(eq(medicinesTable.id, item.medicineId));
+        }
+      }
+    }
+
+    const [updated] = await tx
+      .update(ordersTable)
+      .set({ status: parsed.data.status })
+      .where(eq(ordersTable.id, params.data.id))
+      .returning();
+    return updated;
+  });
+
   if (!row) { res.status(404).json({ error: "Sale not found" }); return; }
   res.json({ ...row, servedByName: null });
 });
