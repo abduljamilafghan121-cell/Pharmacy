@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db, purchaseOrdersTable, purchaseOrderItemsTable, medicinesTable, suppliersTable } from "@workspace/db";
 import {
   CreatePurchaseOrderBody, GetPurchaseOrderParams, ReceivePurchaseOrderParams,
@@ -99,19 +99,40 @@ router.patch("/purchase-orders/:id/receive", requireAuth, requireRole("admin", "
     res.status(400).json({ error: params.error.message });
     return;
   }
-  const [po] = await db.select().from(purchaseOrdersTable).where(eq(purchaseOrdersTable.id, params.data.id));
-  if (!po) { res.status(404).json({ error: "Purchase order not found" }); return; }
+  const receivedId = await db.transaction(async (tx) => {
+    const [po] = await tx
+      .update(purchaseOrdersTable)
+      .set({ status: "received" })
+      .where(and(eq(purchaseOrdersTable.id, params.data.id), eq(purchaseOrdersTable.status, "pending")))
+      .returning({ id: purchaseOrdersTable.id });
+    if (!po) return null;
 
-  const items = await db.select().from(purchaseOrderItemsTable).where(eq(purchaseOrderItemsTable.purchaseOrderId, po.id));
-  for (const item of items) {
-    const [med] = await db.select().from(medicinesTable).where(eq(medicinesTable.id, item.medicineId));
-    if (med) {
-      await db.update(medicinesTable).set({ quantity: med.quantity + item.quantity }).where(eq(medicinesTable.id, med.id));
+    const items = await tx
+      .select()
+      .from(purchaseOrderItemsTable)
+      .where(eq(purchaseOrderItemsTable.purchaseOrderId, po.id));
+    for (const item of items) {
+      const [med] = await tx.select().from(medicinesTable).where(eq(medicinesTable.id, item.medicineId));
+      if (med) {
+        await tx
+          .update(medicinesTable)
+          .set({ quantity: med.quantity + item.quantity })
+          .where(eq(medicinesTable.id, med.id));
+      }
     }
+    return po.id;
+  });
+  if (!receivedId) {
+    const [existing] = await db
+      .select({ id: purchaseOrdersTable.id, status: purchaseOrdersTable.status })
+      .from(purchaseOrdersTable)
+      .where(eq(purchaseOrdersTable.id, params.data.id));
+    if (!existing) { res.status(404).json({ error: "Purchase order not found" }); return; }
+    res.status(409).json({ error: `Purchase order is already ${existing.status}.` });
+    return;
   }
 
-  await db.update(purchaseOrdersTable).set({ status: "received" }).where(eq(purchaseOrdersTable.id, po.id));
-  const full = await fetchPurchaseOrder(po.id);
+  const full = await fetchPurchaseOrder(receivedId);
   res.json(full);
 });
 

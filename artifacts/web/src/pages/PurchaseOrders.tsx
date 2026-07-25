@@ -1,21 +1,243 @@
-import { useListPurchaseOrders } from "@workspace/api-client-react";
+import { useMemo, useState } from "react";
+import { Link } from "wouter";
+import {
+  getGetPurchaseOrderQueryKey,
+  getListMedicinesQueryKey,
+  getListPurchaseOrdersQueryKey,
+  useCreatePurchaseOrder,
+  useGetPurchaseOrder,
+  useListMedicines,
+  useListPurchaseOrders,
+  useListSuppliers,
+  useReceivePurchaseOrder,
+  type Medicine,
+  type PurchaseOrderItemInput,
+} from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { ErrorState } from "@/components/ui/error-state";
 import { getErrorMessage } from "@/lib/errors";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { PackageSearch } from "lucide-react";
+import { useToast } from "@/components/ui/use-toast";
+import {
+  ClipboardList,
+  Eye,
+  Loader2,
+  PackageCheck,
+  PackageSearch,
+  Plus,
+  Trash2,
+  Truck,
+} from "lucide-react";
+
+type DraftItem = PurchaseOrderItemInput & { key: number };
 
 export default function PurchaseOrders() {
-  const { data: pos, isLoading, isError, error, refetch } = useListPurchaseOrders();
+  const { data: purchaseOrders, isLoading, isError, error, refetch } =
+    useListPurchaseOrders();
+  const { data: suppliers } = useListSuppliers();
+  const { data: medicines } = useListMedicines();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [createOpen, setCreateOpen] = useState(false);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [draftSupplierId, setDraftSupplierId] = useState("");
+  const [draftItems, setDraftItems] = useState<DraftItem[]>([
+    { key: 1, medicineId: 0, quantity: 1, unitPrice: "" },
+  ]);
+  const [nextKey, setNextKey] = useState(2);
+
+  const createMutation = useCreatePurchaseOrder({
+    mutation: {
+      onSuccess: () => {
+        toast({ title: "Purchase order created." });
+        queryClient.invalidateQueries({ queryKey: getListPurchaseOrdersQueryKey() });
+        setCreateOpen(false);
+        resetDraft();
+      },
+      onError: (mutationError) => {
+        toast({
+          title: "Could not create purchase order",
+          description: getErrorMessage(mutationError),
+          variant: "destructive",
+        });
+      },
+    },
+  });
+
+  const receiveMutation = useReceivePurchaseOrder({
+    mutation: {
+      onSuccess: (received) => {
+        toast({
+          title: `Purchase order #${received.id} received.`,
+          description: "Inventory quantities were updated.",
+        });
+        queryClient.invalidateQueries({ queryKey: getListPurchaseOrdersQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getListMedicinesQueryKey() });
+        if (selectedId === received.id) {
+          queryClient.invalidateQueries({ queryKey: getGetPurchaseOrderQueryKey(received.id) });
+        }
+      },
+      onError: (mutationError) => {
+        toast({
+          title: "Could not receive purchase order",
+          description: getErrorMessage(mutationError),
+          variant: "destructive",
+        });
+      },
+    },
+  });
+
+  const selectedOrder = useGetPurchaseOrder(selectedId ?? 0, {
+    query: {
+      enabled: selectedId !== null,
+      queryKey: getGetPurchaseOrderQueryKey(selectedId ?? 0),
+    },
+  });
+
+  const availableMedicines = useMemo(
+    () => medicines ?? [],
+    [medicines],
+  );
+
+  function resetDraft() {
+    setDraftSupplierId("");
+    setDraftItems([{ key: 1, medicineId: 0, quantity: 1, unitPrice: "" }]);
+    setNextKey(2);
+  }
+
+  function updateDraftItem(key: number, patch: Partial<DraftItem>) {
+    setDraftItems((current) =>
+      current.map((item) => (item.key === key ? { ...item, ...patch } : item)),
+    );
+  }
+
+  function selectMedicine(key: number, medicineId: number) {
+    const medicine = availableMedicines.find((item) => item.id === medicineId);
+    updateDraftItem(key, {
+      medicineId,
+      unitPrice: medicine?.price ?? "",
+    });
+  }
+
+  function addDraftItem() {
+    setDraftItems((current) => [
+      ...current,
+      { key: nextKey, medicineId: 0, quantity: 1, unitPrice: "" },
+    ]);
+    setNextKey((key) => key + 1);
+  }
+
+  function removeDraftItem(key: number) {
+    setDraftItems((current) =>
+      current.length === 1 ? current : current.filter((item) => item.key !== key),
+    );
+  }
+
+  function handleCreate(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const items = draftItems.map(({ medicineId, quantity, unitPrice }) => ({
+      medicineId: Number(medicineId),
+      quantity: Number(quantity),
+      unitPrice: String(unitPrice).trim(),
+    }));
+
+    if (!draftSupplierId || items.some((item) => !item.medicineId || item.quantity < 1 || !item.unitPrice)) {
+      toast({
+        title: "Complete the purchase details",
+        description: "Choose a supplier, medicine, quantity, and unit price for every line.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    createMutation.mutate({
+      data: {
+        supplierId: Number(draftSupplierId),
+        items,
+      },
+    });
+  }
+
+  function handleReceive(id: number) {
+    if (window.confirm("Receive this purchase and add its quantities to inventory?")) {
+      receiveMutation.mutate({ id });
+    }
+  }
+
+  const noSuppliers = !suppliers?.length;
+  const noMedicines = !availableMedicines.length;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">Purchase Orders</h1>
-        <p className="text-muted-foreground mt-1">Manage restock requests to suppliers.</p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2 text-primary">
+            <ClipboardList className="h-5 w-5" />
+            <span className="text-sm font-semibold uppercase tracking-wider">Inventory purchasing</span>
+          </div>
+          <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground">Purchase Orders</h1>
+          <p className="mt-1 text-muted-foreground">
+            Create supplier orders, track what is pending, and receive stock into inventory.
+          </p>
+        </div>
+        <Button
+          onClick={() => setCreateOpen(true)}
+          disabled={noSuppliers || noMedicines}
+          title={
+            noSuppliers
+              ? "Add a supplier first"
+              : noMedicines
+                ? "Add a medicine first"
+                : undefined
+          }
+        >
+          <Plus className="mr-2 h-4 w-4" />
+          New Purchase Order
+        </Button>
       </div>
+
+      {(noSuppliers || noMedicines) && (
+        <Card className="border-dashed">
+          <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <Truck className="mt-0.5 h-5 w-5 text-primary" />
+              <div>
+                <p className="font-semibold">Set up purchasing first</p>
+                <p className="text-sm text-muted-foreground">
+                  {noSuppliers
+                    ? "Add at least one supplier before creating a purchase order."
+                    : "Add at least one medicine before adding purchase lines."}
+                </p>
+              </div>
+            </div>
+            <Button variant="outline" asChild>
+              <Link href={noSuppliers ? "/suppliers" : "/medicines"}>
+                {noSuppliers ? "Manage Suppliers" : "Manage Medicines"}
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {isError ? (
         <ErrorState
@@ -25,7 +247,7 @@ export default function PurchaseOrders() {
         />
       ) : (
         <Card>
-          <CardContent className="p-0">
+          <CardContent className="overflow-x-auto p-0">
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/50">
@@ -34,31 +256,69 @@ export default function PurchaseOrders() {
                   <TableHead>Supplier</TableHead>
                   <TableHead>Total</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Loading purchase orders…</TableCell>
+                    <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                      Loading purchase orders…
+                    </TableCell>
                   </TableRow>
-                ) : pos?.length === 0 ? (
+                ) : purchaseOrders?.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-12 text-muted-foreground">
-                      <PackageSearch className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
-                      No purchase orders found.
+                    <TableCell colSpan={6} className="py-14 text-center text-muted-foreground">
+                      <PackageSearch className="mx-auto mb-3 h-12 w-12 text-muted-foreground/30" />
+                      <p className="font-medium">No purchase orders yet</p>
+                      <p className="mt-1 text-sm">Create your first supplier order to start restocking.</p>
                     </TableCell>
                   </TableRow>
                 ) : (
-                  pos?.map((po) => (
-                    <TableRow key={po.id}>
-                      <TableCell className="font-medium">#{po.id}</TableCell>
-                      <TableCell>{formatDate(po.createdAt)}</TableCell>
-                      <TableCell>{po.supplierName}</TableCell>
-                      <TableCell className="font-medium">{formatCurrency(po.total)}</TableCell>
+                  purchaseOrders?.map((purchaseOrder) => (
+                    <TableRow key={purchaseOrder.id}>
+                      <TableCell className="font-medium">#{purchaseOrder.id}</TableCell>
+                      <TableCell>{formatDate(purchaseOrder.createdAt)}</TableCell>
+                      <TableCell>{purchaseOrder.supplierName ?? "Unknown supplier"}</TableCell>
+                      <TableCell className="font-medium">{formatCurrency(purchaseOrder.total)}</TableCell>
                       <TableCell>
-                        <Badge variant={po.status === 'received' ? 'success' : po.status === 'cancelled' ? 'destructive' : 'warning'}>
-                          {po.status}
+                        <Badge
+                          variant={
+                            purchaseOrder.status === "received"
+                              ? "success"
+                              : purchaseOrder.status === "cancelled"
+                                ? "destructive"
+                                : "warning"
+                          }
+                        >
+                          {purchaseOrder.status}
                         </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setSelectedId(purchaseOrder.id)}
+                          >
+                            <Eye className="mr-1.5 h-4 w-4" />
+                            View
+                          </Button>
+                          {purchaseOrder.status === "pending" && (
+                            <Button
+                              size="sm"
+                              onClick={() => handleReceive(purchaseOrder.id)}
+                              disabled={receiveMutation.isPending}
+                            >
+                              {receiveMutation.isPending ? (
+                                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                              ) : (
+                                <PackageCheck className="mr-1.5 h-4 w-4" />
+                              )}
+                              Receive
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))
@@ -68,6 +328,184 @@ export default function PurchaseOrders() {
           </CardContent>
         </Card>
       )}
+
+      <Dialog
+        open={createOpen}
+        onOpenChange={(open) => {
+          setCreateOpen(open);
+          if (!open) resetDraft();
+        }}
+      >
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Create purchase order</DialogTitle>
+            <DialogDescription>
+              Select a supplier and add every medicine, quantity, and purchase price on the order.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleCreate} className="space-y-5">
+            <div className="space-y-2">
+              <Label htmlFor="purchase-supplier">Supplier *</Label>
+              <select
+                id="purchase-supplier"
+                className="flex h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={draftSupplierId}
+                onChange={(event) => setDraftSupplierId(event.target.value)}
+                required
+              >
+                <option value="">Select a supplier</option>
+                {suppliers?.map((supplier) => (
+                  <option key={supplier.id} value={supplier.id}>
+                    {supplier.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label>Purchase lines *</Label>
+                  <p className="text-xs text-muted-foreground">The unit price is the supplier cost.</p>
+                </div>
+                <Button type="button" size="sm" variant="outline" onClick={addDraftItem}>
+                  <Plus className="mr-1.5 h-4 w-4" />
+                  Add line
+                </Button>
+              </div>
+              <div className="space-y-3">
+                {draftItems.map((item, index) => (
+                  <div key={item.key} className="grid gap-3 rounded-lg border bg-muted/20 p-3 sm:grid-cols-[minmax(0,1fr)_120px_140px_auto] sm:items-end">
+                    <div className="space-y-2">
+                      <Label htmlFor={`purchase-medicine-${item.key}`}>Medicine {index + 1}</Label>
+                      <select
+                        id={`purchase-medicine-${item.key}`}
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        value={item.medicineId || ""}
+                        onChange={(event) => selectMedicine(item.key, Number(event.target.value))}
+                        required
+                      >
+                        <option value="">Select medicine</option>
+                        {availableMedicines.map((medicine) => (
+                          <option key={medicine.id} value={medicine.id}>
+                            {medicine.name} ({medicine.quantity} in stock)
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor={`purchase-quantity-${item.key}`}>Quantity</Label>
+                      <Input
+                        id={`purchase-quantity-${item.key}`}
+                        type="number"
+                        min="1"
+                        value={item.quantity}
+                        onChange={(event) =>
+                          updateDraftItem(item.key, { quantity: Number(event.target.value) })
+                        }
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor={`purchase-price-${item.key}`}>Unit cost</Label>
+                      <Input
+                        id={`purchase-price-${item.key}`}
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="0.00"
+                        value={item.unitPrice}
+                        onChange={(event) =>
+                          updateDraftItem(item.key, { unitPrice: event.target.value })
+                        }
+                        required
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => removeDraftItem(item.key)}
+                      disabled={draftItems.length === 1}
+                      aria-label="Remove purchase line"
+                    >
+                      <Trash2 className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={createMutation.isPending}>
+                {createMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Save purchase order
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={selectedId !== null} onOpenChange={(open) => !open && setSelectedId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Purchase order #{selectedOrder.data?.id ?? selectedId}
+            </DialogTitle>
+            <DialogDescription>
+              {selectedOrder.data?.supplierName ?? "Loading order details…"}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedOrder.isLoading ? (
+            <div className="flex items-center justify-center py-8 text-muted-foreground">
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading details…
+            </div>
+          ) : selectedOrder.data ? (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between rounded-lg bg-muted/40 p-3">
+                <span className="text-sm text-muted-foreground">Status</span>
+                <Badge variant={selectedOrder.data.status === "received" ? "success" : "warning"}>
+                  {selectedOrder.data.status}
+                </Badge>
+              </div>
+              <div className="space-y-2">
+                {selectedOrder.data.items?.map((item) => (
+                  <div key={item.id} className="flex items-center justify-between border-b pb-2 text-sm last:border-0">
+                    <div>
+                      <p className="font-medium">{item.medicineName ?? "Medicine"}</p>
+                      <p className="text-muted-foreground">
+                        {item.quantity} × {formatCurrency(item.unitPrice)}
+                      </p>
+                    </div>
+                    <span className="font-semibold">
+                      {formatCurrency(Number(item.unitPrice) * item.quantity)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center justify-between border-t pt-3 font-semibold">
+                <span>Total</span>
+                <span>{formatCurrency(selectedOrder.data.total)}</span>
+              </div>
+              {selectedOrder.data.status === "pending" && (
+                <Button
+                  className="w-full"
+                  onClick={() => handleReceive(selectedOrder.data!.id)}
+                  disabled={receiveMutation.isPending}
+                >
+                  <PackageCheck className="mr-2 h-4 w-4" />
+                  Receive and update inventory
+                </Button>
+              )}
+            </div>
+          ) : (
+            <p className="py-6 text-center text-muted-foreground">Purchase order details unavailable.</p>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
