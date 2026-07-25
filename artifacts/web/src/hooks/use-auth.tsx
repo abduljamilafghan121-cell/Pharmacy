@@ -44,7 +44,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem("pharma_token");
     setToken(null);
     setUserOverride(null);
-    setLocation("/login");
+    // Full page redirect clears all in-memory React Query cache and component state
+    window.location.replace("/login");
   };
 
   const updateUser = (updated: Partial<User>) => {

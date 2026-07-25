@@ -87,13 +87,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           })}
         </div>
 
-        <div className="p-4 border-t border-border">
-          <div className="px-3 mb-4">
-            <p className="text-sm font-medium text-foreground truncate">{user.name}</p>
-            <p className="text-xs text-muted-foreground capitalize">{user.role}</p>
-          </div>
-
-          <Link href="/settings" className="block mb-1">
+        <div className="p-4 border-t border-border space-y-1">
+          <Link href="/settings" className="block">
             <div className={cn(
               "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors",
               location === "/settings"
@@ -106,12 +101,17 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           </Link>
 
           <button
-            onClick={() => logout()}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+            onClick={logout}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors"
           >
             <LogOut size={18} />
             Log Out
           </button>
+
+          <div className="px-3 pt-2 mt-1 border-t border-border">
+            <p className="text-sm font-medium text-foreground truncate">{user.name}</p>
+            <p className="text-xs text-muted-foreground capitalize">{user.role}</p>
+          </div>
         </div>
       </aside>
 
@@ -232,6 +232,13 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                     <span>Settings</span>
                   </div>
                 </Link>
+                <button
+                  onClick={logout}
+                  className="flex min-h-16 w-full items-center gap-3 rounded-xl border border-destructive/40 px-3 text-sm font-medium text-destructive"
+                >
+                  <LogOut size={18} />
+                  <span>Log Out</span>
+                </button>
               </nav>
             </SheetContent>
           </Sheet>
