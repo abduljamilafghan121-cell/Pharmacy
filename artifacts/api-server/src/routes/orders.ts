@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, sql, inArray } from "drizzle-orm";
 import { db, ordersTable, orderItemsTable, medicinesTable, usersTable, paymentsTable } from "@workspace/db";
+import { z } from "zod";
 import {
   CreateOrderBody, UpdateOrderStatusBody,
   GetOrderParams, UpdateOrderStatusParams,
@@ -164,6 +165,9 @@ router.patch("/orders/:id/status", requireAuth, async (req, res): Promise<void> 
     return;
   }
 
+  const refundNoteRaw = (req.body as Record<string, unknown>).refundNote;
+  const refundNote = typeof refundNoteRaw === "string" && refundNoteRaw.trim() ? refundNoteRaw.trim() : null;
+
   const row = await db.transaction(async (tx) => {
     const [existing] = await tx
       .select()
@@ -171,8 +175,10 @@ router.patch("/orders/:id/status", requireAuth, async (req, res): Promise<void> 
       .where(eq(ordersTable.id, params.data.id));
     if (!existing) return null;
 
+    const isCancelling = parsed.data.status === "cancelled" && existing.status === "dispensed";
+
     // Restore stock when cancelling a dispensed order
-    if (parsed.data.status === "cancelled" && existing.status === "dispensed") {
+    if (isCancelling) {
       const items = await tx
         .select()
         .from(orderItemsTable)
@@ -191,11 +197,28 @@ router.patch("/orders/:id/status", requireAuth, async (req, res): Promise<void> 
       }
     }
 
+    // Build order update payload
+    const orderUpdates: Record<string, unknown> = { status: parsed.data.status };
+    if (isCancelling && refundNote) {
+      const existingNotes = existing.notes ? `${existing.notes}\n` : "";
+      orderUpdates.notes = `${existingNotes}Refund reason: ${refundNote}`;
+    }
+
     const [updated] = await tx
       .update(ordersTable)
-      .set({ status: parsed.data.status })
+      .set(orderUpdates)
       .where(eq(ordersTable.id, params.data.id))
       .returning();
+
+    // Mark payment as refunded when cancelling a paid order
+    if (isCancelling && existing.paymentStatus === "paid") {
+      await tx
+        .update(paymentsTable)
+        .set({ status: "refunded" })
+        .where(eq(paymentsTable.orderId, existing.id));
+      return { ...updated, paymentStatus: "refunded" as const };
+    }
+
     return updated;
   });
 
