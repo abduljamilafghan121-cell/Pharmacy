@@ -11,7 +11,7 @@ import {
   useListSuppliers,
   useReceivePurchaseOrder,
   type Medicine,
-  type PurchaseOrderItemInput,
+  type MedicineUnit,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
@@ -37,6 +37,7 @@ import {
 import { ErrorState } from "@/components/ui/error-state";
 import { getErrorMessage } from "@/lib/errors";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatStockDisplay } from "@/lib/stock-format";
 import { useToast } from "@/components/ui/use-toast";
 import {
   ClipboardList,
@@ -49,7 +50,17 @@ import {
   Truck,
 } from "lucide-react";
 
-type DraftItem = PurchaseOrderItemInput & { key: number };
+function getMedicineUnits(medicine: Medicine): MedicineUnit[] {
+  return ((medicine as any).units as MedicineUnit[]) ?? [];
+}
+
+type DraftItem = {
+  key: number;
+  medicineId: number;
+  quantity: number;
+  unitId?: number;
+  unitPrice: string;
+};
 
 export default function PurchaseOrders() {
   const { data: purchaseOrders, isLoading, isError, error, refetch } =
@@ -62,7 +73,7 @@ export default function PurchaseOrders() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [draftSupplierId, setDraftSupplierId] = useState("");
   const [draftItems, setDraftItems] = useState<DraftItem[]>([
-    { key: 1, medicineId: 0, quantity: 1, unitPrice: "" },
+    { key: 1, medicineId: 0, quantity: 1, unitId: undefined, unitPrice: "" },
   ]);
   const [nextKey, setNextKey] = useState(2);
 
@@ -114,14 +125,11 @@ export default function PurchaseOrders() {
     },
   });
 
-  const availableMedicines = useMemo(
-    () => medicines ?? [],
-    [medicines],
-  );
+  const availableMedicines = useMemo(() => medicines ?? [], [medicines]);
 
   function resetDraft() {
     setDraftSupplierId("");
-    setDraftItems([{ key: 1, medicineId: 0, quantity: 1, unitPrice: "" }]);
+    setDraftItems([{ key: 1, medicineId: 0, quantity: 1, unitId: undefined, unitPrice: "" }]);
     setNextKey(2);
   }
 
@@ -133,16 +141,31 @@ export default function PurchaseOrders() {
 
   function selectMedicine(key: number, medicineId: number) {
     const medicine = availableMedicines.find((item) => item.id === medicineId);
+    const units = medicine ? getMedicineUnits(medicine) : [];
+    // Default to base unit if defined
+    const baseUnit = units.find((u) => u.isBaseUnit) ?? units.find((u) => u.conversionFactorToBase === 1) ?? units[0];
     updateDraftItem(key, {
       medicineId,
+      unitId: baseUnit?.id,
       unitPrice: medicine?.price ?? "",
     });
+  }
+
+  function selectUnit(key: number, unitId: number | undefined, medicine: Medicine | undefined) {
+    if (!medicine) return;
+    const units = getMedicineUnits(medicine);
+    const unit = units.find((u) => u.id === unitId);
+    // Unit price = base price × conversion factor (buying in larger packs costs proportionally more)
+    const unitPrice = unit
+      ? (parseFloat(medicine.price) * unit.conversionFactorToBase).toFixed(2)
+      : medicine.price;
+    updateDraftItem(key, { unitId, unitPrice });
   }
 
   function addDraftItem() {
     setDraftItems((current) => [
       ...current,
-      { key: nextKey, medicineId: 0, quantity: 1, unitPrice: "" },
+      { key: nextKey, medicineId: 0, quantity: 1, unitId: undefined, unitPrice: "" },
     ]);
     setNextKey((key) => key + 1);
   }
@@ -155,9 +178,10 @@ export default function PurchaseOrders() {
 
   function handleCreate(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const items = draftItems.map(({ medicineId, quantity, unitPrice }) => ({
+    const items = draftItems.map(({ medicineId, quantity, unitId, unitPrice }) => ({
       medicineId: Number(medicineId),
       quantity: Number(quantity),
+      ...(unitId ? { unitId } : {}),
       unitPrice: String(unitPrice).trim(),
     }));
 
@@ -173,7 +197,7 @@ export default function PurchaseOrders() {
     createMutation.mutate({
       data: {
         supplierId: Number(draftSupplierId),
-        items,
+        items: items as any,
       },
     });
   }
@@ -329,6 +353,7 @@ export default function PurchaseOrders() {
         </Card>
       )}
 
+      {/* Create PO dialog */}
       <Dialog
         open={createOpen}
         onOpenChange={(open) => {
@@ -340,7 +365,7 @@ export default function PurchaseOrders() {
           <DialogHeader>
             <DialogTitle>Create purchase order</DialogTitle>
             <DialogDescription>
-              Select a supplier and add every medicine, quantity, and purchase price on the order.
+              Select a supplier and add every medicine with quantity, packaging unit, and purchase price.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleCreate} className="space-y-5">
@@ -366,7 +391,7 @@ export default function PurchaseOrders() {
               <div className="flex items-center justify-between">
                 <div>
                   <Label>Purchase lines *</Label>
-                  <p className="text-xs text-muted-foreground">The unit price is the supplier cost.</p>
+                  <p className="text-xs text-muted-foreground">Unit price is the supplier cost per selected packaging unit.</p>
                 </div>
                 <Button type="button" size="sm" variant="outline" onClick={addDraftItem}>
                   <Plus className="mr-1.5 h-4 w-4" />
@@ -374,65 +399,107 @@ export default function PurchaseOrders() {
                 </Button>
               </div>
               <div className="space-y-3">
-                {draftItems.map((item, index) => (
-                  <div key={item.key} className="grid gap-3 rounded-lg border bg-muted/20 p-3 sm:grid-cols-[minmax(0,1fr)_120px_140px_auto] sm:items-end">
-                    <div className="space-y-2">
-                      <Label htmlFor={`purchase-medicine-${item.key}`}>Medicine {index + 1}</Label>
-                      <select
-                        id={`purchase-medicine-${item.key}`}
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                        value={item.medicineId || ""}
-                        onChange={(event) => selectMedicine(item.key, Number(event.target.value))}
-                        required
-                      >
-                        <option value="">Select medicine</option>
-                        {availableMedicines.map((medicine) => (
-                          <option key={medicine.id} value={medicine.id}>
-                            {medicine.name} ({medicine.quantity} in stock)
-                          </option>
-                        ))}
-                      </select>
+                {draftItems.map((item, index) => {
+                  const selectedMed = availableMedicines.find((m) => m.id === item.medicineId);
+                  const units = selectedMed ? getMedicineUnits(selectedMed) : [];
+                  const stockDisplay = selectedMed
+                    ? formatStockDisplay(selectedMed.quantity, units)
+                    : null;
+
+                  return (
+                    <div key={item.key} className="rounded-lg border bg-muted/20 p-3 space-y-2">
+                      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+                        <div className="space-y-2">
+                          <Label htmlFor={`purchase-medicine-${item.key}`}>Medicine {index + 1}</Label>
+                          <select
+                            id={`purchase-medicine-${item.key}`}
+                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                            value={item.medicineId || ""}
+                            onChange={(event) => selectMedicine(item.key, Number(event.target.value))}
+                            required
+                          >
+                            <option value="">Select medicine</option>
+                            {availableMedicines.map((medicine) => {
+                              const medUnits = getMedicineUnits(medicine);
+                              const stock = formatStockDisplay(medicine.quantity, medUnits);
+                              return (
+                                <option key={medicine.id} value={medicine.id}>
+                                  {medicine.name} ({stock} in stock)
+                                </option>
+                              );
+                            })}
+                          </select>
+                          {stockDisplay && selectedMed && (
+                            <p className="text-xs text-muted-foreground">
+                              Current stock: <span className="font-medium">{stockDisplay}</span>
+                            </p>
+                          )}
+                        </div>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => removeDraftItem(item.key)}
+                          disabled={draftItems.length === 1}
+                          aria-label="Remove purchase line"
+                          className="mt-6"
+                        >
+                          <Trash2 className="h-4 w-4 text-muted-foreground" />
+                        </Button>
+                      </div>
+
+                      <div className="grid gap-3 sm:grid-cols-3 sm:items-end">
+                        {/* Unit selector — only shown if medicine has packaging units */}
+                        {units.length > 0 && (
+                          <div className="space-y-2">
+                            <Label htmlFor={`purchase-unit-${item.key}`}>Packaging unit</Label>
+                            <select
+                              id={`purchase-unit-${item.key}`}
+                              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                              value={item.unitId ?? ""}
+                              onChange={(e) => selectUnit(item.key, e.target.value ? Number(e.target.value) : undefined, selectedMed)}
+                            >
+                              {units.sort((a, b) => a.conversionFactorToBase - b.conversionFactorToBase).map((u) => (
+                                <option key={u.id} value={u.id}>
+                                  {u.unitName} (×{u.conversionFactorToBase})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+
+                        <div className="space-y-2">
+                          <Label htmlFor={`purchase-quantity-${item.key}`}>Quantity</Label>
+                          <Input
+                            id={`purchase-quantity-${item.key}`}
+                            type="number"
+                            min="1"
+                            value={item.quantity}
+                            onChange={(event) =>
+                              updateDraftItem(item.key, { quantity: Number(event.target.value) })
+                            }
+                            required
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor={`purchase-price-${item.key}`}>Unit cost</Label>
+                          <Input
+                            id={`purchase-price-${item.key}`}
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            placeholder="0.00"
+                            value={item.unitPrice}
+                            onChange={(event) =>
+                              updateDraftItem(item.key, { unitPrice: event.target.value })
+                            }
+                            required
+                          />
+                        </div>
+                      </div>
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor={`purchase-quantity-${item.key}`}>Quantity</Label>
-                      <Input
-                        id={`purchase-quantity-${item.key}`}
-                        type="number"
-                        min="1"
-                        value={item.quantity}
-                        onChange={(event) =>
-                          updateDraftItem(item.key, { quantity: Number(event.target.value) })
-                        }
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor={`purchase-price-${item.key}`}>Unit cost</Label>
-                      <Input
-                        id={`purchase-price-${item.key}`}
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        placeholder="0.00"
-                        value={item.unitPrice}
-                        onChange={(event) =>
-                          updateDraftItem(item.key, { unitPrice: event.target.value })
-                        }
-                        required
-                      />
-                    </div>
-                    <Button
-                      type="button"
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => removeDraftItem(item.key)}
-                      disabled={draftItems.length === 1}
-                      aria-label="Remove purchase line"
-                    >
-                      <Trash2 className="h-4 w-4 text-muted-foreground" />
-                    </Button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
@@ -449,6 +516,7 @@ export default function PurchaseOrders() {
         </DialogContent>
       </Dialog>
 
+      {/* View PO dialog */}
       <Dialog open={selectedId !== null} onOpenChange={(open) => !open && setSelectedId(null)}>
         <DialogContent>
           <DialogHeader>
@@ -472,19 +540,30 @@ export default function PurchaseOrders() {
                 </Badge>
               </div>
               <div className="space-y-2">
-                {selectedOrder.data.items?.map((item) => (
-                  <div key={item.id} className="flex items-center justify-between border-b pb-2 text-sm last:border-0">
-                    <div>
-                      <p className="font-medium">{item.medicineName ?? "Medicine"}</p>
-                      <p className="text-muted-foreground">
-                        {item.quantity} × {formatCurrency(item.unitPrice)}
-                      </p>
+                {selectedOrder.data.items?.map((item) => {
+                  const unitLabel = (item as any).unitName
+                    ? `${item.quantity} ${(item as any).unitName}${item.quantity !== 1 ? "s" : ""}`
+                    : `${item.quantity} units`;
+                  const factor = (item as any).conversionFactorToBase ?? 1;
+                  return (
+                    <div key={item.id} className="flex items-center justify-between border-b pb-2 text-sm last:border-0">
+                      <div>
+                        <p className="font-medium">{item.medicineName ?? "Medicine"}</p>
+                        <p className="text-muted-foreground">
+                          {unitLabel} × {formatCurrency(item.unitPrice)}
+                          {factor > 1 && (
+                            <span className="ml-1 text-muted-foreground/60">
+                              ({item.quantity * factor} base units)
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                      <span className="font-semibold">
+                        {formatCurrency(Number(item.unitPrice) * item.quantity)}
+                      </span>
                     </div>
-                    <span className="font-semibold">
-                      {formatCurrency(Number(item.unitPrice) * item.quantity)}
-                    </span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
               <div className="flex items-center justify-between border-t pt-3 font-semibold">
                 <span>Total</span>

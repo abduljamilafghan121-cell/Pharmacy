@@ -35,6 +35,8 @@ import type {
   ListPatientsParams,
   Medicine,
   MedicineInput,
+  MedicineUnit,
+  MedicineUnitInput,
   MedicineUpdate,
   Order,
   OrderDetail,
@@ -2169,6 +2171,228 @@ export const useDeleteMedicine = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getDeleteMedicineMutationOptions(options));
+    }
+
+export const getListMedicineUnitsUrl = (id: number,) => {
+
+
+
+
+  return `/api/medicines/${id}/units`
+}
+
+/**
+ * @summary List packaging units for a medicine
+ */
+export const listMedicineUnits = async (id: number, options?: RequestInit): Promise<MedicineUnit[]> => {
+
+  return customFetch<MedicineUnit[]>(getListMedicineUnitsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListMedicineUnitsQueryKey = (id: number,) => {
+    return [
+    `/api/medicines/${id}/units`
+    ] as const;
+    }
+
+
+export const getListMedicineUnitsQueryOptions = <TData = Awaited<ReturnType<typeof listMedicineUnits>>, TError = ErrorType<ErrorResponse>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMedicineUnits>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListMedicineUnitsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listMedicineUnits>>> = ({ signal }) => listMedicineUnits(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listMedicineUnits>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListMedicineUnitsQueryResult = NonNullable<Awaited<ReturnType<typeof listMedicineUnits>>>
+export type ListMedicineUnitsQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary List packaging units for a medicine
+ */
+
+export function useListMedicineUnits<TData = Awaited<ReturnType<typeof listMedicineUnits>>, TError = ErrorType<ErrorResponse>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMedicineUnits>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListMedicineUnitsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateMedicineUnitUrl = (id: number,) => {
+
+
+
+
+  return `/api/medicines/${id}/units`
+}
+
+/**
+ * @summary Add a packaging unit to a medicine (admin/pharmacist)
+ */
+export const createMedicineUnit = async (id: number,
+    medicineUnitInput: MedicineUnitInput, options?: RequestInit): Promise<MedicineUnit> => {
+
+  return customFetch<MedicineUnit>(getCreateMedicineUnitUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(medicineUnitInput)
+  }
+);}
+
+
+
+
+
+export const getCreateMedicineUnitMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createMedicineUnit>>, TError,{id: number;data: BodyType<MedicineUnitInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createMedicineUnit>>, TError,{id: number;data: BodyType<MedicineUnitInput>}, TContext> => {
+
+const mutationKey = ['createMedicineUnit'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createMedicineUnit>>, {id: number;data: BodyType<MedicineUnitInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  createMedicineUnit(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateMedicineUnitMutationResult = NonNullable<Awaited<ReturnType<typeof createMedicineUnit>>>
+    export type CreateMedicineUnitMutationBody = BodyType<MedicineUnitInput>
+    export type CreateMedicineUnitMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Add a packaging unit to a medicine (admin/pharmacist)
+ */
+export const useCreateMedicineUnit = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createMedicineUnit>>, TError,{id: number;data: BodyType<MedicineUnitInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createMedicineUnit>>,
+        TError,
+        {id: number;data: BodyType<MedicineUnitInput>},
+        TContext
+      > => {
+      return useMutation(getCreateMedicineUnitMutationOptions(options));
+    }
+
+export const getDeleteMedicineUnitUrl = (id: number,
+    unitId: number,) => {
+
+
+
+
+  return `/api/medicines/${id}/units/${unitId}`
+}
+
+/**
+ * @summary Remove a packaging unit from a medicine (admin/pharmacist)
+ */
+export const deleteMedicineUnit = async (id: number,
+    unitId: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteMedicineUnitUrl(id,unitId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteMedicineUnitMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteMedicineUnit>>, TError,{id: number;unitId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteMedicineUnit>>, TError,{id: number;unitId: number}, TContext> => {
+
+const mutationKey = ['deleteMedicineUnit'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteMedicineUnit>>, {id: number;unitId: number}> = (props) => {
+          const {id,unitId} = props ?? {};
+
+          return  deleteMedicineUnit(id,unitId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteMedicineUnitMutationResult = NonNullable<Awaited<ReturnType<typeof deleteMedicineUnit>>>
+
+    export type DeleteMedicineUnitMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Remove a packaging unit from a medicine (admin/pharmacist)
+ */
+export const useDeleteMedicineUnit = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteMedicineUnit>>, TError,{id: number;unitId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteMedicineUnit>>,
+        TError,
+        {id: number;unitId: number},
+        TContext
+      > => {
+      return useMutation(getDeleteMedicineUnitMutationOptions(options));
     }
 
 export const getListPrescriptionsUrl = () => {

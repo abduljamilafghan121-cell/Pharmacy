@@ -1,4 +1,4 @@
-import { pgTable, serial, timestamp, integer, numeric, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, serial, timestamp, integer, numeric, text, pgEnum } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { suppliersTable } from "./suppliers";
@@ -19,7 +19,10 @@ export const purchaseOrderItemsTable = pgTable("purchase_order_items", {
   id: serial("id").primaryKey(),
   purchaseOrderId: integer("purchase_order_id").notNull().references(() => purchaseOrdersTable.id),
   medicineId: integer("medicine_id").notNull().references(() => medicinesTable.id),
+  // quantity is the user-facing amount (e.g. 5 boxes). conversionFactorToBase converts to base units.
   quantity: integer("quantity").notNull(),
+  unitName: text("unit_name"),
+  conversionFactorToBase: integer("conversion_factor_to_base").notNull().default(1),
   unitPrice: numeric("unit_price", { precision: 10, scale: 2 }).notNull(),
 });
 

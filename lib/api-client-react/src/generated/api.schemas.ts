@@ -13,6 +13,22 @@ export interface ErrorResponse {
   error: string;
 }
 
+export interface MedicineUnit {
+  id: number;
+  medicineId: number;
+  unitName: string;
+  conversionFactorToBase: number;
+  isBaseUnit: boolean;
+}
+
+export interface MedicineUnitInput {
+  /** @minLength 1 */
+  unitName: string;
+  /** @minimum 1 */
+  conversionFactorToBase: number;
+  isBaseUnit: boolean;
+}
+
 export interface Patient {
   id: number;
   name: string;
@@ -171,6 +187,7 @@ export interface Medicine {
   /** @nullable */
   imageUrl?: string | null;
   createdAt: string;
+  units?: MedicineUnit[];
 }
 
 export interface MedicineInput {
@@ -249,6 +266,9 @@ export interface OrderItem {
   /** @nullable */
   medicineName?: string | null;
   quantity: number;
+  /** @nullable */
+  unitName?: string | null;
+  conversionFactorToBase?: number;
   price: string;
 }
 
@@ -256,6 +276,8 @@ export interface OrderItemInput {
   medicineId: number;
   /** @minimum 1 */
   quantity: number;
+  /** ID of the packaging unit being sold (from medicine_units). If omitted, base unit is assumed. */
+  unitId?: number;
 }
 
 export type OrderStatus = typeof OrderStatus[keyof typeof OrderStatus];
@@ -414,6 +436,9 @@ export interface PurchaseOrderItem {
   /** @nullable */
   medicineName?: string | null;
   quantity: number;
+  /** @nullable */
+  unitName?: string | null;
+  conversionFactorToBase?: number;
   unitPrice: string;
 }
 
@@ -421,6 +446,8 @@ export interface PurchaseOrderItemInput {
   medicineId: number;
   /** @minimum 1 */
   quantity: number;
+  /** ID of the packaging unit being ordered. If omitted, base unit is assumed. */
+  unitId?: number;
   unitPrice: string;
 }
 

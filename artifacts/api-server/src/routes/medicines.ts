@@ -1,11 +1,12 @@
 import { Router, type IRouter } from "express";
 import { eq, ilike, and, lte, sql } from "drizzle-orm";
-import { db, medicinesTable, categoriesTable } from "@workspace/db";
+import { db, medicinesTable, categoriesTable, medicineUnitsTable } from "@workspace/db";
 import {
   CreateMedicineBody, UpdateMedicineBody,
   GetMedicineParams, UpdateMedicineParams, DeleteMedicineParams,
   ListMedicinesQueryParams,
 } from "@workspace/api-zod";
+import { z } from "zod";
 import { requireAuth, requireRole } from "../middlewares/auth";
 import { formatZodError, getDbErrorMessage } from "../lib/api-errors";
 
@@ -22,6 +23,23 @@ const MEDICINE_SELECT = {
   createdAt: medicinesTable.createdAt,
 };
 
+async function fetchUnitsForMedicine(medicineId: number) {
+  return db
+    .select()
+    .from(medicineUnitsTable)
+    .where(eq(medicineUnitsTable.medicineId, medicineId))
+    .orderBy(medicineUnitsTable.conversionFactorToBase);
+}
+
+async function fetchMedicineWithUnits(id: number) {
+  const [row] = await db.select(MEDICINE_SELECT).from(medicinesTable)
+    .leftJoin(categoriesTable, eq(medicinesTable.categoryId, categoriesTable.id))
+    .where(eq(medicinesTable.id, id));
+  if (!row) return null;
+  const units = await fetchUnitsForMedicine(id);
+  return { ...row, units };
+}
+
 router.get("/medicines/low-stock", requireAuth, async (_req, res): Promise<void> => {
   try {
     const rows = await db
@@ -29,7 +47,11 @@ router.get("/medicines/low-stock", requireAuth, async (_req, res): Promise<void>
       .from(medicinesTable)
       .leftJoin(categoriesTable, eq(medicinesTable.categoryId, categoriesTable.id))
       .where(lte(medicinesTable.quantity, 10));
-    res.json(rows);
+    // Attach units
+    const withUnits = await Promise.all(rows.map(async (r) => ({
+      ...r, units: await fetchUnitsForMedicine(r.id),
+    })));
+    res.json(withUnits);
   } catch (err) {
     res.status(500).json({ error: "Failed to load low-stock medicines.", detail: getDbErrorMessage(err) });
   }
@@ -52,7 +74,10 @@ router.get("/medicines/expiring", requireAuth, async (_req, res): Promise<void> 
           sql`${medicinesTable.expiryDate} <= ${cutoff}`,
         )
       );
-    res.json(rows);
+    const withUnits = await Promise.all(rows.map(async (r) => ({
+      ...r, units: await fetchUnitsForMedicine(r.id),
+    })));
+    res.json(withUnits);
   } catch (err) {
     res.status(500).json({ error: "Failed to load expiring medicines.", detail: getDbErrorMessage(err) });
   }
@@ -76,7 +101,10 @@ router.get("/medicines", async (req, res): Promise<void> => {
       .leftJoin(categoriesTable, eq(medicinesTable.categoryId, categoriesTable.id))
       .where(conditions.length ? and(...conditions) : undefined)
       .orderBy(medicinesTable.name);
-    res.json(rows);
+    const withUnits = await Promise.all(rows.map(async (r) => ({
+      ...r, units: await fetchUnitsForMedicine(r.id),
+    })));
+    res.json(withUnits);
   } catch (err) {
     res.status(500).json({ error: "Failed to load medicines.", detail: getDbErrorMessage(err) });
   }
@@ -94,9 +122,7 @@ router.post("/medicines", requireAuth, requireRole("admin", "pharmacist"), async
       expiryDate: parsed.data.expiryDate ? parsed.data.expiryDate.toISOString().slice(0, 10) : null,
     };
     const [row] = await db.insert(medicinesTable).values(values).returning();
-    const [full] = await db.select(MEDICINE_SELECT).from(medicinesTable)
-      .leftJoin(categoriesTable, eq(medicinesTable.categoryId, categoriesTable.id))
-      .where(eq(medicinesTable.id, row.id));
+    const full = await fetchMedicineWithUnits(row.id);
     res.status(201).json(full);
   } catch (err) {
     res.status(500).json({ error: "Failed to create medicine.", detail: getDbErrorMessage(err) });
@@ -110,11 +136,9 @@ router.get("/medicines/:id", async (req, res): Promise<void> => {
     return;
   }
   try {
-    const [row] = await db.select(MEDICINE_SELECT).from(medicinesTable)
-      .leftJoin(categoriesTable, eq(medicinesTable.categoryId, categoriesTable.id))
-      .where(eq(medicinesTable.id, params.data.id));
-    if (!row) { res.status(404).json({ error: "Medicine not found." }); return; }
-    res.json(row);
+    const full = await fetchMedicineWithUnits(params.data.id);
+    if (!full) { res.status(404).json({ error: "Medicine not found." }); return; }
+    res.json(full);
   } catch (err) {
     res.status(500).json({ error: "Failed to load medicine.", detail: getDbErrorMessage(err) });
   }
@@ -135,9 +159,7 @@ router.patch("/medicines/:id", requireAuth, requireRole("admin", "pharmacist"), 
     };
     const [updated] = await db.update(medicinesTable).set(values).where(eq(medicinesTable.id, params.data.id)).returning();
     if (!updated) { res.status(404).json({ error: "Medicine not found." }); return; }
-    const [full] = await db.select(MEDICINE_SELECT).from(medicinesTable)
-      .leftJoin(categoriesTable, eq(medicinesTable.categoryId, categoriesTable.id))
-      .where(eq(medicinesTable.id, updated.id));
+    const full = await fetchMedicineWithUnits(updated.id);
     res.json(full);
   } catch (err) {
     res.status(500).json({ error: "Failed to update medicine.", detail: getDbErrorMessage(err) });
@@ -152,6 +174,72 @@ router.delete("/medicines/:id", requireAuth, requireRole("admin", "pharmacist"),
     res.sendStatus(204);
   } catch (err) {
     res.status(500).json({ error: "Failed to delete medicine.", detail: getDbErrorMessage(err) });
+  }
+});
+
+// ── Medicine Units ────────────────────────────────────────────────────────────
+
+const MedicineUnitParams = z.object({ id: z.coerce.number().int().positive() });
+const MedicineUnitDeleteParams = z.object({
+  id: z.coerce.number().int().positive(),
+  unitId: z.coerce.number().int().positive(),
+});
+const MedicineUnitInput = z.object({
+  unitName: z.string().min(1),
+  conversionFactorToBase: z.number().int().min(1),
+  isBaseUnit: z.boolean(),
+});
+
+router.get("/medicines/:id/units", requireAuth, async (req, res): Promise<void> => {
+  const params = MedicineUnitParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  try {
+    const [med] = await db.select({ id: medicinesTable.id }).from(medicinesTable).where(eq(medicinesTable.id, params.data.id));
+    if (!med) { res.status(404).json({ error: "Medicine not found." }); return; }
+    const units = await fetchUnitsForMedicine(params.data.id);
+    res.json(units);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to load units.", detail: getDbErrorMessage(err) });
+  }
+});
+
+router.post("/medicines/:id/units", requireAuth, requireRole("admin", "pharmacist"), async (req, res): Promise<void> => {
+  const params = MedicineUnitParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  const parsed = MedicineUnitInput.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  try {
+    const [med] = await db.select({ id: medicinesTable.id }).from(medicinesTable).where(eq(medicinesTable.id, params.data.id));
+    if (!med) { res.status(404).json({ error: "Medicine not found." }); return; }
+
+    // If this unit is being set as base unit, clear previous base unit flag
+    if (parsed.data.isBaseUnit) {
+      await db.update(medicineUnitsTable)
+        .set({ isBaseUnit: false })
+        .where(eq(medicineUnitsTable.medicineId, params.data.id));
+    }
+
+    const [unit] = await db.insert(medicineUnitsTable).values({
+      medicineId: params.data.id,
+      unitName: parsed.data.unitName,
+      conversionFactorToBase: parsed.data.conversionFactorToBase,
+      isBaseUnit: parsed.data.isBaseUnit,
+    }).returning();
+    res.status(201).json(unit);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to create unit.", detail: getDbErrorMessage(err) });
+  }
+});
+
+router.delete("/medicines/:id/units/:unitId", requireAuth, requireRole("admin", "pharmacist"), async (req, res): Promise<void> => {
+  const params = MedicineUnitDeleteParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  try {
+    await db.delete(medicineUnitsTable)
+      .where(and(eq(medicineUnitsTable.id, params.data.unitId), eq(medicineUnitsTable.medicineId, params.data.id)));
+    res.sendStatus(204);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to delete unit.", detail: getDbErrorMessage(err) });
   }
 });
 

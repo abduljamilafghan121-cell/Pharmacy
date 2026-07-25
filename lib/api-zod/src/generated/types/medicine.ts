@@ -5,6 +5,7 @@
  * Pharmacy Management System API
  * OpenAPI spec version: 0.1.0
  */
+import type { MedicineUnit } from './medicineUnit';
 
 export interface Medicine {
   id: number;
@@ -31,4 +32,5 @@ export interface Medicine {
   /** @nullable */
   imageUrl?: string | null;
   createdAt: Date;
+  units?: MedicineUnit[];
 }

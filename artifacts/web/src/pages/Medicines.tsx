@@ -1,19 +1,25 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
-import { useListMedicines, useListCategories, useCreateMedicine, getListMedicinesQueryKey } from "@workspace/api-client-react";
+import {
+  useListMedicines, useListCategories, useCreateMedicine,
+  useListMedicineUnits, useCreateMedicineUnit, useDeleteMedicineUnit,
+  getListMedicinesQueryKey, getListMedicineUnitsQueryKey,
+  type Medicine, type MedicineUnit,
+} from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Search, Plus, Filter, AlertCircle, CalendarClock } from "lucide-react";
+import { Search, Plus, Filter, AlertCircle, CalendarClock, Package, Trash2, Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { ErrorState } from "@/components/ui/error-state";
 import { useToast } from "@/components/ui/use-toast";
 import { formatCurrency } from "@/lib/utils";
 import { getErrorMessage } from "@/lib/errors";
+import { formatStockDisplay } from "@/lib/stock-format";
 
 export default function Medicines() {
   const { user } = useAuth();
@@ -95,7 +101,7 @@ export default function Medicines() {
   );
 }
 
-function MedicineCard({ medicine, isAdmin: _isAdmin }: { medicine: any, isAdmin: boolean }) {
+function MedicineCard({ medicine, isAdmin }: { medicine: Medicine, isAdmin: boolean }) {
   const isOutOfStock = medicine.quantity === 0;
   const today = new Date().toISOString().slice(0, 10);
   const isExpired = Boolean(medicine.expiryDate && medicine.expiryDate < today);
@@ -104,6 +110,10 @@ function MedicineCard({ medicine, isAdmin: _isAdmin }: { medicine: any, isAdmin:
     !isExpired &&
     medicine.expiryDate <= new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10),
   );
+
+  const units = (medicine as any).units as MedicineUnit[] | undefined;
+  const stockDisplay = formatStockDisplay(medicine.quantity, units);
+  const hasUnits = units && units.length > 0;
 
   return (
     <Card className="flex flex-col overflow-hidden hover-elevate transition-all group">
@@ -126,7 +136,7 @@ function MedicineCard({ medicine, isAdmin: _isAdmin }: { medicine: any, isAdmin:
           <Link href={`/medicines/${medicine.id}`} className="text-lg font-bold hover:text-primary transition-colors line-clamp-1">
             {medicine.name}
           </Link>
-          <p className="text-sm text-muted-foreground line-clamp-1" title={medicine.genericName}>
+          <p className="text-sm text-muted-foreground line-clamp-1" title={medicine.genericName ?? undefined}>
             {medicine.genericName || "—"}
           </p>
         </div>
@@ -137,22 +147,162 @@ function MedicineCard({ medicine, isAdmin: _isAdmin }: { medicine: any, isAdmin:
               {isExpired ? "Expired" : `Expires ${new Date(`${medicine.expiryDate}T00:00:00`).toLocaleDateString()}`}
             </div>
           )}
-          <div className="flex items-end justify-between">
+          <div className="flex items-end justify-between gap-2">
             <div>
               <p className="text-xl font-bold text-primary">{formatCurrency(medicine.price)}</p>
               {isOutOfStock ? (
                 <p className="mt-1 text-xs font-semibold text-destructive">Out of stock</p>
+              ) : hasUnits ? (
+                <p className="mt-1 text-xs text-muted-foreground" title={`${medicine.quantity} base units`}>
+                  {stockDisplay}
+                </p>
               ) : (
                 <p className="mt-1 text-xs text-muted-foreground">{medicine.quantity} in stock</p>
               )}
             </div>
-            <Button size="sm" variant="outline" asChild>
-              <Link href={`/medicines/${medicine.id}`}>Details</Link>
-            </Button>
+            <div className="flex flex-col gap-1 shrink-0">
+              {isAdmin && (
+                <ManageUnitsDialog medicine={medicine} units={units ?? []} />
+              )}
+              <Button size="sm" variant="outline" asChild>
+                <Link href={`/medicines/${medicine.id}`}>Details</Link>
+              </Button>
+            </div>
           </div>
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function ManageUnitsDialog({ medicine, units }: { medicine: Medicine; units: MedicineUnit[] }) {
+  const [open, setOpen] = useState(false);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data: liveUnits, isLoading: unitsLoading } = useListMedicineUnits(medicine.id, {
+    query: { enabled: open, queryKey: getListMedicineUnitsQueryKey(medicine.id) },
+  });
+
+  const displayUnits = liveUnits ?? units;
+
+  const createUnit = useCreateMedicineUnit({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListMedicineUnitsQueryKey(medicine.id) });
+        queryClient.invalidateQueries({ queryKey: getListMedicinesQueryKey() });
+        toast({ title: "Packaging unit added." });
+      },
+      onError: (err) => toast({ title: "Failed to add unit", description: getErrorMessage(err), variant: "destructive" }),
+    },
+  });
+
+  const deleteUnit = useDeleteMedicineUnit({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListMedicineUnitsQueryKey(medicine.id) });
+        queryClient.invalidateQueries({ queryKey: getListMedicinesQueryKey() });
+        toast({ title: "Packaging unit removed." });
+      },
+      onError: (err) => toast({ title: "Failed to remove unit", description: getErrorMessage(err), variant: "destructive" }),
+    },
+  });
+
+  const handleAddUnit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const unitName = fd.get("unitName") as string;
+    const factor = parseInt(fd.get("factor") as string, 10);
+    const isBase = fd.get("isBase") === "on";
+    if (!unitName || !factor || factor < 1) {
+      toast({ title: "Fill in unit name and a conversion factor ≥ 1", variant: "destructive" });
+      return;
+    }
+    createUnit.mutate({
+      id: medicine.id,
+      data: { unitName, conversionFactorToBase: factor, isBaseUnit: isBase },
+    });
+    (e.target as HTMLFormElement).reset();
+  };
+
+  const sorted = [...displayUnits].sort((a, b) => a.conversionFactorToBase - b.conversionFactorToBase);
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="ghost" className="text-muted-foreground hover:text-foreground h-7 px-2">
+          <Package size={13} className="mr-1" /> Units
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-[480px]">
+        <DialogHeader>
+          <DialogTitle>Packaging units — {medicine.name}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Define how stock is packaged. All quantities are stored internally as base units.
+            The base unit should have a conversion factor of 1.
+          </p>
+
+          {/* Current units */}
+          {unitsLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+              <Loader2 size={14} className="animate-spin" /> Loading…
+            </div>
+          ) : sorted.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-2 italic">No packaging units defined yet. Add one below.</p>
+          ) : (
+            <div className="space-y-2">
+              {sorted.map((unit) => (
+                <div key={unit.id} className="flex items-center justify-between rounded-lg border border-border p-3 bg-muted/20">
+                  <div>
+                    <span className="font-medium text-sm">{unit.unitName}</span>
+                    {unit.isBaseUnit && (
+                      <Badge variant="secondary" className="ml-2 text-[10px]">Base</Badge>
+                    )}
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      1 {unit.unitName} = {unit.conversionFactorToBase} base unit{unit.conversionFactorToBase !== 1 ? "s" : ""}
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
+                    onClick={() => deleteUnit.mutate({ id: medicine.id, unitId: unit.id })}
+                    disabled={deleteUnit.isPending}
+                  >
+                    <Trash2 size={13} />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Add unit form */}
+          <form onSubmit={handleAddUnit} className="space-y-3 border-t pt-4">
+            <p className="text-sm font-medium">Add packaging unit</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label htmlFor="unitName" className="text-xs">Unit name</Label>
+                <Input id="unitName" name="unitName" placeholder="e.g. tablet, strip, box" className="h-9 text-sm" required />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="factor" className="text-xs">= how many base units?</Label>
+                <Input id="factor" name="factor" type="number" min="1" placeholder="e.g. 10" className="h-9 text-sm" required />
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <input type="checkbox" id="isBase" name="isBase" className="w-4 h-4 rounded border-input" />
+              <Label htmlFor="isBase" className="text-sm font-normal">This is the base unit (conversion = 1)</Label>
+            </div>
+            <Button type="submit" size="sm" disabled={createUnit.isPending} className="w-full">
+              {createUnit.isPending ? <Loader2 size={14} className="animate-spin mr-2" /> : <Plus size={14} className="mr-2" />}
+              Add unit
+            </Button>
+          </form>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -212,12 +362,14 @@ function MedicineFormDialog() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="price">Price (USD) *</Label>
-              <Input id="price" name="price" type="number" step="0.01" required placeholder="12.99" />
+              <Label htmlFor="price">Price per base unit *</Label>
+              <Input id="price" name="price" type="number" step="0.01" required placeholder="0.50" />
+              <p className="text-xs text-muted-foreground">Price per the smallest unit (e.g. per tablet, per ml)</p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="quantity">Initial Stock *</Label>
+              <Label htmlFor="quantity">Initial stock (base units) *</Label>
               <Input id="quantity" name="quantity" type="number" required placeholder="100" />
+              <p className="text-xs text-muted-foreground">Enter in base units (e.g. total tablets)</p>
             </div>
           </div>
           <div className="space-y-2">
@@ -233,9 +385,6 @@ function MedicineFormDialog() {
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </select>
-            {categories?.length === 0 && (
-              <p className="text-xs text-muted-foreground">No categories yet — add some in Settings first.</p>
-            )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="description">Description</Label>
@@ -250,6 +399,9 @@ function MedicineFormDialog() {
             <input type="checkbox" id="prescriptionRequired" name="prescriptionRequired" className="w-4 h-4 rounded border-input" />
             <Label htmlFor="prescriptionRequired">Requires Prescription</Label>
           </div>
+          <p className="text-xs text-muted-foreground bg-muted/50 rounded-lg p-3">
+            💡 After adding the medicine, use the <strong>Units</strong> button on its card to define packaging levels (e.g. tablet → strip → box).
+          </p>
           <div className="flex justify-end gap-3 pt-4">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
             <Button type="submit" disabled={createMutation.isPending}>

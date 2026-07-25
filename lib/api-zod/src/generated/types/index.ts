@@ -21,6 +21,8 @@ export * from './listMedicinesParams';
 export * from './listPatientsParams';
 export * from './medicine';
 export * from './medicineInput';
+export * from './medicineUnit';
+export * from './medicineUnitInput';
 export * from './medicineUpdate';
 export * from './order';
 export * from './orderDetail';

@@ -645,6 +645,88 @@ paths:
         "204":
           description: Deleted
 
+  /medicines/{id}/units:
+    get:
+      operationId: listMedicineUnits
+      tags: [medicines]
+      summary: List packaging units for a medicine
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Units
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MedicineUnit"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: createMedicineUnit
+      tags: [medicines]
+      summary: Add a packaging unit to a medicine (admin/pharmacist)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MedicineUnitInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MedicineUnit"
+        "404":
+          description: Medicine not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /medicines/{id}/units/{unitId}:
+    delete:
+      operationId: deleteMedicineUnit
+      tags: [medicines]
+      summary: Remove a packaging unit from a medicine (admin/pharmacist)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: unitId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   # ── Prescriptions ─────────────────────────────────────────────────────────
   /prescriptions:
     get:
@@ -1148,6 +1230,35 @@ components:
           type: string
       required: [error]
 
+    # ── Medicine Unit ─────────────────────────────────────────────────────────
+    MedicineUnit:
+      type: object
+      required: [id, medicineId, unitName, conversionFactorToBase, isBaseUnit]
+      properties:
+        id:
+          type: integer
+        medicineId:
+          type: integer
+        unitName:
+          type: string
+        conversionFactorToBase:
+          type: integer
+        isBaseUnit:
+          type: boolean
+
+    MedicineUnitInput:
+      type: object
+      required: [unitName, conversionFactorToBase, isBaseUnit]
+      properties:
+        unitName:
+          type: string
+          minLength: 1
+        conversionFactorToBase:
+          type: integer
+          minimum: 1
+        isBaseUnit:
+          type: boolean
+
     Patient:
       type: object
       required: [id, name, createdAt]
@@ -1381,6 +1492,10 @@ components:
         createdAt:
           type: string
           format: date-time
+        units:
+          type: array
+          items:
+            $ref: "#/components/schemas/MedicineUnit"
 
     MedicineInput:
       type: object
@@ -1503,6 +1618,10 @@ components:
           type: ["string", "null"]
         quantity:
           type: integer
+        unitName:
+          type: ["string", "null"]
+        conversionFactorToBase:
+          type: integer
         price:
           type: string
 
@@ -1515,6 +1634,9 @@ components:
         quantity:
           type: integer
           minimum: 1
+        unitId:
+          type: integer
+          description: ID of the packaging unit being sold (from medicine_units). If omitted, base unit is assumed.
 
     Order:
       type: object
@@ -1655,6 +1777,10 @@ components:
           type: ["string", "null"]
         quantity:
           type: integer
+        unitName:
+          type: ["string", "null"]
+        conversionFactorToBase:
+          type: integer
         unitPrice:
           type: string
 
@@ -1667,6 +1793,9 @@ components:
         quantity:
           type: integer
           minimum: 1
+        unitId:
+          type: integer
+          description: ID of the packaging unit being ordered. If omitted, base unit is assumed.
         unitPrice:
           type: string
 

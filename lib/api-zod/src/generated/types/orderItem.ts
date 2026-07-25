@@ -13,5 +13,8 @@ export interface OrderItem {
   /** @nullable */
   medicineName?: string | null;
   quantity: number;
+  /** @nullable */
+  unitName?: string | null;
+  conversionFactorToBase?: number;
   price: string;
 }

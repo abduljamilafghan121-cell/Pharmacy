@@ -26,7 +26,10 @@ export const orderItemsTable = pgTable("order_items", {
   id: serial("id").primaryKey(),
   orderId: integer("order_id").notNull().references(() => ordersTable.id),
   medicineId: integer("medicine_id").notNull().references(() => medicinesTable.id),
+  // quantity is the user-facing amount (e.g. 2 strips). conversionFactorToBase converts to base units.
   quantity: integer("quantity").notNull(),
+  unitName: text("unit_name"),
+  conversionFactorToBase: integer("conversion_factor_to_base").notNull().default(1),
   price: numeric("price", { precision: 10, scale: 2 }).notNull(),
 });
 

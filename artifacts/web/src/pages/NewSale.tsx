@@ -8,14 +8,18 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Search, Plus, Minus, Trash2, ShoppingBag, Pill, CheckCircle2, Loader2, Receipt } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
+import { formatStockDisplay, priceForUnit } from "@/lib/stock-format";
 import { getErrorMessage } from "@/lib/errors";
 import { useToast } from "@/components/ui/use-toast";
 import { useLocation, useSearch } from "wouter";
-import type { Medicine } from "@workspace/api-client-react";
+import type { Medicine, MedicineUnit } from "@workspace/api-client-react";
 
 interface SaleItem {
   medicine: Medicine;
-  quantity: number;
+  quantity: number;           // user-facing quantity (e.g. 2 strips)
+  unitId?: number;            // selected unit id (undefined = base unit)
+  unitName?: string;          // selected unit name for display
+  conversionFactor: number;   // base units per selected unit
 }
 
 const PAYMENT_METHODS = [
@@ -23,6 +27,18 @@ const PAYMENT_METHODS = [
   { value: "card", label: "Card / PoS" },
   { value: "insurance", label: "Insurance" },
 ] as const;
+
+function getUnits(medicine: Medicine): MedicineUnit[] {
+  return ((medicine as any).units as MedicineUnit[]) ?? [];
+}
+
+function defaultUnit(medicine: Medicine): { unitId?: number; unitName?: string; conversionFactor: number } {
+  const units = getUnits(medicine);
+  if (units.length === 0) return { conversionFactor: 1 };
+  const base = units.find((u) => u.isBaseUnit) ?? units.find((u) => u.conversionFactorToBase === 1) ?? units[0];
+  if (!base) return { conversionFactor: 1 };
+  return { unitId: base.id, unitName: base.unitName, conversionFactor: base.conversionFactorToBase };
+}
 
 export default function NewSale() {
   const [search, setSearch] = useState("");
@@ -62,11 +78,13 @@ export default function NewSale() {
   }, [medicines]);
 
   const addItem = (medicine: Medicine) => {
+    const defUnit = defaultUnit(medicine);
     setSaleItems(prev => {
       const existing = prev.find(i => i.medicine.id === medicine.id);
+      const baseUnitsNeeded = (existing ? existing.quantity + 1 : 1) * defUnit.conversionFactor;
       if (existing) {
-        if (existing.quantity >= medicine.quantity) {
-          toast({ title: "Stock limit reached", description: `Only ${medicine.quantity} units available.`, variant: "destructive" });
+        if (existing.medicine.quantity < baseUnitsNeeded) {
+          toast({ title: "Stock limit reached", description: `Only ${formatStockDisplay(medicine.quantity, getUnits(medicine))} available.`, variant: "destructive" });
           return prev;
         }
         return prev.map(i => i.medicine.id === medicine.id ? { ...i, quantity: i.quantity + 1 } : i);
@@ -79,7 +97,7 @@ export default function NewSale() {
         toast({ title: "Expired medicine", description: `${medicine.name} cannot be sold because it has expired.`, variant: "destructive" });
         return prev;
       }
-      return [...prev, { medicine, quantity: 1 }];
+      return [...prev, { medicine, quantity: 1, ...defUnit }];
     });
     setSearch("");
     searchRef.current?.focus();
@@ -93,16 +111,39 @@ export default function NewSale() {
     );
   };
 
+  const updateUnit = (medicineId: number, unitId: number | undefined, units: MedicineUnit[]) => {
+    setSaleItems(prev => prev.map(i => {
+      if (i.medicine.id !== medicineId) return i;
+      if (unitId == null) return { ...i, unitId: undefined, unitName: undefined, conversionFactor: 1 };
+      const unit = units.find((u) => u.id === unitId);
+      if (!unit) return i;
+      return { ...i, unitId: unit.id, unitName: unit.unitName, conversionFactor: unit.conversionFactorToBase };
+    }));
+  };
+
   const removeItem = (id: number) => {
     setSaleItems(prev => prev.filter(i => i.medicine.id !== id));
   };
 
-  const subtotal = saleItems.reduce((sum, i) => sum + parseFloat(i.medicine.price) * i.quantity, 0);
+  // Total using base unit price × base units sold
+  const subtotal = saleItems.reduce((sum, i) => {
+    return sum + priceForUnit(i.medicine.price, i.conversionFactor) * i.quantity;
+  }, 0);
 
   const handleProcessSale = async () => {
     if (saleItems.length === 0) {
       toast({ title: "Cart is empty", description: "Add at least one medicine to process a sale.", variant: "destructive" });
       return;
+    }
+
+    // Validate stock (in base units)
+    for (const item of saleItems) {
+      const baseUnitsNeeded = item.quantity * item.conversionFactor;
+      if (item.medicine.quantity < baseUnitsNeeded) {
+        const available = formatStockDisplay(item.medicine.quantity, getUnits(item.medicine));
+        toast({ title: "Insufficient stock", description: `${item.medicine.name}: only ${available} available.`, variant: "destructive" });
+        return;
+      }
     }
 
     setIsSubmitting(true);
@@ -112,7 +153,11 @@ export default function NewSale() {
           patientName: patientName.trim() || undefined,
           paymentMethod,
           notes: notes.trim() || undefined,
-          items: saleItems.map(i => ({ medicineId: i.medicine.id, quantity: i.quantity })),
+          items: saleItems.map(i => ({
+            medicineId: i.medicine.id,
+            quantity: i.quantity,
+            ...(i.unitId ? { unitId: i.unitId } : {}),
+          })) as any,
         },
       });
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
@@ -169,7 +214,10 @@ export default function NewSale() {
             <div className="border-t border-border pt-3 space-y-2">
               {completedSale.items?.map((item: any) => (
                 <div key={item.id} className="flex justify-between text-sm">
-                  <span>{item.medicineName} × {item.quantity}</span>
+                  <span>
+                    {item.medicineName}
+                    {item.unitName ? ` × ${item.quantity} ${item.unitName}${item.quantity !== 1 ? "s" : ""}` : ` × ${item.quantity}`}
+                  </span>
                   <span className="font-medium">{formatCurrency(parseFloat(item.price))}</span>
                 </div>
               ))}
@@ -221,29 +269,37 @@ export default function NewSale() {
                   {filteredMedicines.length === 0 ? (
                     <div className="py-6 text-center text-sm text-muted-foreground">No medicines found</div>
                   ) : (
-                    filteredMedicines.map(med => (
-                      <button
-                        key={med.id}
-                        onClick={() => addItem(med)}
-                        className="w-full flex items-center justify-between p-3 hover:bg-muted/50 transition-colors text-left"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-md bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                            <Pill size={16} />
+                    filteredMedicines.map(med => {
+                      const units = getUnits(med);
+                      const stockLabel = med.quantity === 0
+                        ? "Out of stock"
+                        : units.length > 0
+                          ? formatStockDisplay(med.quantity, units)
+                          : `${med.quantity} in stock`;
+                      return (
+                        <button
+                          key={med.id}
+                          onClick={() => addItem(med)}
+                          className="w-full flex items-center justify-between p-3 hover:bg-muted/50 transition-colors text-left"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-md bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                              <Pill size={16} />
+                            </div>
+                            <div>
+                              <p className="font-medium text-sm">{med.name}</p>
+                              {med.genericName && <p className="text-xs text-muted-foreground">{med.genericName}</p>}
+                            </div>
                           </div>
-                          <div>
-                            <p className="font-medium text-sm">{med.name}</p>
-                            {med.genericName && <p className="text-xs text-muted-foreground">{med.genericName}</p>}
+                          <div className="text-right shrink-0 ml-4">
+                            <p className="font-semibold text-sm">{formatCurrency(parseFloat(med.price))}<span className="text-xs font-normal text-muted-foreground">/base unit</span></p>
+                            <p className={`text-xs ${med.quantity === 0 ? 'text-destructive' : 'text-muted-foreground'}`}>
+                              {stockLabel}
+                            </p>
                           </div>
-                        </div>
-                        <div className="text-right shrink-0 ml-4">
-                          <p className="font-semibold text-sm">{formatCurrency(parseFloat(med.price))}</p>
-                          <p className={`text-xs ${med.quantity === 0 ? 'text-destructive' : 'text-muted-foreground'}`}>
-                            {med.quantity === 0 ? 'Out of stock' : `${med.quantity} in stock`}
-                          </p>
-                        </div>
-                      </button>
-                    ))
+                        </button>
+                      );
+                    })
                   )}
                 </div>
               )}
@@ -266,36 +322,76 @@ export default function NewSale() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {saleItems.map(item => (
-                    <div key={item.medicine.id} className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/20">
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm truncate">{item.medicine.name}</p>
-                        <p className="text-xs text-muted-foreground">{formatCurrency(parseFloat(item.medicine.price))} each</p>
+                  {saleItems.map(item => {
+                    const units = getUnits(item.medicine);
+                    const unitPrice = priceForUnit(item.medicine.price, item.conversionFactor);
+                    const lineTotal = unitPrice * item.quantity;
+                    const baseUnitsUsed = item.quantity * item.conversionFactor;
+                    const maxQty = Math.floor(item.medicine.quantity / item.conversionFactor);
+                    return (
+                      <div key={item.medicine.id} className="rounded-lg border border-border bg-muted/20 p-3 space-y-2">
+                        <div className="flex items-start gap-3">
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm truncate">{item.medicine.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {formatCurrency(unitPrice)}{item.unitName ? ` / ${item.unitName}` : " / unit"}
+                              {item.conversionFactor > 1 && (
+                                <span className="ml-1 text-muted-foreground/70">
+                                  (= {item.conversionFactor} base units)
+                                </span>
+                              )}
+                            </p>
+                          </div>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0" onClick={() => removeItem(item.medicine.id)}>
+                            <Trash2 size={14} />
+                          </Button>
+                        </div>
+
+                        <div className="flex items-center gap-3 flex-wrap">
+                          {/* Unit selector */}
+                          {units.length > 0 && (
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs text-muted-foreground">Unit:</span>
+                              <select
+                                className="h-7 rounded-md border border-input bg-background px-2 py-0 text-xs"
+                                value={item.unitId ?? ""}
+                                onChange={(e) => updateUnit(item.medicine.id, e.target.value ? Number(e.target.value) : undefined, units)}
+                              >
+                                {units.sort((a, b) => a.conversionFactorToBase - b.conversionFactorToBase).map((u) => (
+                                  <option key={u.id} value={u.id}>{u.unitName}</option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
+
+                          {/* Quantity controls */}
+                          <div className="flex items-center gap-1.5 ml-auto">
+                            <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => updateQty(item.medicine.id, item.quantity - 1)}>
+                              <Minus size={12} />
+                            </Button>
+                            <Input
+                              type="number"
+                              value={item.quantity}
+                              min={1}
+                              max={maxQty}
+                              className="h-7 w-14 text-center text-sm p-0"
+                              onChange={(e) => updateQty(item.medicine.id, parseInt(e.target.value) || 0)}
+                            />
+                            <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => updateQty(item.medicine.id, item.quantity + 1)} disabled={item.quantity >= maxQty}>
+                              <Plus size={12} />
+                            </Button>
+                          </div>
+
+                          <div className="w-20 text-right shrink-0">
+                            <p className="font-semibold text-sm">{formatCurrency(lineTotal)}</p>
+                            {item.conversionFactor > 1 && (
+                              <p className="text-[10px] text-muted-foreground">{baseUnitsUsed} base units</p>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => updateQty(item.medicine.id, item.quantity - 1)}>
-                          <Minus size={12} />
-                        </Button>
-                        <Input
-                          type="number"
-                          value={item.quantity}
-                          min={1}
-                          max={item.medicine.quantity}
-                          className="h-7 w-14 text-center text-sm p-0"
-                          onChange={(e) => updateQty(item.medicine.id, parseInt(e.target.value) || 0)}
-                        />
-                        <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => updateQty(item.medicine.id, item.quantity + 1)} disabled={item.quantity >= item.medicine.quantity}>
-                          <Plus size={12} />
-                        </Button>
-                      </div>
-                      <div className="w-20 text-right shrink-0">
-                        <p className="font-semibold text-sm">{formatCurrency(parseFloat(item.medicine.price) * item.quantity)}</p>
-                      </div>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0" onClick={() => removeItem(item.medicine.id)}>
-                        <Trash2 size={14} />
-                      </Button>
-                    </div>
-                  ))}
+                    );
+                  })}
 
                   <div className="pt-3 border-t border-border flex justify-between font-bold text-lg">
                     <span>Total</span>

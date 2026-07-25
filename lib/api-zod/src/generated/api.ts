@@ -414,7 +414,14 @@ export const ListMedicinesResponseItem = zod.object({
   "prescriptionRequired": zod.boolean(),
   "description": zod.string().nullish(),
   "imageUrl": zod.string().nullish(),
-  "createdAt": zod.coerce.date()
+  "createdAt": zod.coerce.date(),
+  "units": zod.array(zod.object({
+  "id": zod.number(),
+  "medicineId": zod.number(),
+  "unitName": zod.string(),
+  "conversionFactorToBase": zod.number(),
+  "isBaseUnit": zod.boolean()
+})).optional()
 })
 export const ListMedicinesResponse = zod.array(ListMedicinesResponseItem)
 
@@ -457,7 +464,14 @@ export const CreateMedicineResponse = zod.object({
   "prescriptionRequired": zod.boolean(),
   "description": zod.string().nullish(),
   "imageUrl": zod.string().nullish(),
-  "createdAt": zod.coerce.date()
+  "createdAt": zod.coerce.date(),
+  "units": zod.array(zod.object({
+  "id": zod.number(),
+  "medicineId": zod.number(),
+  "unitName": zod.string(),
+  "conversionFactorToBase": zod.number(),
+  "isBaseUnit": zod.boolean()
+})).optional()
 })
 
 
@@ -479,7 +493,14 @@ export const GetLowStockMedicinesResponseItem = zod.object({
   "prescriptionRequired": zod.boolean(),
   "description": zod.string().nullish(),
   "imageUrl": zod.string().nullish(),
-  "createdAt": zod.coerce.date()
+  "createdAt": zod.coerce.date(),
+  "units": zod.array(zod.object({
+  "id": zod.number(),
+  "medicineId": zod.number(),
+  "unitName": zod.string(),
+  "conversionFactorToBase": zod.number(),
+  "isBaseUnit": zod.boolean()
+})).optional()
 })
 export const GetLowStockMedicinesResponse = zod.array(GetLowStockMedicinesResponseItem)
 
@@ -502,7 +523,14 @@ export const GetExpiringMedicinesResponseItem = zod.object({
   "prescriptionRequired": zod.boolean(),
   "description": zod.string().nullish(),
   "imageUrl": zod.string().nullish(),
-  "createdAt": zod.coerce.date()
+  "createdAt": zod.coerce.date(),
+  "units": zod.array(zod.object({
+  "id": zod.number(),
+  "medicineId": zod.number(),
+  "unitName": zod.string(),
+  "conversionFactorToBase": zod.number(),
+  "isBaseUnit": zod.boolean()
+})).optional()
 })
 export const GetExpiringMedicinesResponse = zod.array(GetExpiringMedicinesResponseItem)
 
@@ -529,7 +557,14 @@ export const GetMedicineResponse = zod.object({
   "prescriptionRequired": zod.boolean(),
   "description": zod.string().nullish(),
   "imageUrl": zod.string().nullish(),
-  "createdAt": zod.coerce.date()
+  "createdAt": zod.coerce.date(),
+  "units": zod.array(zod.object({
+  "id": zod.number(),
+  "medicineId": zod.number(),
+  "unitName": zod.string(),
+  "conversionFactorToBase": zod.number(),
+  "isBaseUnit": zod.boolean()
+})).optional()
 })
 
 
@@ -575,7 +610,14 @@ export const UpdateMedicineResponse = zod.object({
   "prescriptionRequired": zod.boolean(),
   "description": zod.string().nullish(),
   "imageUrl": zod.string().nullish(),
-  "createdAt": zod.coerce.date()
+  "createdAt": zod.coerce.date(),
+  "units": zod.array(zod.object({
+  "id": zod.number(),
+  "medicineId": zod.number(),
+  "unitName": zod.string(),
+  "conversionFactorToBase": zod.number(),
+  "isBaseUnit": zod.boolean()
+})).optional()
 })
 
 
@@ -587,6 +629,60 @@ export const DeleteMedicineParams = zod.object({
 })
 
 export const DeleteMedicineResponse = zod.void()
+
+
+/**
+ * @summary List packaging units for a medicine
+ */
+export const ListMedicineUnitsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListMedicineUnitsResponseItem = zod.object({
+  "id": zod.number(),
+  "medicineId": zod.number(),
+  "unitName": zod.string(),
+  "conversionFactorToBase": zod.number(),
+  "isBaseUnit": zod.boolean()
+})
+export const ListMedicineUnitsResponse = zod.array(ListMedicineUnitsResponseItem)
+
+
+/**
+ * @summary Add a packaging unit to a medicine (admin/pharmacist)
+ */
+export const CreateMedicineUnitParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+
+
+
+export const CreateMedicineUnitBody = zod.object({
+  "unitName": zod.string().min(1),
+  "conversionFactorToBase": zod.number().min(1),
+  "isBaseUnit": zod.boolean()
+})
+
+export const CreateMedicineUnitResponse = zod.object({
+  "id": zod.number(),
+  "medicineId": zod.number(),
+  "unitName": zod.string(),
+  "conversionFactorToBase": zod.number(),
+  "isBaseUnit": zod.boolean()
+})
+
+
+/**
+ * @summary Remove a packaging unit from a medicine (admin/pharmacist)
+ */
+export const DeleteMedicineUnitParams = zod.object({
+  "id": zod.coerce.number(),
+  "unitId": zod.coerce.number()
+})
+
+export const DeleteMedicineUnitResponse = zod.void()
 
 
 /**
@@ -724,7 +820,8 @@ export const CreateOrderBody = zod.object({
   "prescriptionId": zod.number().optional(),
   "items": zod.array(zod.object({
   "medicineId": zod.number(),
-  "quantity": zod.number().min(1)
+  "quantity": zod.number().min(1),
+  "unitId": zod.number().optional().describe('ID of the packaging unit being sold (from medicine_units). If omitted, base unit is assumed.')
 })).min(1)
 })
 
@@ -744,6 +841,8 @@ export const CreateOrderResponse = zod.object({
   "medicineId": zod.number(),
   "medicineName": zod.string().nullish(),
   "quantity": zod.number(),
+  "unitName": zod.string().nullish(),
+  "conversionFactorToBase": zod.number().optional(),
   "price": zod.string()
 })),
   "createdAt": zod.coerce.date()
@@ -773,6 +872,8 @@ export const GetOrderResponse = zod.object({
   "medicineId": zod.number(),
   "medicineName": zod.string().nullish(),
   "quantity": zod.number(),
+  "unitName": zod.string().nullish(),
+  "conversionFactorToBase": zod.number().optional(),
   "price": zod.string()
 })),
   "createdAt": zod.coerce.date()
@@ -857,6 +958,8 @@ export const ListPurchaseOrdersResponseItem = zod.object({
   "medicineId": zod.number(),
   "medicineName": zod.string().nullish(),
   "quantity": zod.number(),
+  "unitName": zod.string().nullish(),
+  "conversionFactorToBase": zod.number().optional(),
   "unitPrice": zod.string()
 })).optional(),
   "createdAt": zod.coerce.date()
@@ -876,6 +979,7 @@ export const CreatePurchaseOrderBody = zod.object({
   "items": zod.array(zod.object({
   "medicineId": zod.number(),
   "quantity": zod.number().min(1),
+  "unitId": zod.number().optional().describe('ID of the packaging unit being ordered. If omitted, base unit is assumed.'),
   "unitPrice": zod.string()
 })).min(1)
 })
@@ -892,6 +996,8 @@ export const CreatePurchaseOrderResponse = zod.object({
   "medicineId": zod.number(),
   "medicineName": zod.string().nullish(),
   "quantity": zod.number(),
+  "unitName": zod.string().nullish(),
+  "conversionFactorToBase": zod.number().optional(),
   "unitPrice": zod.string()
 })).optional(),
   "createdAt": zod.coerce.date()
@@ -917,6 +1023,8 @@ export const GetPurchaseOrderResponse = zod.object({
   "medicineId": zod.number(),
   "medicineName": zod.string().nullish(),
   "quantity": zod.number(),
+  "unitName": zod.string().nullish(),
+  "conversionFactorToBase": zod.number().optional(),
   "unitPrice": zod.string()
 })).optional(),
   "createdAt": zod.coerce.date()
@@ -942,6 +1050,8 @@ export const ReceivePurchaseOrderResponse = zod.object({
   "medicineId": zod.number(),
   "medicineName": zod.string().nullish(),
   "quantity": zod.number(),
+  "unitName": zod.string().nullish(),
+  "conversionFactorToBase": zod.number().optional(),
   "unitPrice": zod.string()
 })).optional(),
   "createdAt": zod.coerce.date()

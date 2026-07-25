@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
-import { and, eq } from "drizzle-orm";
-import { db, purchaseOrdersTable, purchaseOrderItemsTable, medicinesTable, suppliersTable } from "@workspace/db";
+import { and, eq, inArray } from "drizzle-orm";
+import { db, purchaseOrdersTable, purchaseOrderItemsTable, medicinesTable, suppliersTable, medicineUnitsTable } from "@workspace/db";
+import { z } from "zod";
 import {
   CreatePurchaseOrderBody, GetPurchaseOrderParams, ReceivePurchaseOrderParams,
 } from "@workspace/api-zod";
@@ -30,6 +31,8 @@ async function fetchPurchaseOrder(id: number) {
       medicineId: purchaseOrderItemsTable.medicineId,
       medicineName: medicinesTable.name,
       quantity: purchaseOrderItemsTable.quantity,
+      unitName: purchaseOrderItemsTable.unitName,
+      conversionFactorToBase: purchaseOrderItemsTable.conversionFactorToBase,
       unitPrice: purchaseOrderItemsTable.unitPrice,
     })
     .from(purchaseOrderItemsTable)
@@ -55,14 +58,46 @@ router.get("/purchase-orders", requireAuth, requireRole("admin", "pharmacist"), 
   res.json(pos.map((po) => ({ ...po, items: [] })));
 });
 
+// Extended item input: standard fields + optional unitId
+const PurchaseOrderItemInputExtended = z.object({
+  medicineId: z.number().int().positive(),
+  quantity: z.number().int().min(1),
+  unitId: z.number().int().positive().optional(),
+  unitPrice: z.string(),
+});
+
 router.post("/purchase-orders", requireAuth, requireRole("admin", "pharmacist"), async (req, res): Promise<void> => {
   const parsed = CreatePurchaseOrderBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const { supplierId, items } = parsed.data;
-  const total = items.reduce((sum, i) => sum + parseFloat(i.unitPrice) * i.quantity, 0);
+
+  const itemsRaw = z.array(PurchaseOrderItemInputExtended).safeParse(req.body.items);
+  if (!itemsRaw.success) {
+    res.status(400).json({ error: itemsRaw.error.message });
+    return;
+  }
+
+  const { supplierId } = parsed.data;
+  const items = itemsRaw.data;
+
+  // Resolve unit conversion factors
+  const unitIds = items.map((i) => i.unitId).filter((id): id is number => id != null);
+  const units = unitIds.length > 0
+    ? await db.select().from(medicineUnitsTable).where(inArray(medicineUnitsTable.id, unitIds))
+    : [];
+
+  const resolvedItems = items.map((item) => {
+    const unit = item.unitId ? units.find((u) => u.id === item.unitId) : null;
+    return {
+      ...item,
+      unitName: unit?.unitName ?? null,
+      conversionFactor: unit?.conversionFactorToBase ?? 1,
+    };
+  });
+
+  const total = resolvedItems.reduce((sum, i) => sum + parseFloat(i.unitPrice) * i.quantity, 0);
 
   const poId = await db.transaction(async (tx) => {
     const [po] = await tx.insert(purchaseOrdersTable).values({
@@ -70,11 +105,13 @@ router.post("/purchase-orders", requireAuth, requireRole("admin", "pharmacist"),
       total: total.toFixed(2),
     }).returning();
 
-    for (const item of items) {
+    for (const item of resolvedItems) {
       await tx.insert(purchaseOrderItemsTable).values({
         purchaseOrderId: po.id,
         medicineId: item.medicineId,
         quantity: item.quantity,
+        unitName: item.unitName,
+        conversionFactorToBase: item.conversionFactor,
         unitPrice: item.unitPrice,
       });
     }
@@ -115,17 +152,21 @@ router.patch("/purchase-orders/:id/receive", requireAuth, requireRole("admin", "
       .select()
       .from(purchaseOrderItemsTable)
       .where(eq(purchaseOrderItemsTable.purchaseOrderId, po.id));
+
     for (const item of items) {
+      const conversionFactor = item.conversionFactorToBase ?? 1;
+      const baseUnitsToAdd = item.quantity * conversionFactor;
       const [med] = await tx.select().from(medicinesTable).where(eq(medicinesTable.id, item.medicineId));
       if (med) {
         await tx
           .update(medicinesTable)
-          .set({ quantity: med.quantity + item.quantity })
+          .set({ quantity: med.quantity + baseUnitsToAdd })
           .where(eq(medicinesTable.id, med.id));
       }
     }
     return po.id;
   });
+
   if (!receivedId) {
     const [existing] = await db
       .select({ id: purchaseOrdersTable.id, status: purchaseOrdersTable.status })

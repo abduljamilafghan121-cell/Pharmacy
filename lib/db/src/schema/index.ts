@@ -3,6 +3,7 @@ export * from "./patients";
 export * from "./categories";
 export * from "./suppliers";
 export * from "./medicines";
+export * from "./medicine-units";
 export * from "./prescriptions";
 export * from "./orders";
 export * from "./payments";

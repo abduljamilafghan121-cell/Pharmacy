@@ -13,7 +13,8 @@ router.post("/payments", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  const status = parsed.data.status ?? "completed";
+  // status is not part of the public PaymentInput schema; always complete on creation
+  const status = "completed" as const;
   const transactionId = parsed.data.transactionId ?? null;
 
   const [payment] = await db.insert(paymentsTable).values({
