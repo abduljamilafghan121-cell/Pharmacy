@@ -96,6 +96,66 @@ router.get("/auth/me", requireAuth, async (req, res): Promise<void> => {
   }
 });
 
+router.patch("/auth/me", requireAuth, async (req, res): Promise<void> => {
+  const { name, phone } = req.body as { name?: string; phone?: string };
+  if (!name && phone === undefined) {
+    res.status(400).json({ error: "Provide at least one field to update (name or phone)." });
+    return;
+  }
+  try {
+    const updates: Record<string, string | null> = {};
+    if (name !== undefined) {
+      if (typeof name !== "string" || !name.trim()) {
+        res.status(400).json({ error: "Name must be a non-empty string." });
+        return;
+      }
+      updates.name = name.trim();
+    }
+    if (phone !== undefined) {
+      updates.phone = phone?.trim() || null;
+    }
+    const [user] = await db
+      .update(usersTable)
+      .set(updates)
+      .where(eq(usersTable.id, req.auth!.userId))
+      .returning();
+    res.json({ id: user.id, name: user.name, email: user.email, phone: user.phone, role: user.role, createdAt: user.createdAt });
+  } catch (err) {
+    logger.error({ err }, "auth/me PATCH: failed to update profile");
+    res.status(500).json({ error: "Failed to update profile.", detail: getDbErrorMessage(err) });
+  }
+});
+
+router.post("/auth/change-password", requireAuth, async (req, res): Promise<void> => {
+  const { currentPassword, newPassword } = req.body as { currentPassword?: string; newPassword?: string };
+  if (!currentPassword || !newPassword) {
+    res.status(400).json({ error: "currentPassword and newPassword are required." });
+    return;
+  }
+  if (typeof newPassword !== "string" || newPassword.length < 6) {
+    res.status(400).json({ error: "New password must be at least 6 characters." });
+    return;
+  }
+  try {
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.auth!.userId));
+    if (!user) {
+      res.status(404).json({ error: "User not found." });
+      return;
+    }
+    const valid = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!valid) {
+      res.status(401).json({ error: "Current password is incorrect." });
+      return;
+    }
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    await db.update(usersTable).set({ passwordHash }).where(eq(usersTable.id, user.id));
+    res.json({ message: "Password changed successfully." });
+  } catch (err) {
+    logger.error({ err }, "auth/change-password: failed");
+    res.status(500).json({ error: "Failed to change password.", detail: getDbErrorMessage(err) });
+  }
+});
+
 router.get("/users", requireAuth, requireRole("admin"), async (_req, res): Promise<void> => {
   try {
     const users = await db

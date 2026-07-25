@@ -80,6 +80,44 @@ export const GetMeResponse = zod.object({
 
 
 /**
+ * @summary Update current user's name or phone
+ */
+
+
+
+export const UpdateProfileBody = zod.object({
+  "name": zod.string().min(1).optional(),
+  "phone": zod.string().nullish()
+})
+
+export const UpdateProfileResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "email": zod.string(),
+  "phone": zod.string().nullish(),
+  "role": zod.enum(['admin', 'pharmacist']),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Change current user's password
+ */
+export const changePasswordBodyNewPasswordMin = 6;
+
+
+
+export const ChangePasswordBody = zod.object({
+  "currentPassword": zod.string(),
+  "newPassword": zod.string().min(changePasswordBodyNewPasswordMin)
+})
+
+export const ChangePasswordResponse = zod.object({
+  "message": zod.string().optional()
+})
+
+
+/**
  * @summary List staff accounts (admin only)
  */
 export const ListUsersResponseItem = zod.object({
@@ -919,15 +957,16 @@ export const ListSupplierLedgerResponseItem = zod.object({
   "totalOrdered": zod.string(),
   "totalPaid": zod.string(),
   "balance": zod.string(),
-  "lastActivity": zod.string().nullish()
+  "lastActivity": zod.coerce.date().nullish()
 })
 export const ListSupplierLedgerResponse = zod.array(ListSupplierLedgerResponseItem)
+
 
 /**
  * @summary Get full ledger for a single supplier
  */
 export const GetSupplierLedgerParams = zod.object({
-  "supplierId": zod.number()
+  "supplierId": zod.coerce.number()
 })
 
 export const GetSupplierLedgerResponse = zod.object({
@@ -940,17 +979,18 @@ export const GetSupplierLedgerResponse = zod.object({
   "totalPaid": zod.string(),
   "balance": zod.string(),
   "entries": zod.array(zod.object({
-    "id": zod.number(),
-    "entryType": zod.enum(["purchase_order", "payment"]),
-    "purchaseOrderId": zod.number().nullish(),
-    "paymentId": zod.number().nullish(),
-    "date": zod.string(),
-    "description": zod.string(),
-    "debit": zod.string(),
-    "credit": zod.string(),
-    "runningBalance": zod.string()
-  }))
+  "id": zod.number(),
+  "entryType": zod.enum(['purchase_order', 'payment']),
+  "purchaseOrderId": zod.number().nullish(),
+  "paymentId": zod.number().nullish(),
+  "date": zod.coerce.date(),
+  "description": zod.string(),
+  "debit": zod.string(),
+  "credit": zod.string(),
+  "runningBalance": zod.string()
+}))
 })
+
 
 /**
  * @summary Record a payment made to a supplier
@@ -959,7 +999,7 @@ export const CreateSupplierPaymentBody = zod.object({
   "supplierId": zod.number(),
   "purchaseOrderId": zod.number().nullish(),
   "amount": zod.string(),
-  "method": zod.enum(["cash", "bank", "cheque", "transfer"]),
+  "method": zod.enum(['cash', 'bank', 'cheque', 'transfer']),
   "note": zod.string().nullish()
 })
 
@@ -973,6 +1013,7 @@ export const CreateSupplierPaymentResponse = zod.object({
   "note": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 })
+
 
 /**
  * @summary Sales summary — orders by day/range

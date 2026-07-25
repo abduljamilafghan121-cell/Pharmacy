@@ -37,6 +37,19 @@ export interface PatientUpdate {
   notes?: string;
 }
 
+export interface UpdateProfileInput {
+  /** @minLength 1 */
+  name?: string;
+  /** @nullable */
+  phone?: string | null;
+}
+
+export interface ChangePasswordInput {
+  currentPassword: string;
+  /** @minLength 6 */
+  newPassword: string;
+}
+
 export type UserRegisterInputRole = typeof UserRegisterInputRole[keyof typeof UserRegisterInputRole];
 
 
@@ -437,6 +450,87 @@ export interface PurchaseOrderInput {
   items: PurchaseOrderItemInput[];
 }
 
+export interface SupplierLedgerSummary {
+  supplierId: number;
+  supplierName: string;
+  totalOrdered: string;
+  totalPaid: string;
+  balance: string;
+  /** @nullable */
+  lastActivity?: string | null;
+}
+
+export type SupplierLedgerEntryEntryType = typeof SupplierLedgerEntryEntryType[keyof typeof SupplierLedgerEntryEntryType];
+
+
+export const SupplierLedgerEntryEntryType = {
+  purchase_order: 'purchase_order',
+  payment: 'payment',
+} as const;
+
+export interface SupplierLedgerEntry {
+  id: number;
+  entryType: SupplierLedgerEntryEntryType;
+  /** @nullable */
+  purchaseOrderId?: number | null;
+  /** @nullable */
+  paymentId?: number | null;
+  date: string;
+  description: string;
+  debit: string;
+  credit: string;
+  runningBalance: string;
+}
+
+export interface SupplierLedgerDetail {
+  supplierId: number;
+  supplierName: string;
+  /** @nullable */
+  contactName?: string | null;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  totalOrdered: string;
+  totalPaid: string;
+  balance: string;
+  entries: SupplierLedgerEntry[];
+}
+
+export type SupplierPaymentInputMethod = typeof SupplierPaymentInputMethod[keyof typeof SupplierPaymentInputMethod];
+
+
+export const SupplierPaymentInputMethod = {
+  cash: 'cash',
+  bank: 'bank',
+  cheque: 'cheque',
+  transfer: 'transfer',
+} as const;
+
+export interface SupplierPaymentInput {
+  supplierId: number;
+  /** @nullable */
+  purchaseOrderId?: number | null;
+  amount: string;
+  method: SupplierPaymentInputMethod;
+  /** @nullable */
+  note?: string | null;
+}
+
+export interface SupplierPayment {
+  id: number;
+  supplierId: number;
+  /** @nullable */
+  supplierName?: string | null;
+  /** @nullable */
+  purchaseOrderId?: number | null;
+  amount: string;
+  method: string;
+  /** @nullable */
+  note?: string | null;
+  createdAt: string;
+}
+
 export interface SalesByDay {
   date: string;
   orders: number;
@@ -474,57 +568,9 @@ export interface RevenueReport {
   byDate: RevenueByRange[];
 }
 
-export interface SupplierLedgerSummary {
-  supplierId: number;
-  supplierName: string;
-  totalOrdered: string;
-  totalPaid: string;
-  balance: string;
-  lastActivity?: string | null;
-}
-
-export interface SupplierLedgerEntry {
-  id: number;
-  entryType: 'purchase_order' | 'payment';
-  purchaseOrderId?: number | null;
-  paymentId?: number | null;
-  date: string;
-  description: string;
-  debit: string;
-  credit: string;
-  runningBalance: string;
-}
-
-export interface SupplierLedgerDetail {
-  supplierId: number;
-  supplierName: string;
-  contactName?: string | null;
-  email?: string | null;
-  phone?: string | null;
-  totalOrdered: string;
-  totalPaid: string;
-  balance: string;
-  entries: SupplierLedgerEntry[];
-}
-
-export interface SupplierPaymentInput {
-  supplierId: number;
-  purchaseOrderId?: number | null;
-  amount: string;
-  method: 'cash' | 'bank' | 'cheque' | 'transfer';
-  note?: string | null;
-}
-
-export interface SupplierPayment {
-  id: number;
-  supplierId: number;
-  supplierName?: string | null;
-  purchaseOrderId?: number | null;
-  amount: string;
-  method: string;
-  note?: string | null;
-  createdAt: string;
-}
+export type ChangePassword200 = {
+  message?: string;
+};
 
 export type ListPatientsParams = {
 search?: string;

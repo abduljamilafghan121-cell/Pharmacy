@@ -8,6 +8,7 @@ interface AuthContextType {
   isLoading: boolean;
   login: (token: string) => void;
   logout: () => void;
+  updateUser: (updated: Partial<User>) => void;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -31,19 +32,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [isError]);
 
+  const [userOverride, setUserOverride] = useState<Partial<User> | null>(null);
+
   const login = (newToken: string) => {
     localStorage.setItem("pharma_token", newToken);
     setToken(newToken);
+    setUserOverride(null);
   };
 
   const logout = () => {
     localStorage.removeItem("pharma_token");
     setToken(null);
+    setUserOverride(null);
     setLocation("/login");
   };
 
+  const updateUser = (updated: Partial<User>) => {
+    setUserOverride((prev) => ({ ...prev, ...updated }));
+  };
+
+  const mergedUser = user ? { ...user, ...userOverride } : null;
+
   return (
-    <AuthContext.Provider value={{ user: user || null, isLoading: !!token && isUserLoading, login, logout }}>
+    <AuthContext.Provider value={{ user: mergedUser, isLoading: !!token && isUserLoading, login, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   );
