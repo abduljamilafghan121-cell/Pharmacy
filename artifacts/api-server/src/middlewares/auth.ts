@@ -23,6 +23,9 @@ export function signToken(payload: AuthPayload): string {
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
   const header = req.headers["authorization"];
   if (!header || !header.startsWith("Bearer ")) {
+    // Log received headers to aid debugging (mask token value for security)
+    const allHeaders = Object.keys(req.headers).join(", ");
+    console.warn(`[requireAuth] 401 on ${req.method} ${req.url} — headers present: ${allHeaders}`);
     res.status(401).json({ error: "Missing or invalid authorization header" });
     return;
   }
