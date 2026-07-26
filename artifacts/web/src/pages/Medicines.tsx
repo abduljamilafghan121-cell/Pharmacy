@@ -239,10 +239,18 @@ function ManageUnitsDialog({ medicine, units }: { medicine: Medicine; units: Med
           <DialogTitle>Packaging units — {medicine.name}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Define how stock is packaged. All quantities are stored internally as base units.
-            The base unit should have a conversion factor of 1.
-          </p>
+          {/* How it works */}
+          <div className="rounded-lg bg-muted/50 border border-border p-3 space-y-1.5 text-xs text-muted-foreground">
+            <p className="font-semibold text-foreground text-sm">How packaging units work</p>
+            <p>Stock is always stored as the <strong>smallest sellable unit</strong> (e.g. individual tablet). Every other unit tells the system how many of those base units it contains.</p>
+            <p className="font-medium text-foreground mt-1">Example — 1 strip = 10 tablets:</p>
+            <div className="space-y-1 pl-2 border-l-2 border-primary/30">
+              <p>① Add <strong>Tablet</strong> · factor <strong>1</strong> · ✓ Base unit &nbsp;→ the individual tablet</p>
+              <p>② Add <strong>Strip</strong> · factor <strong>10</strong> &nbsp;→ 1 strip = 10 tablets</p>
+              <p>③ Add <strong>Box</strong> · factor <strong>100</strong> &nbsp;→ 1 box = 100 tablets (optional)</p>
+            </div>
+            <p className="mt-1">In a sale you can then choose <em>Tablet</em> and enter 5 to sell exactly 5 tablets.</p>
+          </div>
 
           {/* Current units */}
           {unitsLoading ? (
@@ -253,6 +261,17 @@ function ManageUnitsDialog({ medicine, units }: { medicine: Medicine; units: Med
             <p className="text-sm text-muted-foreground py-2 italic">No packaging units defined yet. Add one below.</p>
           ) : (
             <div className="space-y-2">
+              {/* Warning when no base unit (factor=1) is defined */}
+              {!sorted.some(u => u.isBaseUnit || u.conversionFactorToBase === 1) && (
+                <div className="flex items-start gap-2 rounded-lg bg-amber-500/10 border border-amber-500/30 p-3 text-xs text-amber-700">
+                  <span className="text-base leading-none mt-0.5">⚠️</span>
+                  <span>
+                    <strong>No base unit defined.</strong> You can still sell individual units in the sale form
+                    using the "Individual unit (×1)" option, but adding an explicit base unit (e.g. Tablet · factor 1)
+                    lets you name it properly.
+                  </span>
+                </div>
+              )}
               {sorted.map((unit) => (
                 <div key={unit.id} className="flex items-center justify-between rounded-lg border border-border p-3 bg-muted/20">
                   <div>
@@ -284,16 +303,18 @@ function ManageUnitsDialog({ medicine, units }: { medicine: Medicine; units: Med
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label htmlFor="unitName" className="text-xs">Unit name</Label>
-                <Input id="unitName" name="unitName" placeholder="e.g. tablet, strip, box" className="h-9 text-sm" required />
+                <Input id="unitName" name="unitName" placeholder="e.g. Tablet, Strip, Box" className="h-9 text-sm" required />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="factor" className="text-xs">= how many base units?</Label>
-                <Input id="factor" name="factor" type="number" min="1" placeholder="e.g. 10" className="h-9 text-sm" required />
+                <Label htmlFor="factor" className="text-xs">How many base units?</Label>
+                <Input id="factor" name="factor" type="number" min="1" placeholder="e.g. 1, 10, 100" className="h-9 text-sm" required />
               </div>
             </div>
             <div className="flex items-center gap-2">
               <input type="checkbox" id="isBase" name="isBase" className="w-4 h-4 rounded border-input" />
-              <Label htmlFor="isBase" className="text-sm font-normal">This is the base unit (conversion = 1)</Label>
+              <Label htmlFor="isBase" className="text-sm font-normal">
+                This is the base unit <span className="text-muted-foreground">(set factor to 1, e.g. Tablet)</span>
+              </Label>
             </div>
             <Button type="submit" size="sm" disabled={createUnit.isPending} className="w-full">
               {createUnit.isPending ? <Loader2 size={14} className="animate-spin mr-2" /> : <Plus size={14} className="mr-2" />}

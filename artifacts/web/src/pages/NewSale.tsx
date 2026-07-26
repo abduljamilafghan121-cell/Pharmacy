@@ -366,7 +366,7 @@ export default function NewSale() {
                                     can sell individual tablets even when only strips/boxes
                                     are configured. */}
                                 {!units.some(u => u.isBaseUnit || u.conversionFactorToBase === 1) && (
-                                  <option value="">1 unit</option>
+                                  <option value="">Individual unit (×1)</option>
                                 )}
                                 {[...units].sort((a, b) => a.conversionFactorToBase - b.conversionFactorToBase).map((u) => (
                                   <option key={u.id} value={u.id}>{u.unitName}</option>
