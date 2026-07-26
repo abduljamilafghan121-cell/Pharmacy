@@ -35,11 +35,15 @@ function getUnits(medicine: Medicine): MedicineUnit[] {
 function defaultUnit(medicine: Medicine): { unitId?: number; unitName?: string; conversionFactor: number } {
   const units = getUnits(medicine);
   if (units.length === 0) return { conversionFactor: 1 };
-  // Prefer an explicitly-marked base unit, then any unit with factor=1.
-  // Do NOT fall back to units[0] — that could be a strip/box, which would
-  // make it impossible to sell individual tablets when no base unit is defined.
-  const base = units.find((u) => u.isBaseUnit) ?? units.find((u) => u.conversionFactorToBase === 1);
-  if (!base) return { conversionFactor: 1 }; // sell 1 base unit by default
+  // Sort ascending so the smallest unit wins all tie-breaks.
+  const sorted = [...units].sort((a, b) => a.conversionFactorToBase - b.conversionFactorToBase);
+  // Priority: (1) isBaseUnit flag AND factor=1, (2) factor=1 regardless of flag,
+  // (3) smallest unit overall.  We intentionally ignore isBaseUnit alone because
+  // users sometimes mistakenly tick the flag on a box/strip — the factor is ground truth.
+  const base =
+    sorted.find((u) => u.isBaseUnit && u.conversionFactorToBase === 1) ??
+    sorted.find((u) => u.conversionFactorToBase === 1) ??
+    sorted[0];
   return { unitId: base.id, unitName: base.unitName, conversionFactor: base.conversionFactorToBase };
 }
 
@@ -326,11 +330,14 @@ export default function NewSale() {
               ) : (
                 <div className="space-y-3">
                   {saleItems.map(item => {
-                    const units = getUnits(item.medicine);
+                    // Use live medicine data from the query so that units added
+                    // after the medicine was put in the cart are reflected immediately.
+                    const liveMedicine = medicines?.find(m => m.id === item.medicine.id) ?? item.medicine;
+                    const units = getUnits(liveMedicine);
                     const unitPrice = priceForUnit(item.medicine.price, item.conversionFactor);
                     const lineTotal = unitPrice * item.quantity;
                     const baseUnitsUsed = item.quantity * item.conversionFactor;
-                    const maxQty = Math.floor(item.medicine.quantity / item.conversionFactor);
+                    const maxQty = Math.floor(liveMedicine.quantity / item.conversionFactor);
                     return (
                       <div key={item.medicine.id} className="rounded-lg border border-border bg-muted/20 p-3 space-y-2">
                         <div className="flex items-start gap-3">
