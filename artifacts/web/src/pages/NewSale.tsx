@@ -35,8 +35,11 @@ function getUnits(medicine: Medicine): MedicineUnit[] {
 function defaultUnit(medicine: Medicine): { unitId?: number; unitName?: string; conversionFactor: number } {
   const units = getUnits(medicine);
   if (units.length === 0) return { conversionFactor: 1 };
-  const base = units.find((u) => u.isBaseUnit) ?? units.find((u) => u.conversionFactorToBase === 1) ?? units[0];
-  if (!base) return { conversionFactor: 1 };
+  // Prefer an explicitly-marked base unit, then any unit with factor=1.
+  // Do NOT fall back to units[0] — that could be a strip/box, which would
+  // make it impossible to sell individual tablets when no base unit is defined.
+  const base = units.find((u) => u.isBaseUnit) ?? units.find((u) => u.conversionFactorToBase === 1);
+  if (!base) return { conversionFactor: 1 }; // sell 1 base unit by default
   return { unitId: base.id, unitName: base.unitName, conversionFactor: base.conversionFactorToBase };
 }
 
@@ -357,7 +360,15 @@ export default function NewSale() {
                                 value={item.unitId ?? ""}
                                 onChange={(e) => updateUnit(item.medicine.id, e.target.value ? Number(e.target.value) : undefined, units)}
                               >
-                                {units.sort((a, b) => a.conversionFactorToBase - b.conversionFactorToBase).map((u) => (
+                                {/* Always offer an individual-unit option.
+                                    If no unit with factor=1 / isBaseUnit is defined,
+                                    inject a synthetic "1 unit" entry so pharmacists
+                                    can sell individual tablets even when only strips/boxes
+                                    are configured. */}
+                                {!units.some(u => u.isBaseUnit || u.conversionFactorToBase === 1) && (
+                                  <option value="">1 unit</option>
+                                )}
+                                {[...units].sort((a, b) => a.conversionFactorToBase - b.conversionFactorToBase).map((u) => (
                                   <option key={u.id} value={u.id}>{u.unitName}</option>
                                 ))}
                               </select>
