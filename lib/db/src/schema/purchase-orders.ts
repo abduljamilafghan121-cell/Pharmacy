@@ -1,4 +1,4 @@
-import { pgTable, serial, timestamp, integer, numeric, text, date, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, serial, timestamp, integer, numeric, text, pgEnum } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { suppliersTable } from "./suppliers";
@@ -24,8 +24,6 @@ export const purchaseOrderItemsTable = pgTable("purchase_order_items", {
   unitName: text("unit_name"),
   conversionFactorToBase: integer("conversion_factor_to_base").notNull().default(1),
   unitPrice: numeric("unit_price", { precision: 10, scale: 2 }).notNull(),
-  batchNumber: text("batch_number"),
-  expiryDate: date("expiry_date", { mode: "string" }),
 });
 
 export const insertPurchaseOrderSchema = createInsertSchema(purchaseOrdersTable).omit({ id: true, createdAt: true, updatedAt: true });

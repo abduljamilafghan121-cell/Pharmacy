@@ -2,34 +2,14 @@ import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { db, paymentsTable, ordersTable } from "@workspace/db";
 import { CreatePaymentBody, GetPaymentParams } from "@workspace/api-zod";
-import { requireAuth, requireRole } from "../middlewares/auth";
+import { requireAuth } from "../middlewares/auth";
 
 const router: IRouter = Router();
 
-router.post("/payments", requireAuth, requireRole("admin", "pharmacist", "cashier"), async (req, res): Promise<void> => {
+router.post("/payments", requireAuth, async (req, res): Promise<void> => {
   const parsed = CreatePaymentBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
-    return;
-  }
-
-  const [order] = await db.select().from(ordersTable).where(eq(ordersTable.id, parsed.data.orderId));
-  if (!order) {
-    res.status(404).json({ error: "Order not found." });
-    return;
-  }
-  if (order.paymentStatus === "paid") {
-    res.status(409).json({ error: "This order is already fully paid." });
-    return;
-  }
-  const amount = parseFloat(parsed.data.amount);
-  if (!(amount > 0)) {
-    res.status(400).json({ error: "Payment amount must be greater than zero." });
-    return;
-  }
-  // Small epsilon guards against floating point rounding on the total.
-  if (amount > parseFloat(order.total) + 0.01) {
-    res.status(400).json({ error: `Payment of ${parsed.data.amount} exceeds the order total of ${order.total}.` });
     return;
   }
 
@@ -48,6 +28,8 @@ router.post("/payments", requireAuth, requireRole("admin", "pharmacist", "cashie
   // Only mark the order as paid when the payment actually completed
   if (status === "completed") {
     await db.update(ordersTable).set({ paymentStatus: "paid" }).where(eq(ordersTable.id, parsed.data.orderId));
+  } else if (status === "failed") {
+    await db.update(ordersTable).set({ paymentStatus: "unpaid" }).where(eq(ordersTable.id, parsed.data.orderId));
   }
 
   res.status(201).json(payment);

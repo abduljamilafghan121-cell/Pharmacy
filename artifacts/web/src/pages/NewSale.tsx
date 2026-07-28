@@ -1,21 +1,18 @@
 import { useState, useRef, useEffect } from "react";
-import { useListMedicines, useCreateOrder, useListPrescriptions } from "@workspace/api-client-react";
+import { useListMedicines, useCreateOrder } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Search, Plus, Minus, Trash2, ShoppingBag, Pill, CheckCircle2, Loader2, Receipt, AlertTriangle } from "lucide-react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Search, Plus, Minus, Trash2, ShoppingBag, Pill, CheckCircle2, Loader2, Receipt } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { formatStockDisplay, priceForUnit } from "@/lib/stock-format";
 import { getErrorMessage } from "@/lib/errors";
 import { useToast } from "@/components/ui/use-toast";
 import { useLocation, useSearch } from "wouter";
 import type { Medicine, MedicineUnit } from "@workspace/api-client-react";
-import { usePharmacySettings } from "@/hooks/use-pharmacy-settings";
-import { ScanLine } from "lucide-react";
 
 interface SaleItem {
   medicine: Medicine;
@@ -56,12 +53,8 @@ export default function NewSale() {
   const [patientName, setPatientName] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "card" | "insurance">("cash");
   const [notes, setNotes] = useState("");
-  const [prescriptionId, setPrescriptionId] = useState<number | undefined>(undefined);
-  const [discountInput, setDiscountInput] = useState("");
-  const [barcodeInput, setBarcodeInput] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [completedSale, setCompletedSale] = useState<any>(null);
-  const barcodeRef = useRef<HTMLInputElement>(null);
 
   const { toast } = useToast();
   const [, setLocation] = useLocation();
@@ -72,12 +65,6 @@ export default function NewSale() {
 
   const { data: medicines } = useListMedicines({ search: search || undefined });
   const createOrderMutation = useCreateOrder();
-  const { data: prescriptions } = useListPrescriptions();
-  const { data: pharmacySettings } = usePharmacySettings();
-  const verifiedPrescriptions = (prescriptions ?? []).filter((p: any) => p.status === "verified");
-
-  const rxRequiredItems = saleItems.filter(i => (i.medicine as any).prescriptionRequired);
-  const needsPrescription = rxRequiredItems.length > 0;
 
   const filteredMedicines = search.trim()
     ? (medicines ?? []).filter(m =>
@@ -149,47 +136,10 @@ export default function NewSale() {
   const subtotal = saleItems.reduce((sum, i) => {
     return sum + priceForUnit(i.medicine.price, i.conversionFactor) * i.quantity;
   }, 0);
-  const discountAmount = Math.min(Math.max(parseFloat(discountInput) || 0, 0), subtotal);
-  const taxRate = parseFloat(pharmacySettings?.taxRatePercent ?? "0");
-  const taxableAmount = subtotal - discountAmount;
-  const taxAmount = taxableAmount * (taxRate / 100);
-  const total = taxableAmount + taxAmount;
-
-  async function handleBarcodeSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const code = barcodeInput.trim();
-    if (!code) return;
-    try {
-      const token = localStorage.getItem("pharma_token");
-      const url = `${import.meta.env.BASE_URL}api/medicines/by-barcode/${encodeURIComponent(code)}`.replace(/\/+/g, "/").replace(":/", "://");
-      const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
-      if (!res.ok) {
-        toast({ title: "No match", description: `No medicine found for barcode "${code}".`, variant: "destructive" });
-        setBarcodeInput("");
-        return;
-      }
-      const medicine = await res.json();
-      addItem(medicine);
-    } catch {
-      toast({ title: "Lookup failed", description: "Could not reach the server.", variant: "destructive" });
-    } finally {
-      setBarcodeInput("");
-      barcodeRef.current?.focus();
-    }
-  }
 
   const handleProcessSale = async () => {
     if (saleItems.length === 0) {
       toast({ title: "Cart is empty", description: "Add at least one medicine to process a sale.", variant: "destructive" });
-      return;
-    }
-
-    if (needsPrescription && !prescriptionId) {
-      toast({
-        title: "Prescription required",
-        description: `${rxRequiredItems.map(i => i.medicine.name).join(", ")} require a verified prescription. Select one before checking out.`,
-        variant: "destructive",
-      });
       return;
     }
 
@@ -210,8 +160,6 @@ export default function NewSale() {
           patientName: patientName.trim() || undefined,
           paymentMethod,
           notes: notes.trim() || undefined,
-          ...(needsPrescription && prescriptionId ? { prescriptionId } : {}),
-          ...(discountAmount > 0 ? { discountAmount } : {}),
           items: saleItems.map(i => ({
             medicineId: i.medicine.id,
             quantity: i.quantity,
@@ -238,8 +186,6 @@ export default function NewSale() {
     setPatientName("");
     setPaymentMethod("cash");
     setNotes("");
-    setPrescriptionId(undefined);
-    setDiscountInput("");
     setCompletedSale(null);
     searchRef.current?.focus();
   };
@@ -312,17 +258,7 @@ export default function NewSale() {
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
         <div className="lg:col-span-3 space-y-4">
           <Card>
-            <CardContent className="pt-4 pb-4 space-y-3">
-              <form onSubmit={handleBarcodeSubmit} className="relative">
-                <ScanLine className="absolute left-3 top-1/2 -translate-y-1/2 text-primary w-4 h-4" />
-                <Input
-                  ref={barcodeRef}
-                  placeholder="Scan or enter barcode, then press Enter…"
-                  className="pl-9 border-primary/30 focus-visible:ring-primary/40"
-                  value={barcodeInput}
-                  onChange={(e) => setBarcodeInput(e.target.value)}
-                />
-              </form>
+            <CardContent className="pt-4 pb-4">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
                 <Input
@@ -477,7 +413,7 @@ export default function NewSale() {
 
                   <div className="pt-3 border-t border-border flex justify-between font-bold text-lg">
                     <span>Total</span>
-                    <span>{formatCurrency(total)}</span>
+                    <span>{formatCurrency(subtotal)}</span>
                   </div>
                 </div>
               )}
@@ -500,33 +436,6 @@ export default function NewSale() {
                   onChange={(e) => setPatientName(e.target.value)}
                 />
               </div>
-
-              {needsPrescription && (
-                <div className="space-y-1.5 pt-1">
-                  <Label htmlFor="prescription" className="flex items-center gap-1.5">
-                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-                    Verified Prescription <span className="text-destructive font-normal">(required)</span>
-                  </Label>
-                  <Select value={prescriptionId?.toString()} onValueChange={(v) => setPrescriptionId(Number(v))}>
-                    <SelectTrigger id="prescription">
-                      <SelectValue placeholder="Select a verified prescription…" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {verifiedPrescriptions.length === 0 && (
-                        <div className="px-3 py-2 text-sm text-muted-foreground">No verified prescriptions found</div>
-                      )}
-                      {verifiedPrescriptions.map((p: any) => (
-                        <SelectItem key={p.id} value={p.id.toString()}>
-                          #{p.id} — {p.patientName ?? "Unnamed"} {p.doctorName ? `(Dr. ${p.doctorName})` : ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    Required for: {rxRequiredItems.map(i => i.medicine.name).join(", ")}
-                  </p>
-                </div>
-              )}
             </CardContent>
           </Card>
 
@@ -551,19 +460,6 @@ export default function NewSale() {
                 ))}
               </div>
               <div className="space-y-1">
-                <Label htmlFor="discount">Discount <span className="text-muted-foreground font-normal">(optional, amount off)</span></Label>
-                <Input
-                  id="discount"
-                  type="number"
-                  min={0}
-                  max={subtotal}
-                  step="0.01"
-                  placeholder="0.00"
-                  value={discountInput}
-                  onChange={(e) => setDiscountInput(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1">
                 <Label htmlFor="notes">Notes <span className="text-muted-foreground font-normal">(optional)</span></Label>
                 <Input
                   id="notes"
@@ -580,35 +476,19 @@ export default function NewSale() {
               <span>Items</span>
               <span>{saleItems.reduce((s, i) => s + i.quantity, 0)}</span>
             </div>
-            <div className="flex justify-between text-sm text-muted-foreground">
-              <span>Subtotal</span>
-              <span>{formatCurrency(subtotal)}</span>
-            </div>
-            {discountAmount > 0 && (
-              <div className="flex justify-between text-sm text-emerald-600">
-                <span>Discount</span>
-                <span>-{formatCurrency(discountAmount)}</span>
-              </div>
-            )}
-            {taxRate > 0 && (
-              <div className="flex justify-between text-sm text-muted-foreground">
-                <span>Tax ({taxRate}%)</span>
-                <span>{formatCurrency(taxAmount)}</span>
-              </div>
-            )}
-            <div className="flex justify-between font-bold text-xl pt-1 border-t border-border">
+            <div className="flex justify-between font-bold text-xl">
               <span>Total</span>
-              <span>{formatCurrency(total)}</span>
+              <span>{formatCurrency(subtotal)}</span>
             </div>
           </div>
 
           <Button
             className="w-full h-12 text-base font-semibold"
             onClick={handleProcessSale}
-            disabled={saleItems.length === 0 || isSubmitting || (needsPrescription && !prescriptionId)}
+            disabled={saleItems.length === 0 || isSubmitting}
           >
             {isSubmitting ? <Loader2 className="animate-spin mr-2" size={18} /> : null}
-            Process Sale · {formatCurrency(total)}
+            Process Sale · {formatCurrency(subtotal)}
           </Button>
         </div>
       </div>

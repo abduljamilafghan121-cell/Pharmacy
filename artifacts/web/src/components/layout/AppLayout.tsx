@@ -15,14 +15,8 @@ import {
   Users,
   Menu,
   BookOpen,
-  History,
-  Wallet,
-  ShieldCheck,
-  Undo2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { PharmacyBrand } from "./PharmacyBrand";
-import { NotificationBell } from "./NotificationBell";
 import {
   Sheet,
   SheetContent,
@@ -40,20 +34,16 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, roles: ["admin", "pharmacist", "cashier", "viewer"] },
-  { label: "New Sale", href: "/new-sale", icon: Receipt, roles: ["admin", "pharmacist", "cashier"] },
-  { label: "Sales", href: "/sales", icon: ClipboardList, roles: ["admin", "pharmacist", "cashier", "viewer"] },
-  { label: "Prescriptions", href: "/prescriptions", icon: FileText, roles: ["admin", "pharmacist", "cashier", "viewer"] },
-  { label: "Medicines", href: "/medicines", icon: Pill, roles: ["admin", "pharmacist", "viewer"] },
-  { label: "Patients", href: "/patients", icon: Users, roles: ["admin", "pharmacist", "cashier", "viewer"] },
-  { label: "Suppliers", href: "/suppliers", icon: Truck, roles: ["admin", "pharmacist", "viewer"] },
-  { label: "Purchase Orders", href: "/purchase-orders", icon: PackageSearch, roles: ["admin", "pharmacist", "viewer"] },
-  { label: "Supplier Ledger", href: "/supplier-ledger", icon: BookOpen, roles: ["admin", "viewer"] },
-  { label: "Audit Log", href: "/audit-log", icon: History, roles: ["admin"] },
-  { label: "Cash Register", href: "/cash-register", icon: Wallet, roles: ["admin", "pharmacist", "cashier"] },
-  { label: "Insurance Claims", href: "/insurance-claims", icon: ShieldCheck, roles: ["admin", "pharmacist", "viewer"] },
-  { label: "Supplier Returns", href: "/supplier-returns", icon: Undo2, roles: ["admin", "pharmacist", "viewer"] },
-  { label: "Reports", href: "/reports", icon: BarChart3, roles: ["admin", "pharmacist", "viewer"] },
+  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, roles: ["admin", "pharmacist"] },
+  { label: "New Sale", href: "/new-sale", icon: Receipt, roles: ["admin", "pharmacist"] },
+  { label: "Sales", href: "/sales", icon: ClipboardList, roles: ["admin", "pharmacist"] },
+  { label: "Prescriptions", href: "/prescriptions", icon: FileText, roles: ["admin", "pharmacist"] },
+  { label: "Medicines", href: "/medicines", icon: Pill, roles: ["admin", "pharmacist"] },
+  { label: "Patients", href: "/patients", icon: Users, roles: ["admin", "pharmacist"] },
+  { label: "Suppliers", href: "/suppliers", icon: Truck, roles: ["admin", "pharmacist"] },
+  { label: "Purchase Orders", href: "/purchase-orders", icon: PackageSearch, roles: ["admin", "pharmacist"] },
+  { label: "Supplier Ledger", href: "/supplier-ledger", icon: BookOpen, roles: ["admin"] },
+  { label: "Reports", href: "/reports", icon: BarChart3, roles: ["admin", "pharmacist"] },
   { label: "User Management", href: "/users", icon: Users, roles: ["admin"] },
 ];
 
@@ -70,8 +60,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       {/* Sidebar */}
       <aside className="w-64 border-r border-border bg-card flex flex-col hidden md:flex sticky top-0 h-screen">
         <div className="h-16 flex items-center px-6 border-b border-border">
-          <div className="flex items-center gap-2 text-primary font-bold text-xl tracking-tight min-w-0">
-            <PharmacyBrand />
+          <div className="flex items-center gap-2 text-primary font-bold text-xl tracking-tight">
+            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground">
+              <Pill size={18} />
+            </div>
+            PharmaCore
           </div>
         </div>
 
@@ -125,12 +118,13 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       {/* Mobile header */}
       <div className="flex-1 flex flex-col min-w-0">
           <header className="h-16 border-b border-border bg-card flex items-center justify-between px-4 sm:px-6 md:hidden">
-          <div className="flex items-center gap-2 text-primary font-bold text-xl tracking-tight min-w-0">
-            <PharmacyBrand />
+          <div className="flex items-center gap-2 text-primary font-bold text-xl tracking-tight">
+            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground">
+              <Pill size={18} />
+            </div>
+            PharmaCore
           </div>
-          <div className="flex items-center gap-1">
-            <NotificationBell />
-            <Sheet>
+          <Sheet>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon" aria-label="Open navigation menu">
                 <Menu size={20} />
@@ -138,8 +132,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             </SheetTrigger>
             <SheetContent side="left" className="w-[min(88vw,320px)] p-0">
               <SheetHeader className="border-b border-border px-6 py-5 text-left">
-                <SheetTitle className="flex items-center gap-2 text-primary min-w-0">
-                  <PharmacyBrand iconSize={18} boxClassName="w-8 h-8" />
+                <SheetTitle className="flex items-center gap-2 text-primary">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                    <Pill size={18} />
+                  </span>
+                  PharmaCore
                 </SheetTitle>
                 <SheetDescription>Pharmacy workspace navigation</SheetDescription>
               </SheetHeader>
@@ -179,7 +176,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               </div>
             </SheetContent>
           </Sheet>
-          </div>
         </header>
 
         {/* Mobile bottom nav */}
@@ -249,9 +245,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
 
         <main className="flex-1 flex flex-col min-w-0 pb-16 md:pb-0">
-          <div className="hidden md:flex h-16 border-b border-border items-center justify-end px-8 shrink-0">
-            <NotificationBell />
-          </div>
           <div className="flex-1 p-6 md:p-10 max-w-7xl mx-auto w-full">
             {children}
           </div>

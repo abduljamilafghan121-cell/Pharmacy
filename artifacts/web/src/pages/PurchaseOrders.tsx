@@ -60,8 +60,6 @@ type DraftItem = {
   quantity: number;
   unitId?: number;
   unitPrice: string;
-  batchNumber: string;
-  expiryDate: string;
 };
 
 export default function PurchaseOrders() {
@@ -75,7 +73,7 @@ export default function PurchaseOrders() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [draftSupplierId, setDraftSupplierId] = useState("");
   const [draftItems, setDraftItems] = useState<DraftItem[]>([
-    { key: 1, medicineId: 0, quantity: 1, unitId: undefined, unitPrice: "", batchNumber: "", expiryDate: "" },
+    { key: 1, medicineId: 0, quantity: 1, unitId: undefined, unitPrice: "" },
   ]);
   const [nextKey, setNextKey] = useState(2);
 
@@ -131,7 +129,7 @@ export default function PurchaseOrders() {
 
   function resetDraft() {
     setDraftSupplierId("");
-    setDraftItems([{ key: 1, medicineId: 0, quantity: 1, unitId: undefined, unitPrice: "", batchNumber: "", expiryDate: "" }]);
+    setDraftItems([{ key: 1, medicineId: 0, quantity: 1, unitId: undefined, unitPrice: "" }]);
     setNextKey(2);
   }
 
@@ -167,7 +165,7 @@ export default function PurchaseOrders() {
   function addDraftItem() {
     setDraftItems((current) => [
       ...current,
-      { key: nextKey, medicineId: 0, quantity: 1, unitId: undefined, unitPrice: "", batchNumber: "", expiryDate: "" },
+      { key: nextKey, medicineId: 0, quantity: 1, unitId: undefined, unitPrice: "" },
     ]);
     setNextKey((key) => key + 1);
   }
@@ -180,13 +178,11 @@ export default function PurchaseOrders() {
 
   function handleCreate(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const items = draftItems.map(({ medicineId, quantity, unitId, unitPrice, batchNumber, expiryDate }) => ({
+    const items = draftItems.map(({ medicineId, quantity, unitId, unitPrice }) => ({
       medicineId: Number(medicineId),
       quantity: Number(quantity),
       ...(unitId ? { unitId } : {}),
       unitPrice: String(unitPrice).trim(),
-      ...(batchNumber.trim() ? { batchNumber: batchNumber.trim() } : {}),
-      ...(expiryDate ? { expiryDate } : {}),
     }));
 
     if (!draftSupplierId || items.some((item) => !item.medicineId || item.quantity < 1 || !item.unitPrice)) {
@@ -501,33 +497,6 @@ export default function PurchaseOrders() {
                           />
                         </div>
                       </div>
-
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <div className="space-y-2">
-                          <Label htmlFor={`purchase-batch-${item.key}`}>Batch number <span className="text-muted-foreground font-normal">(optional)</span></Label>
-                          <Input
-                            id={`purchase-batch-${item.key}`}
-                            placeholder="e.g. B2026-0451"
-                            value={item.batchNumber}
-                            onChange={(event) => updateDraftItem(item.key, { batchNumber: event.target.value })}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor={`purchase-expiry-${item.key}`}>Batch expiry date <span className="text-muted-foreground font-normal">(optional)</span></Label>
-                          <Input
-                            id={`purchase-expiry-${item.key}`}
-                            type="date"
-                            min={new Date().toISOString().slice(0, 10)}
-                            value={item.expiryDate}
-                            onChange={(event) => updateDraftItem(item.key, { expiryDate: event.target.value })}
-                          />
-                          {selectedMed?.expiryDate && (
-                            <p className="text-xs text-muted-foreground">
-                              Current on file: {new Date(`${selectedMed.expiryDate}T00:00:00`).toLocaleDateString()} — leaving this blank keeps it unchanged.
-                            </p>
-                          )}
-                        </div>
-                      </div>
                     </div>
                   );
                 })}
@@ -576,8 +545,6 @@ export default function PurchaseOrders() {
                     ? `${item.quantity} ${(item as any).unitName}${item.quantity !== 1 ? "s" : ""}`
                     : `${item.quantity} units`;
                   const factor = (item as any).conversionFactorToBase ?? 1;
-                  const batchNumber = (item as any).batchNumber as string | null;
-                  const expiryDate = (item as any).expiryDate as string | null;
                   return (
                     <div key={item.id} className="flex items-center justify-between border-b pb-2 text-sm last:border-0">
                       <div>
@@ -590,13 +557,6 @@ export default function PurchaseOrders() {
                             </span>
                           )}
                         </p>
-                        {(batchNumber || expiryDate) && (
-                          <p className="text-xs text-muted-foreground/70 mt-0.5">
-                            {batchNumber && `Batch ${batchNumber}`}
-                            {batchNumber && expiryDate && " · "}
-                            {expiryDate && `Exp. ${new Date(`${expiryDate}T00:00:00`).toLocaleDateString()}`}
-                          </p>
-                        )}
                       </div>
                       <span className="font-semibold">
                         {formatCurrency(Number(item.unitPrice) * item.quantity)}

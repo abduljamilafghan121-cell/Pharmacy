@@ -16,15 +16,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ArrowLeft, CheckCircle2, RotateCcw, User, Stethoscope, Printer, Package, BadgeCheck, Undo2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, RotateCcw, User, Stethoscope, Printer, Package, BadgeCheck } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useToast } from "@/components/ui/use-toast";
 import { SaleStatusBadge, PaymentStatusBadge } from "./Orders";
-import { PrintableReceipt } from "@/components/PrintableReceipt";
-import { useReturnOrderItem } from "@/hooks/use-order-returns";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 
 export default function SaleDetail() {
   const [, params] = useRoute("/sales/:id");
@@ -37,16 +32,10 @@ export default function SaleDetail() {
   });
 
   const updateStatusMutation = useUpdateOrderStatus();
-  const returnItemMutation = useReturnOrderItem();
 
-  // Return & Refund dialog state (whole-order cancellation)
+  // Return & Refund dialog state
   const [refundOpen, setRefundOpen] = useState(false);
   const [refundNote, setRefundNote] = useState("");
-
-  // Per-item partial return dialog state
-  const [returningItem, setReturningItem] = useState<any | null>(null);
-  const [returnQty, setReturnQty] = useState(1);
-  const [returnReason, setReturnReason] = useState("");
 
   if (isLoading) return <div className="p-10 text-center text-muted-foreground">Loading sale…</div>;
   if (!order) return <div className="p-10 text-center text-muted-foreground">Sale not found.</div>;
@@ -90,31 +79,9 @@ export default function SaleDetail() {
     );
   };
 
-  function openReturnDialog(item: any) {
-    setReturningItem(item);
-    setReturnQty(1);
-    setReturnReason("");
-  }
-
-  function handleSubmitReturn() {
-    if (!returningItem) return;
-    returnItemMutation.mutate(
-      { orderId: id, itemId: returningItem.id, quantity: returnQty, reason: returnReason.trim() },
-      {
-        onSuccess: (data) => {
-          toast({ title: "Return processed", description: `Refunded ${formatCurrency(data.refundAmount)}.` });
-          setReturningItem(null);
-        },
-        onError: (err) => toast({ title: "Return failed", description: err.message, variant: "destructive" }),
-      }
-    );
-  }
-
   return (
     <div className="space-y-6 max-w-5xl mx-auto animate-in fade-in duration-300">
-      <PrintableReceipt order={order as any} />
-
-      <Button variant="ghost" className="mb-2 -ml-4 print:hidden" onClick={() => window.history.back()}>
+      <Button variant="ghost" className="mb-2 -ml-4" onClick={() => window.history.back()}>
         <ArrowLeft className="w-4 h-4 mr-2" /> Back to Sales
       </Button>
 
@@ -140,36 +107,20 @@ export default function SaleDetail() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {(order as any).items?.map((item: any) => {
-                  const remainingReturnable = item.quantity - (item.returnedQuantity ?? 0);
-                  const canReturn = isDispensed && remainingReturnable > 0;
-                  return (
-                    <div
-                      key={item.id}
-                      className="flex justify-between items-center py-2 border-b border-border last:border-0 last:pb-0 print:hidden"
-                    >
-                      <div>
-                        <p className="font-medium text-foreground">{item.medicineName}</p>
-                        <p className="text-sm text-muted-foreground">
-                          Qty: {item.quantity} × {formatCurrency(parseFloat(item.price) / item.quantity)}
-                        </p>
-                        {item.returnedQuantity > 0 && (
-                          <Badge variant="outline" className="mt-1 text-[10px] border-amber-400/50 text-amber-600">
-                            {item.returnedQuantity} returned
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <p className="font-semibold text-foreground">{formatCurrency(parseFloat(item.price))}</p>
-                        {canReturn && (
-                          <Button variant="ghost" size="sm" onClick={() => openReturnDialog(item)}>
-                            <Undo2 className="w-3.5 h-3.5 mr-1" /> Return
-                          </Button>
-                        )}
-                      </div>
+                {(order as any).items?.map((item: any) => (
+                  <div
+                    key={item.id}
+                    className="flex justify-between items-center py-2 border-b border-border last:border-0 last:pb-0"
+                  >
+                    <div>
+                      <p className="font-medium text-foreground">{item.medicineName}</p>
+                      <p className="text-sm text-muted-foreground">
+                        Qty: {item.quantity} × {formatCurrency(parseFloat(item.price) / item.quantity)}
+                      </p>
                     </div>
-                  );
-                })}
+                    <p className="font-semibold text-foreground">{formatCurrency(parseFloat(item.price))}</p>
+                  </div>
+                ))}
               </div>
 
               <div className="mt-6 pt-4 border-t border-border space-y-2">
@@ -177,18 +128,6 @@ export default function SaleDetail() {
                   <span>Subtotal</span>
                   <span>{formatCurrency(order.subtotal ?? order.total)}</span>
                 </div>
-                {!!(order as any).discountAmount && parseFloat((order as any).discountAmount) > 0 && (
-                  <div className="flex justify-between text-sm text-emerald-600">
-                    <span>Discount</span>
-                    <span>-{formatCurrency((order as any).discountAmount)}</span>
-                  </div>
-                )}
-                {!!(order as any).taxAmount && parseFloat((order as any).taxAmount) > 0 && (
-                  <div className="flex justify-between text-sm text-muted-foreground">
-                    <span>Tax</span>
-                    <span>{formatCurrency((order as any).taxAmount)}</span>
-                  </div>
-                )}
                 <div className="flex justify-between font-bold text-xl">
                   <span>Total</span>
                   <span>{formatCurrency(order.total)}</span>
@@ -333,54 +272,6 @@ export default function SaleDetail() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {/* Partial item return dialog */}
-      <Dialog open={!!returningItem} onOpenChange={(o) => !o && setReturningItem(null)}>
-        <DialogContent className="sm:max-w-[420px]">
-          <DialogHeader>
-            <DialogTitle>Return {returningItem?.medicineName}</DialogTitle>
-          </DialogHeader>
-          {returningItem && (
-            <div className="space-y-4 py-2">
-              <div className="space-y-2">
-                <Label htmlFor="return-qty">
-                  Quantity to return <span className="text-muted-foreground font-normal">
-                    (max {returningItem.quantity - (returningItem.returnedQuantity ?? 0)})
-                  </span>
-                </Label>
-                <Input
-                  id="return-qty"
-                  type="number"
-                  min={1}
-                  max={returningItem.quantity - (returningItem.returnedQuantity ?? 0)}
-                  value={returnQty}
-                  onChange={(e) => setReturnQty(Math.max(1, Number(e.target.value) || 1))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="return-reason">Reason *</Label>
-                <Textarea
-                  id="return-reason"
-                  placeholder="e.g. Wrong item, patient changed mind, adverse reaction…"
-                  value={returnReason}
-                  onChange={(e) => setReturnReason(e.target.value)}
-                  rows={3}
-                />
-              </div>
-              <p className="text-xs text-muted-foreground">
-                This restores the returned quantity to inventory and reduces the sale total accordingly. It does not cancel the whole sale.
-              </p>
-              <Button
-                className="w-full"
-                disabled={!returnReason.trim() || returnItemMutation.isPending}
-                onClick={handleSubmitReturn}
-              >
-                {returnItemMutation.isPending ? "Processing…" : "Confirm Return"}
-              </Button>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

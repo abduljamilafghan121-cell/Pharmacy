@@ -1,14 +1,11 @@
 import { Router, type IRouter } from "express";
 import bcrypt from "bcryptjs";
-import crypto from "crypto";
-import { eq, and, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
 import { RegisterUserBody, LoginUserBody } from "@workspace/api-zod";
 import { signToken, requireAuth, requireRole } from "../middlewares/auth";
 import { logger } from "../lib/logger";
 import { formatZodError, getDbErrorMessage } from "../lib/api-errors";
-import { sendPasswordResetEmail } from "../lib/mailer";
-import { logAudit } from "../lib/audit";
 
 const router: IRouter = Router();
 
@@ -71,11 +68,6 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     const valid = await bcrypt.compare(password, user.passwordHash);
     if (!valid) {
       res.status(401).json({ error: "Incorrect password. Please try again." });
-      return;
-    }
-
-    if (!user.isActive) {
-      res.status(403).json({ error: "This account has been deactivated. Contact your administrator." });
       return;
     }
 
@@ -173,7 +165,6 @@ router.get("/users", requireAuth, requireRole("admin"), async (_req, res): Promi
         email: usersTable.email,
         phone: usersTable.phone,
         role: usersTable.role,
-        isActive: usersTable.isActive,
         createdAt: usersTable.createdAt,
       })
       .from(usersTable)
@@ -216,183 +207,9 @@ router.post("/users", requireAuth, requireRole("admin"), async (req, res): Promi
       createdAt: usersTable.createdAt,
     });
     res.status(201).json(user);
-    logAudit(req.auth!.userId, "user.create", "user", user.id, `Created ${role} account for ${name} (${email}).`);
   } catch (err) {
     logger.error({ err, email }, "users: failed to create staff account");
     res.status(500).json({ error: "Failed to create staff account.", detail: getDbErrorMessage(err) });
-  }
-});
-
-router.patch("/users/:id", requireAuth, requireRole("admin"), async (req, res): Promise<void> => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id) || id <= 0) {
-    res.status(400).json({ error: "Invalid user id." });
-    return;
-  }
-  const { name, phone, role, isActive } = req.body as {
-    name?: string; phone?: string | null; role?: "admin" | "pharmacist"; isActive?: boolean;
-  };
-
-  try {
-    const [target] = await db.select().from(usersTable).where(eq(usersTable.id, id));
-    if (!target) { res.status(404).json({ error: "Staff account not found." }); return; }
-
-    // Safety guards against locking yourself (or everyone) out:
-    const isSelf = req.auth!.userId === id;
-    const isDemotingOrDeactivatingAdmin =
-      target.role === "admin" && ((role && role !== "admin") || isActive === false);
-
-    if (isSelf && isActive === false) {
-      res.status(400).json({ error: "You can't deactivate your own account." });
-      return;
-    }
-    if (isSelf && role && role !== "admin") {
-      res.status(400).json({ error: "You can't remove your own admin access." });
-      return;
-    }
-    if (isDemotingOrDeactivatingAdmin) {
-      const [{ count }] = await db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(usersTable)
-        .where(and(eq(usersTable.role, "admin"), eq(usersTable.isActive, true)));
-      if (count <= 1) {
-        res.status(400).json({ error: "This is the only active administrator — promote or activate another admin first." });
-        return;
-      }
-    }
-
-    const updates: Record<string, unknown> = {};
-    if (name !== undefined) {
-      if (!name.trim()) { res.status(400).json({ error: "Name can't be empty." }); return; }
-      updates.name = name.trim();
-    }
-    if (phone !== undefined) updates.phone = phone?.trim() || null;
-    if (role !== undefined) updates.role = role;
-    if (isActive !== undefined) updates.isActive = isActive;
-
-    if (Object.keys(updates).length === 0) {
-      res.status(400).json({ error: "Provide at least one field to update." });
-      return;
-    }
-
-    const [updated] = await db.update(usersTable).set(updates).where(eq(usersTable.id, id)).returning({
-      id: usersTable.id, name: usersTable.name, email: usersTable.email, phone: usersTable.phone,
-      role: usersTable.role, isActive: usersTable.isActive, createdAt: usersTable.createdAt,
-    });
-    res.json(updated);
-
-    if (isActive === false) {
-      logAudit(req.auth!.userId, "user.deactivate", "user", id, `Deactivated staff account for ${target.name} (${target.email}).`);
-    } else if (isActive === true) {
-      logAudit(req.auth!.userId, "user.reactivate", "user", id, `Reactivated staff account for ${target.name} (${target.email}).`);
-    } else {
-      const changed = Object.keys(updates).join(", ");
-      logAudit(req.auth!.userId, "user.update", "user", id, `Updated ${target.name}'s account (${changed}).`);
-    }
-  } catch (err) {
-    logger.error({ err, id }, "users: failed to update staff account");
-    res.status(500).json({ error: "Failed to update staff account.", detail: getDbErrorMessage(err) });
-  }
-});
-
-router.post("/users/:id/reset-password", requireAuth, requireRole("admin"), async (req, res): Promise<void> => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id) || id <= 0) {
-    res.status(400).json({ error: "Invalid user id." });
-    return;
-  }
-  const { newPassword } = req.body as { newPassword?: string };
-  if (!newPassword || newPassword.length < 6) {
-    res.status(400).json({ error: "New password must be at least 6 characters." });
-    return;
-  }
-  try {
-    const [target] = await db.select({ name: usersTable.name, email: usersTable.email }).from(usersTable).where(eq(usersTable.id, id));
-    if (!target) { res.status(404).json({ error: "Staff account not found." }); return; }
-
-    const passwordHash = await bcrypt.hash(newPassword, 10);
-    await db.update(usersTable).set({ passwordHash }).where(eq(usersTable.id, id));
-    res.json({ message: "Password reset successfully." });
-    logAudit(req.auth!.userId, "user.password_reset_by_admin", "user", id, `Reset password for ${target.name} (${target.email}).`);
-  } catch (err) {
-    logger.error({ err, id }, "users: failed to reset password");
-    res.status(500).json({ error: "Failed to reset password.", detail: getDbErrorMessage(err) });
-  }
-});
-
-router.post("/auth/forgot-password", async (req, res): Promise<void> => {
-  const { email } = req.body as { email?: string };
-  const normalizedEmail = email?.trim().toLowerCase();
-
-  // Always respond the same way whether or not the email exists — otherwise
-  // this endpoint becomes a way to check which emails have accounts.
-  const genericResponse = { message: "If an account exists for that email, a reset link has been sent." };
-
-  if (!normalizedEmail) {
-    res.status(400).json({ error: "Email is required." });
-    return;
-  }
-
-  try {
-    const [user] = await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail));
-    if (!user || !user.isActive) {
-      res.json(genericResponse);
-      return;
-    }
-
-    const rawToken = crypto.randomBytes(32).toString("hex");
-    const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
-    const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
-
-    await db.update(usersTable)
-      .set({ resetTokenHash: tokenHash, resetTokenExpiresAt: expiresAt })
-      .where(eq(usersTable.id, user.id));
-
-    const appOrigin = (req.headers["origin"] as string) || `${req.protocol}://${req.headers["host"]}`;
-    const resetLink = `${appOrigin}/reset-password?token=${rawToken}`;
-    await sendPasswordResetEmail(user.email, resetLink);
-
-    // No real email provider is wired up yet (see lib/mailer.ts) — surface
-    // the link directly outside production so the flow is testable without
-    // one. This must never happen in production, since it would let anyone
-    // reset any account just by knowing their email.
-    const devPayload = process.env["NODE_ENV"] !== "production" ? { resetLink } : {};
-    res.json({ ...genericResponse, ...devPayload });
-  } catch (err) {
-    logger.error({ err }, "forgot-password: failed");
-    res.status(500).json({ error: "Something went wrong. Please try again.", detail: getDbErrorMessage(err) });
-  }
-});
-
-router.post("/auth/reset-password", async (req, res): Promise<void> => {
-  const { token, newPassword } = req.body as { token?: string; newPassword?: string };
-  if (!token) {
-    res.status(400).json({ error: "Reset token is required." });
-    return;
-  }
-  if (!newPassword || newPassword.length < 6) {
-    res.status(400).json({ error: "New password must be at least 6 characters." });
-    return;
-  }
-
-  try {
-    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
-    const [user] = await db.select().from(usersTable).where(eq(usersTable.resetTokenHash, tokenHash));
-
-    if (!user || !user.resetTokenExpiresAt || user.resetTokenExpiresAt < new Date()) {
-      res.status(400).json({ error: "This reset link is invalid or has expired. Please request a new one." });
-      return;
-    }
-
-    const passwordHash = await bcrypt.hash(newPassword, 10);
-    await db.update(usersTable)
-      .set({ passwordHash, resetTokenHash: null, resetTokenExpiresAt: null })
-      .where(eq(usersTable.id, user.id));
-
-    res.json({ message: "Password reset successfully. You can now log in." });
-  } catch (err) {
-    logger.error({ err }, "reset-password: failed");
-    res.status(500).json({ error: "Something went wrong. Please try again.", detail: getDbErrorMessage(err) });
   }
 });
 

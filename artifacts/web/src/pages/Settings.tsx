@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { UserCircle, Plus, Trash2, Tag, Save, Lock, Building2, ImagePlus, X } from "lucide-react";
+import { UserCircle, Plus, Trash2, Tag, Save, Lock } from "lucide-react";
 import {
   useListCategories,
   useCreateCategory,
@@ -15,80 +15,11 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { getListCategoriesQueryKey } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
-import { usePharmacySettings, useUpdatePharmacySettings } from "@/hooks/use-pharmacy-settings";
 
 export default function Settings() {
   const { user, updateUser } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const isAdmin = user?.role === "admin";
-
-  // ── Pharmacy Details (branding, used on receipts / dispensing slips) ────
-  const { data: pharmacySettings, isLoading: pharmacySettingsLoading } = usePharmacySettings();
-  const updatePharmacySettings = useUpdatePharmacySettings();
-
-  const [pharmacyName, setPharmacyName] = useState("");
-  const [pharmacyAddress, setPharmacyAddress] = useState("");
-  const [pharmacyPhone, setPharmacyPhone] = useState("");
-  const [pharmacyEmail, setPharmacyEmail] = useState("");
-  const [pharmacyLicense, setPharmacyLicense] = useState("");
-  const [taxRatePercent, setTaxRatePercent] = useState("0");
-  const [logoPreview, setLogoPreview] = useState<string | null>(null);
-  const logoInputRef = useRef<HTMLInputElement>(null);
-
-  // Sync local form state once the settings load (or change from elsewhere).
-  useEffect(() => {
-    if (!pharmacySettings) return;
-    setPharmacyName(pharmacySettings.name ?? "");
-    setPharmacyAddress(pharmacySettings.address ?? "");
-    setPharmacyPhone(pharmacySettings.phone ?? "");
-    setPharmacyEmail(pharmacySettings.email ?? "");
-    setPharmacyLicense(pharmacySettings.licenseNumber ?? "");
-    setTaxRatePercent(pharmacySettings.taxRatePercent ?? "0");
-    setLogoPreview(pharmacySettings.logoUrl ?? null);
-  }, [pharmacySettings]);
-
-  const MAX_LOGO_MB = 2;
-
-  function handleLogoSelect(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      toast({ title: "Please choose an image file", variant: "destructive" });
-      return;
-    }
-    if (file.size > MAX_LOGO_MB * 1024 * 1024) {
-      toast({ title: `Logo must be under ${MAX_LOGO_MB}MB`, variant: "destructive" });
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => setLogoPreview(reader.result as string);
-    reader.readAsDataURL(file);
-  }
-
-  function handleRemoveLogo() {
-    setLogoPreview(null);
-    if (logoInputRef.current) logoInputRef.current.value = "";
-  }
-
-  function handleSavePharmacyDetails(e: React.FormEvent) {
-    e.preventDefault();
-    updatePharmacySettings.mutate(
-      {
-        name: pharmacyName.trim() || "My Pharmacy",
-        address: pharmacyAddress.trim() || null,
-        phone: pharmacyPhone.trim() || null,
-        email: pharmacyEmail.trim() || null,
-        licenseNumber: pharmacyLicense.trim() || null,
-        taxRatePercent: taxRatePercent.trim() || "0",
-        logoUrl: logoPreview,
-      } as any,
-      {
-        onSuccess: () => toast({ title: "Pharmacy details updated" }),
-        onError: (err: any) => toast({ title: err?.message ?? "Failed to update pharmacy details", variant: "destructive" }),
-      }
-    );
-  }
 
   // ── Profile ────────────────────────────────────────────────────────────
   const [name, setName] = useState(user?.name ?? "");
@@ -183,145 +114,6 @@ export default function Settings() {
         <h1 className="text-3xl font-bold tracking-tight text-foreground">Settings</h1>
         <p className="text-muted-foreground mt-1">Manage your account and system configuration.</p>
       </div>
-
-      {/* Pharmacy Details */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Building2 className="w-5 h-5 text-primary" />
-            <div>
-              <CardTitle>Pharmacy Details</CardTitle>
-              <CardDescription>
-                Shown on printed receipts and dispensing slips.
-                {!isAdmin && " Only admins can make changes here."}
-              </CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {pharmacySettingsLoading ? (
-            <p className="text-sm text-muted-foreground">Loading…</p>
-          ) : (
-            <form onSubmit={handleSavePharmacyDetails} className="space-y-5">
-              {/* Logo */}
-              <div className="space-y-2">
-                <Label>Pharmacy Logo</Label>
-                <div className="flex items-center gap-4">
-                  <div className="w-20 h-20 rounded-lg border border-dashed border-border bg-muted/40 flex items-center justify-center overflow-hidden shrink-0">
-                    {logoPreview ? (
-                      <img src={logoPreview} alt="Pharmacy logo" className="w-full h-full object-contain" />
-                    ) : (
-                      <ImagePlus className="w-6 h-6 text-muted-foreground" />
-                    )}
-                  </div>
-                  {isAdmin && (
-                    <div className="space-y-2">
-                      <div className="flex gap-2">
-                        <Button type="button" variant="outline" size="sm" onClick={() => logoInputRef.current?.click()}>
-                          <ImagePlus className="w-4 h-4 mr-2" />
-                          {logoPreview ? "Change Logo" : "Upload Logo"}
-                        </Button>
-                        {logoPreview && (
-                          <Button type="button" variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={handleRemoveLogo}>
-                            <X className="w-4 h-4 mr-1" /> Remove
-                          </Button>
-                        )}
-                      </div>
-                      <input
-                        ref={logoInputRef}
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={handleLogoSelect}
-                      />
-                      <p className="text-xs text-muted-foreground">PNG, JPG or SVG. Up to {MAX_LOGO_MB}MB.</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="pharmacy-name">Pharmacy Name</Label>
-                  <Input
-                    id="pharmacy-name"
-                    value={pharmacyName}
-                    onChange={e => setPharmacyName(e.target.value)}
-                    placeholder="e.g. MediCare Pharmacy"
-                    disabled={!isAdmin}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="pharmacy-license">License Number</Label>
-                  <Input
-                    id="pharmacy-license"
-                    value={pharmacyLicense}
-                    onChange={e => setPharmacyLicense(e.target.value)}
-                    placeholder="e.g. PH-8842"
-                    disabled={!isAdmin}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="pharmacy-tax">Tax Rate (%)</Label>
-                  <Input
-                    id="pharmacy-tax"
-                    type="number"
-                    min={0}
-                    max={100}
-                    step="0.01"
-                    value={taxRatePercent}
-                    onChange={e => setTaxRatePercent(e.target.value)}
-                    placeholder="e.g. 5 for 5%"
-                    disabled={!isAdmin}
-                  />
-                  <p className="text-xs text-muted-foreground">Applied automatically to every sale at checkout. Leave 0 if not applicable.</p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="pharmacy-phone">Phone Number</Label>
-                  <Input
-                    id="pharmacy-phone"
-                    value={pharmacyPhone}
-                    onChange={e => setPharmacyPhone(e.target.value)}
-                    placeholder="e.g. +1 555 000 0000"
-                    disabled={!isAdmin}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="pharmacy-email">Contact Email</Label>
-                  <Input
-                    id="pharmacy-email"
-                    type="email"
-                    value={pharmacyEmail}
-                    onChange={e => setPharmacyEmail(e.target.value)}
-                    placeholder="e.g. contact@pharmacy.com"
-                    disabled={!isAdmin}
-                  />
-                </div>
-                <div className="space-y-2 md:col-span-2">
-                  <Label htmlFor="pharmacy-address">Address</Label>
-                  <Input
-                    id="pharmacy-address"
-                    value={pharmacyAddress}
-                    onChange={e => setPharmacyAddress(e.target.value)}
-                    placeholder="Street, city, area"
-                    disabled={!isAdmin}
-                  />
-                </div>
-              </div>
-
-              {isAdmin && (
-                <div className="flex justify-end">
-                  <Button type="submit" disabled={updatePharmacySettings.isPending}>
-                    <Save className="w-4 h-4 mr-2" />
-                    {updatePharmacySettings.isPending ? "Saving…" : "Save Pharmacy Details"}
-                  </Button>
-                </div>
-              )}
-            </form>
-          )}
-        </CardContent>
-      </Card>
 
       {/* Profile */}
       <Card>

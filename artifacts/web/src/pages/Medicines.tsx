@@ -353,15 +353,13 @@ function MedicineFormDialog() {
       data: {
         name: fd.get("name") as string,
         genericName: fd.get("genericName") as string,
-        barcode: (fd.get("barcode") as string)?.trim() || undefined,
         categoryId: fd.get("categoryId") ? Number(fd.get("categoryId")) : undefined,
         quantity: Number(fd.get("quantity")),
-        reorderLevel: fd.get("reorderLevel") ? Number(fd.get("reorderLevel")) : undefined,
         price: fd.get("price") as string,
         expiryDate: fd.get("expiryDate") as string,
         prescriptionRequired: fd.get("prescriptionRequired") === "on",
         description: fd.get("description") as string,
-      } as any,
+      },
     });
   };
 
@@ -383,11 +381,6 @@ function MedicineFormDialog() {
             <Label htmlFor="genericName">Generic Name</Label>
             <Input id="genericName" name="genericName" placeholder="Amoxicillin" />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="barcode">Barcode / SKU <span className="text-muted-foreground font-normal">(optional)</span></Label>
-            <Input id="barcode" name="barcode" placeholder="Scan with a barcode scanner, or enter manually" />
-            <p className="text-xs text-muted-foreground">Lets you look this medicine up instantly at checkout with a scanner.</p>
-          </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="price">Price per base unit *</Label>
@@ -399,11 +392,6 @@ function MedicineFormDialog() {
               <Input id="quantity" name="quantity" type="number" required placeholder="100" />
               <p className="text-xs text-muted-foreground">Enter in base units (e.g. total tablets)</p>
             </div>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="reorderLevel">Low-stock alert at</Label>
-            <Input id="reorderLevel" name="reorderLevel" type="number" min={0} placeholder="10" />
-            <p className="text-xs text-muted-foreground">Base units remaining before this medicine is flagged low-stock (e.g. 10 for tablets, 3 for bottles)</p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="expiryDate">Expiry date *</Label>

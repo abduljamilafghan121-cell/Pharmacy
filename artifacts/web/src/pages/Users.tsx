@@ -7,25 +7,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { ShieldCheck, UserPlus, Users as UsersIcon, Loader2, MoreVertical, KeyRound, UserX, UserCheck, Pencil } from "lucide-react";
+import { ShieldCheck, UserPlus, Users as UsersIcon, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { getErrorMessage } from "@/lib/errors";
-import { useAuth } from "@/hooks/use-auth";
-import { useUpdateStaffUser, useResetStaffPassword } from "@/hooks/use-staff-management";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu";
 
 export default function Users() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { user: currentUser } = useAuth();
   const [open, setOpen] = useState(false);
-  const [editingStaff, setEditingStaff] = useState<any | null>(null);
-  const [resettingStaff, setResettingStaff] = useState<any | null>(null);
   const { data: users = [], isLoading, isError, refetch } = useListUsers();
-  const updateStaff = useUpdateStaffUser();
-  const resetPassword = useResetStaffPassword();
   const createUser = useCreateUser({
     mutation: {
       onSuccess: () => {
@@ -52,7 +42,7 @@ export default function Users() {
         email: String(form.get("email") ?? "").trim(),
         password,
         phone: String(form.get("phone") ?? "").trim() || undefined,
-        role: String(form.get("role") ?? "pharmacist") as "admin" | "pharmacist" | "cashier" | "viewer",
+        role: String(form.get("role") ?? "pharmacist") as "admin" | "pharmacist",
       },
     });
   }
@@ -79,9 +69,7 @@ export default function Users() {
               <div className="space-y-2">
                 <Label htmlFor="user-role">Access level</Label>
                 <select id="user-role" name="role" defaultValue="pharmacist" className="flex h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
-                  <option value="pharmacist">Pharmacist — inventory, prescriptions, sales</option>
-                  <option value="cashier">Cashier — checkout and sales only</option>
-                  <option value="viewer">Viewer — read-only visibility, no changes</option>
+                  <option value="pharmacist">Pharmacist — daily pharmacy operations</option>
                   <option value="admin">Administrator — full system access</option>
                 </select>
               </div>
@@ -107,158 +95,19 @@ export default function Users() {
           {isLoading ? <div className="py-10 text-center text-muted-foreground">Loading accounts…</div> :
             isError ? <div className="py-10 text-center"><p className="text-destructive">Could not load staff accounts.</p><Button variant="outline" className="mt-3" onClick={() => refetch()}>Try again</Button></div> :
             users.length === 0 ? <div className="py-10 text-center text-muted-foreground">No staff accounts yet.</div> :
-            <div className="divide-y divide-border">{users.map((staff: any) => {
-              const isSelf = currentUser?.id === staff.id;
-              return (
+            <div className="divide-y divide-border">{users.map((staff) => (
               <div key={staff.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <p className="font-semibold flex items-center gap-2">
-                    {staff.name}
-                    {isSelf && <span className="text-xs text-muted-foreground font-normal">(you)</span>}
-                  </p>
+                  <p className="font-semibold">{staff.name}</p>
                   <p className="text-sm text-muted-foreground">{staff.email}{staff.phone ? ` · ${staff.phone}` : ""}</p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant={staff.role === "admin" ? "default" : "secondary"} className="w-fit capitalize">
-                    {staff.role === "admin" && <ShieldCheck className="mr-1 h-3.5 w-3.5" />}{staff.role}
-                  </Badge>
-                  <Badge variant="outline" className={staff.isActive === false ? "border-destructive/40 text-destructive" : "border-emerald-500/40 text-emerald-600"}>
-                    {staff.isActive === false ? "Deactivated" : "Active"}
-                  </Badge>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => setEditingStaff(staff)}>
-                        <Pencil className="mr-2 h-4 w-4" /> Edit details
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setResettingStaff(staff)}>
-                        <KeyRound className="mr-2 h-4 w-4" /> Reset password
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      {staff.isActive === false ? (
-                        <DropdownMenuItem
-                          onClick={() => updateStaff.mutate(
-                            { id: staff.id, data: { isActive: true } },
-                            { onSuccess: () => toast({ title: "Account reactivated" }), onError: (e) => toast({ title: "Failed", description: getErrorMessage(e), variant: "destructive" }) }
-                          )}
-                        >
-                          <UserCheck className="mr-2 h-4 w-4" /> Reactivate
-                        </DropdownMenuItem>
-                      ) : (
-                        <DropdownMenuItem
-                          disabled={isSelf}
-                          className="text-destructive focus:text-destructive"
-                          onClick={() => {
-                            if (confirm(`Deactivate ${staff.name}? They won't be able to log in until reactivated.`)) {
-                              updateStaff.mutate(
-                                { id: staff.id, data: { isActive: false } },
-                                { onSuccess: () => toast({ title: "Account deactivated" }), onError: (e) => toast({ title: "Failed", description: getErrorMessage(e), variant: "destructive" }) }
-                              );
-                            }
-                          }}
-                        >
-                          <UserX className="mr-2 h-4 w-4" /> {isSelf ? "Can't deactivate self" : "Deactivate"}
-                        </DropdownMenuItem>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
+                <Badge variant={staff.role === "admin" ? "default" : "secondary"} className="w-fit capitalize">
+                  {staff.role === "admin" && <ShieldCheck className="mr-1 h-3.5 w-3.5" />}{staff.role}
+                </Badge>
               </div>
-            );})}</div>}
+            ))}</div>}
         </CardContent>
       </Card>
-
-      {/* Edit staff dialog */}
-      <Dialog open={!!editingStaff} onOpenChange={(o) => !o && setEditingStaff(null)}>
-        <DialogContent className="sm:max-w-[440px]">
-          <DialogHeader><DialogTitle>Edit staff account</DialogTitle></DialogHeader>
-          {editingStaff && (
-            <form
-              className="space-y-4 py-2"
-              onSubmit={(e) => {
-                e.preventDefault();
-                const fd = new FormData(e.currentTarget);
-                updateStaff.mutate(
-                  {
-                    id: editingStaff.id,
-                    data: {
-                      name: String(fd.get("name") ?? "").trim(),
-                      phone: String(fd.get("phone") ?? "").trim() || null,
-                      role: String(fd.get("role") ?? editingStaff.role) as "admin" | "pharmacist" | "cashier" | "viewer",
-                    },
-                  },
-                  {
-                    onSuccess: () => { toast({ title: "Staff account updated" }); setEditingStaff(null); },
-                    onError: (err) => toast({ title: "Update failed", description: getErrorMessage(err), variant: "destructive" }),
-                  }
-                );
-              }}
-            >
-              <div className="space-y-2"><Label htmlFor="edit-name">Full name</Label><Input id="edit-name" name="name" defaultValue={editingStaff.name} required /></div>
-              <div className="space-y-2"><Label htmlFor="edit-phone">Phone</Label><Input id="edit-phone" name="phone" type="tel" defaultValue={editingStaff.phone ?? ""} /></div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-role">Access level</Label>
-                <select
-                  id="edit-role" name="role" defaultValue={editingStaff.role}
-                  disabled={currentUser?.id === editingStaff.id}
-                  className="flex h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-60"
-                >
-                  <option value="pharmacist">Pharmacist — inventory, prescriptions, sales</option>
-                  <option value="cashier">Cashier — checkout and sales only</option>
-                  <option value="viewer">Viewer — read-only visibility, no changes</option>
-                  <option value="admin">Administrator — full system access</option>
-                </select>
-                {currentUser?.id === editingStaff.id && (
-                  <p className="text-xs text-muted-foreground">You can't change your own access level.</p>
-                )}
-              </div>
-              <Button type="submit" className="w-full" disabled={updateStaff.isPending}>
-                {updateStaff.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Save changes
-              </Button>
-            </form>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Reset password dialog */}
-      <Dialog open={!!resettingStaff} onOpenChange={(o) => !o && setResettingStaff(null)}>
-        <DialogContent className="sm:max-w-[420px]">
-          <DialogHeader><DialogTitle>Reset password for {resettingStaff?.name}</DialogTitle></DialogHeader>
-          <form
-            className="space-y-4 py-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const fd = new FormData(e.currentTarget);
-              const newPassword = String(fd.get("newPassword") ?? "");
-              const confirmation = String(fd.get("confirmation") ?? "");
-              if (newPassword !== confirmation) {
-                toast({ title: "Passwords do not match", variant: "destructive" });
-                return;
-              }
-              resetPassword.mutate(
-                { id: resettingStaff.id, newPassword },
-                {
-                  onSuccess: () => { toast({ title: "Password reset successfully" }); setResettingStaff(null); },
-                  onError: (err) => toast({ title: "Reset failed", description: getErrorMessage(err), variant: "destructive" }),
-                }
-              );
-            }}
-          >
-            <p className="text-sm text-muted-foreground">
-              This immediately sets a new password for this account. Share it with them securely — they won't be notified automatically.
-            </p>
-            <div className="space-y-2"><Label htmlFor="reset-password">New password</Label><Input id="reset-password" name="newPassword" type="password" minLength={6} required /></div>
-            <div className="space-y-2"><Label htmlFor="reset-confirmation">Confirm new password</Label><Input id="reset-confirmation" name="confirmation" type="password" minLength={6} required /></div>
-            <Button type="submit" className="w-full" disabled={resetPassword.isPending}>
-              {resetPassword.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Reset password
-            </Button>
-          </form>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

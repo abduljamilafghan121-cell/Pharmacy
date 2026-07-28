@@ -1,13 +1,11 @@
 import { Router, type IRouter } from "express";
 import { and, eq, inArray } from "drizzle-orm";
-import { db, purchaseOrdersTable, purchaseOrderItemsTable, medicinesTable, suppliersTable, medicineUnitsTable, medicineBatchesTable } from "@workspace/db";
+import { db, purchaseOrdersTable, purchaseOrderItemsTable, medicinesTable, suppliersTable, medicineUnitsTable } from "@workspace/db";
 import { z } from "zod";
 import {
   CreatePurchaseOrderBody, GetPurchaseOrderParams, ReceivePurchaseOrderParams,
 } from "@workspace/api-zod";
 import { requireAuth, requireRole } from "../middlewares/auth";
-import { refreshMedicineAggregate } from "../lib/batch-helpers";
-import { logAudit } from "../lib/audit";
 
 const router: IRouter = Router();
 
@@ -36,8 +34,6 @@ async function fetchPurchaseOrder(id: number) {
       unitName: purchaseOrderItemsTable.unitName,
       conversionFactorToBase: purchaseOrderItemsTable.conversionFactorToBase,
       unitPrice: purchaseOrderItemsTable.unitPrice,
-      batchNumber: purchaseOrderItemsTable.batchNumber,
-      expiryDate: purchaseOrderItemsTable.expiryDate,
     })
     .from(purchaseOrderItemsTable)
     .leftJoin(medicinesTable, eq(purchaseOrderItemsTable.medicineId, medicinesTable.id))
@@ -68,8 +64,6 @@ const PurchaseOrderItemInputExtended = z.object({
   quantity: z.number().int().min(1),
   unitId: z.number().int().positive().optional(),
   unitPrice: z.string(),
-  batchNumber: z.string().optional(),
-  expiryDate: z.string().optional(), // "YYYY-MM-DD" — the batch/expiry of this incoming stock
 });
 
 router.post("/purchase-orders", requireAuth, requireRole("admin", "pharmacist"), async (req, res): Promise<void> => {
@@ -119,8 +113,6 @@ router.post("/purchase-orders", requireAuth, requireRole("admin", "pharmacist"),
         unitName: item.unitName,
         conversionFactorToBase: item.conversionFactor,
         unitPrice: item.unitPrice,
-        batchNumber: item.batchNumber ?? null,
-        expiryDate: item.expiryDate ?? null,
       });
     }
 
@@ -129,8 +121,6 @@ router.post("/purchase-orders", requireAuth, requireRole("admin", "pharmacist"),
 
   const full = await fetchPurchaseOrder(poId);
   res.status(201).json(full);
-  logAudit(req.auth!.userId, "purchase_order.create", "purchase_order", poId,
-    `Created purchase order #${poId} with ${resolvedItems.length} item(s), total ${total.toFixed(2)}.`);
 });
 
 router.get("/purchase-orders/:id", requireAuth, requireRole("admin", "pharmacist"), async (req, res): Promise<void> => {
@@ -166,21 +156,13 @@ router.patch("/purchase-orders/:id/receive", requireAuth, requireRole("admin", "
     for (const item of items) {
       const conversionFactor = item.conversionFactorToBase ?? 1;
       const baseUnitsToAdd = item.quantity * conversionFactor;
-      const costPricePerBaseUnit = parseFloat(item.unitPrice) / conversionFactor;
-
-      // Each receipt is its own batch/lot — this is what enables FEFO
-      // (first-expiry-first-out) selling and correct per-lot expiry
-      // tracking, instead of merging everything into one shared expiry.
-      await tx.insert(medicineBatchesTable).values({
-        medicineId: item.medicineId,
-        batchNumber: item.batchNumber ?? null,
-        expiryDate: item.expiryDate ?? null,
-        quantity: baseUnitsToAdd,
-        costPrice: costPricePerBaseUnit.toFixed(4),
-        purchaseOrderId: po.id,
-      });
-
-      await refreshMedicineAggregate(tx, item.medicineId);
+      const [med] = await tx.select().from(medicinesTable).where(eq(medicinesTable.id, item.medicineId));
+      if (med) {
+        await tx
+          .update(medicinesTable)
+          .set({ quantity: med.quantity + baseUnitsToAdd })
+          .where(eq(medicinesTable.id, med.id));
+      }
     }
     return po.id;
   });
@@ -197,7 +179,6 @@ router.patch("/purchase-orders/:id/receive", requireAuth, requireRole("admin", "
 
   const full = await fetchPurchaseOrder(receivedId);
   res.json(full);
-  logAudit(req.auth!.userId, "purchase_order.receive", "purchase_order", receivedId, `Received stock for purchase order #${receivedId}.`);
 });
 
 export default router;
