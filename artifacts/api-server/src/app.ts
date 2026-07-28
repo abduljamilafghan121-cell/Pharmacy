@@ -33,8 +33,11 @@ app.use(
     credentials: true,
   }),
 );
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Raise the JSON body limit to 4 MB so that base64-encoded logo images
+// and prescription attachments (stored as data URIs, ~33% larger than
+// the original binary) don't hit the default 100 KB Express limit.
+app.use(express.json({ limit: "4mb" }));
+app.use(express.urlencoded({ extended: true, limit: "4mb" }));
 
 app.use("/api", router);
 
