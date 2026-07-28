@@ -54,3 +54,30 @@ export function getDbErrorMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
   return String(err);
 }
+
+/**
+ * True when the error is a Postgres foreign-key-violation (code 23503).
+ * Unwraps Drizzle's "Failed query:" wrapper the same way getDbErrorMessage does.
+ */
+export function isForeignKeyViolation(err: unknown): boolean {
+  if (
+    err instanceof Error &&
+    err.message.startsWith("Failed query:") &&
+    (err as NodeJS.ErrnoException & { cause?: unknown }).cause
+  ) {
+    return isForeignKeyViolation((err as NodeJS.ErrnoException & { cause?: unknown }).cause);
+  }
+  return !!err && typeof err === "object" && (err as { code?: string }).code === "23503";
+}
+
+/**
+ * Friendly message for delete endpoints: when the row is still referenced
+ * elsewhere (sales history, purchase orders, etc.) explain that plainly
+ * instead of surfacing a raw Postgres constraint error.
+ */
+export function getDeleteErrorMessage(err: unknown, entityLabel: string): string {
+  if (isForeignKeyViolation(err)) {
+    return `This ${entityLabel} can't be deleted because it's used in existing records (sales, purchase orders, etc.). Remove or reassign those first.`;
+  }
+  return getDbErrorMessage(err);
+}

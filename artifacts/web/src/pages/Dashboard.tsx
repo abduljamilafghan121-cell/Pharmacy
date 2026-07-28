@@ -1,20 +1,26 @@
 import { useGetInventoryReport, useGetSalesReport, useGetTopMedicines, useListOrders } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { formatCurrency } from "@/lib/utils";
-import { Package, AlertCircle, Clock, DollarSign, TrendingUp, Receipt } from "lucide-react";
+import { formatCurrency, formatDate } from "@/lib/utils";
+import { Package, AlertCircle, Clock, DollarSign, TrendingUp, Receipt, Mail } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/hooks/use-auth";
+import { useSendDigest } from "@/hooks/use-notifications";
+import { useToast } from "@/components/ui/use-toast";
 
 export default function Dashboard() {
   return <StaffDashboard />;
 }
 
 function StaffDashboard() {
-  const { data: inventory } = useGetInventoryReport();
-  const { data: sales } = useGetSalesReport();
-  const { data: topMedicines } = useGetTopMedicines();
-  const { data: recentOrders } = useListOrders();
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const sendDigest = useSendDigest();
+  const { data: inventory, isLoading: inventoryLoading } = useGetInventoryReport();
+  const { data: sales, isLoading: salesLoading } = useGetSalesReport();
+  const { data: topMedicines, isLoading: topLoading } = useGetTopMedicines();
+  const { data: recentOrders, isLoading: ordersLoading } = useListOrders();
 
   const todayStr = new Date().toISOString().split('T')[0];
   const todaySales = sales?.byDay.find(d => d.date.startsWith(todayStr));
@@ -26,9 +32,23 @@ function StaffDashboard() {
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Overview</h1>
           <p className="text-muted-foreground mt-1">Pharmacy operations snapshot for today.</p>
         </div>
-        <Button asChild>
-          <Link href="/new-sale">+ New Sale</Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          {user?.role === "admin" && (
+            <Button
+              variant="outline"
+              disabled={sendDigest.isPending}
+              onClick={() => sendDigest.mutate(undefined, {
+                onSuccess: (data) => toast({ title: "Digest sent", description: `${data.summary.lowStockCount} low-stock, ${data.summary.expiringCount} expiring, ${data.summary.pendingPrescriptionCount} prescriptions pending. (Logged server-side — no email provider connected yet.)` }),
+                onError: (err) => toast({ title: "Failed to send digest", description: err.message, variant: "destructive" }),
+              })}
+            >
+              <Mail className="w-4 h-4 mr-2" /> {sendDigest.isPending ? "Sending…" : "Email Digest Now"}
+            </Button>
+          )}
+          <Button asChild>
+            <Link href="/new-sale">+ New Sale</Link>
+          </Button>
+        </div>
       </div>
 
       {/* Metrics Row */}
@@ -39,6 +59,7 @@ function StaffDashboard() {
           subtitle={`${todaySales?.orders || 0} sales today`}
           icon={DollarSign}
           intent="primary"
+          isLoading={salesLoading}
         />
         <MetricCard
           title="Total Inventory"
@@ -46,6 +67,7 @@ function StaffDashboard() {
           subtitle={`${inventory?.totalMedicines || 0} unique medicines`}
           icon={Package}
           intent="neutral"
+          isLoading={inventoryLoading}
         />
         <MetricCard
           title="Low Stock Alerts"
@@ -53,6 +75,7 @@ function StaffDashboard() {
           subtitle={`${inventory?.outOfStockCount || 0} out of stock`}
           icon={AlertCircle}
           intent="warning"
+          isLoading={inventoryLoading}
         />
         <MetricCard
           title="Expiring Soon"
@@ -60,6 +83,7 @@ function StaffDashboard() {
           subtitle="Within next 30 days"
           icon={Clock}
           intent="danger"
+          isLoading={inventoryLoading}
         />
       </div>
 
@@ -72,7 +96,13 @@ function StaffDashboard() {
           </CardHeader>
           <CardContent className="flex-1">
             <div className="space-y-4">
-              {(topMedicines as any)?.slice(0, 5).map((item: any) => (
+              {topLoading ? (
+                Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="h-16 rounded-lg bg-muted/30 animate-pulse" />
+                ))
+              ) : (
+                <>
+                  {(topMedicines as any)?.slice(0, 5).map((item: any) => (
                 <div key={item.medicineId} className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/20">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-md bg-primary/10 text-primary flex items-center justify-center">
@@ -90,6 +120,8 @@ function StaffDashboard() {
               ))}
               {!topMedicines?.length && (
                 <p className="text-muted-foreground text-sm py-4 text-center">No sales data yet.</p>
+              )}
+                </>
               )}
             </div>
           </CardContent>
@@ -132,28 +164,39 @@ function StaffDashboard() {
       {/* Recent Sales */}
       <Card>
         <CardHeader>
-          <CardTitle>Recent Sales</CardTitle>
+          <CardTitle>Latest Sales</CardTitle>
+          <CardDescription>Most recent transactions, across all dates.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
-            {recentOrders?.slice(0, 5).map((order: any) => (
-              <Link key={order.id} href={`/sales/${order.id}`} className="block hover:bg-muted/30 rounded-lg p-3 transition-colors border border-transparent hover:border-border">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">Sale #{order.id?.toString().padStart(4, '0')}</p>
-                    <p className="text-sm text-muted-foreground">{order.patientName || "Walk-in"}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-bold">{formatCurrency(order.total)}</p>
-                    <Badge variant={order.paymentStatus === 'paid' ? 'default' : 'secondary'} className="capitalize text-xs">
-                      {order.paymentStatus}
-                    </Badge>
-                  </div>
-                </div>
-              </Link>
-            ))}
-            {!recentOrders?.length && (
-              <p className="text-muted-foreground text-sm py-4 text-center">No sales yet today.</p>
+            {ordersLoading ? (
+              Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="h-14 rounded-lg bg-muted/30 animate-pulse" />
+              ))
+            ) : (
+              <>
+                {recentOrders?.slice(0, 5).map((order: any) => (
+                  <Link key={order.id} href={`/sales/${order.id}`} className="block hover:bg-muted/30 rounded-lg p-3 transition-colors border border-transparent hover:border-border">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium">Sale #{order.id?.toString().padStart(4, '0')}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {order.patientName || "Walk-in"} · {formatDate(order.createdAt)}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold">{formatCurrency(order.total)}</p>
+                        <Badge variant={order.paymentStatus === 'paid' ? 'default' : 'secondary'} className="capitalize text-xs">
+                          {order.paymentStatus}
+                        </Badge>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+                {!recentOrders?.length && (
+                  <p className="text-muted-foreground text-sm py-4 text-center">No sales recorded yet.</p>
+                )}
+              </>
             )}
           </div>
         </CardContent>
@@ -162,7 +205,7 @@ function StaffDashboard() {
   );
 }
 
-function MetricCard({ title, value, subtitle, icon: Icon, intent = "neutral" }: any) {
+function MetricCard({ title, value, subtitle, icon: Icon, intent = "neutral", isLoading = false }: any) {
   const colors = {
     primary: "text-primary bg-primary/10",
     warning: "text-amber-600 bg-amber-500/10",
@@ -176,14 +219,18 @@ function MetricCard({ title, value, subtitle, icon: Icon, intent = "neutral" }: 
         <div className="flex items-center justify-between">
           <div className="space-y-1">
             <p className="text-sm font-medium text-muted-foreground">{title}</p>
-            <p className="text-3xl font-bold tracking-tight text-foreground">{value}</p>
+            {isLoading ? (
+              <div className="h-9 w-16 bg-muted/50 animate-pulse rounded" />
+            ) : (
+              <p className="text-3xl font-bold tracking-tight text-foreground">{value}</p>
+            )}
           </div>
           <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${colors[intent as keyof typeof colors]}`}>
             <Icon size={24} />
           </div>
         </div>
         <div className="mt-4 text-sm text-muted-foreground">
-          {subtitle}
+          {isLoading ? <div className="h-4 w-24 bg-muted/40 animate-pulse rounded" /> : subtitle}
         </div>
       </CardContent>
     </Card>

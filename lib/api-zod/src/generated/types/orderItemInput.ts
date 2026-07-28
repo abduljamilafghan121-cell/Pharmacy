@@ -10,4 +10,6 @@ export interface OrderItemInput {
   medicineId: number;
   /** @minimum 1 */
   quantity: number;
+  /** ID of the packaging unit being sold (from medicine_units). If omitted, base unit is assumed. */
+  unitId?: number;
 }

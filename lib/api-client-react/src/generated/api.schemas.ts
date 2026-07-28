@@ -13,6 +13,67 @@ export interface ErrorResponse {
   error: string;
 }
 
+export interface MedicineUnit {
+  id: number;
+  medicineId: number;
+  unitName: string;
+  conversionFactorToBase: number;
+  isBaseUnit: boolean;
+}
+
+export interface MedicineUnitInput {
+  /** @minLength 1 */
+  unitName: string;
+  /** @minimum 1 */
+  conversionFactorToBase: number;
+  isBaseUnit: boolean;
+}
+
+export interface Patient {
+  id: number;
+  name: string;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  createdAt: string;
+}
+
+export interface PatientInput {
+  /** @minLength 1 */
+  name: string;
+  phone?: string;
+  notes?: string;
+}
+
+export interface PatientUpdate {
+  /** @minLength 1 */
+  name?: string;
+  phone?: string;
+  notes?: string;
+}
+
+export interface UpdateProfileInput {
+  /** @minLength 1 */
+  name?: string;
+  /** @nullable */
+  phone?: string | null;
+}
+
+export interface ChangePasswordInput {
+  currentPassword: string;
+  /** @minLength 6 */
+  newPassword: string;
+}
+
+export type UserRegisterInputRole = typeof UserRegisterInputRole[keyof typeof UserRegisterInputRole];
+
+
+export const UserRegisterInputRole = {
+  admin: 'admin',
+  pharmacist: 'pharmacist',
+} as const;
+
 export interface UserRegisterInput {
   /** @minLength 1 */
   name: string;
@@ -20,7 +81,7 @@ export interface UserRegisterInput {
   /** @minLength 6 */
   password: string;
   phone?: string;
-  role?: 'admin' | 'pharmacist';
+  role?: UserRegisterInputRole;
 }
 
 export interface UserLoginInput {
@@ -49,23 +110,6 @@ export interface User {
 export interface AuthResponse {
   token: string;
   user: User;
-}
-
-export interface Patient {
-  id: number;
-  name: string;
-  /** @nullable */
-  phone?: string | null;
-  /** @nullable */
-  notes?: string | null;
-  createdAt: string;
-}
-
-export interface PatientInput {
-  /** @minLength 1 */
-  name: string;
-  phone?: string;
-  notes?: string;
 }
 
 export interface Category {
@@ -143,6 +187,7 @@ export interface Medicine {
   /** @nullable */
   imageUrl?: string | null;
   createdAt: string;
+  units?: MedicineUnit[];
 }
 
 export interface MedicineInput {
@@ -153,7 +198,7 @@ export interface MedicineInput {
   supplierId?: number;
   manufacturer?: string;
   batchNumber?: string;
-  expiryDate?: string;
+  expiryDate: string;
   /** @minimum 0 */
   quantity: number;
   price: string;
@@ -190,12 +235,11 @@ export const PrescriptionStatus = {
 
 export interface Prescription {
   id: number;
+  customerId: number;
   /** @nullable */
-  patientId?: number | null;
+  customerName?: string | null;
   /** @nullable */
-  patientName?: string | null;
-  /** @nullable */
-  doctorName?: string | null;
+  imageUrl?: string | null;
   status: PrescriptionStatus;
   /** @nullable */
   verifiedBy?: number | null;
@@ -222,6 +266,9 @@ export interface OrderItem {
   /** @nullable */
   medicineName?: string | null;
   quantity: number;
+  /** @nullable */
+  unitName?: string | null;
+  conversionFactorToBase?: number;
   price: string;
 }
 
@@ -229,6 +276,8 @@ export interface OrderItemInput {
   medicineId: number;
   /** @minimum 1 */
   quantity: number;
+  /** ID of the packaging unit being sold (from medicine_units). If omitted, base unit is assumed. */
+  unitId?: number;
 }
 
 export type OrderStatus = typeof OrderStatus[keyof typeof OrderStatus];
@@ -236,7 +285,9 @@ export type OrderStatus = typeof OrderStatus[keyof typeof OrderStatus];
 
 export const OrderStatus = {
   pending: 'pending',
+  processing: 'processing',
   dispensed: 'dispensed',
+  delivered: 'delivered',
   cancelled: 'cancelled',
 } as const;
 
@@ -251,18 +302,15 @@ export const OrderPaymentStatus = {
 
 export interface Order {
   id: number;
+  customerId: number;
   /** @nullable */
-  patientId?: number | null;
+  customerName?: string | null;
   /** @nullable */
-  patientName?: string | null;
-  /** @nullable */
-  servedByName?: string | null;
+  prescriptionId?: number | null;
   status: OrderStatus;
   subtotal?: string;
   total: string;
   paymentStatus: OrderPaymentStatus;
-  /** @nullable */
-  notes?: string | null;
   createdAt: string;
 }
 
@@ -271,7 +319,9 @@ export type OrderDetailStatus = typeof OrderDetailStatus[keyof typeof OrderDetai
 
 export const OrderDetailStatus = {
   pending: 'pending',
+  processing: 'processing',
   dispensed: 'dispensed',
+  delivered: 'delivered',
   cancelled: 'cancelled',
 } as const;
 
@@ -286,12 +336,11 @@ export const OrderDetailPaymentStatus = {
 
 export interface OrderDetail {
   id: number;
+  customerId: number;
   /** @nullable */
-  patientId?: number | null;
+  customerName?: string | null;
   /** @nullable */
-  patientName?: string | null;
-  /** @nullable */
-  servedByName?: string | null;
+  prescriptionId?: number | null;
   status: OrderDetailStatus;
   subtotal?: string;
   total: string;
@@ -302,11 +351,21 @@ export interface OrderDetail {
   createdAt: string;
 }
 
+export type OrderInputPaymentMethod = typeof OrderInputPaymentMethod[keyof typeof OrderInputPaymentMethod];
+
+
+export const OrderInputPaymentMethod = {
+  cash: 'cash',
+  card: 'card',
+  insurance: 'insurance',
+} as const;
+
 export interface OrderInput {
   patientId?: number;
   patientName?: string;
-  paymentMethod: 'cash' | 'card' | 'insurance';
+  paymentMethod?: OrderInputPaymentMethod;
   notes?: string;
+  prescriptionId?: number;
   /** @minItems 1 */
   items: OrderItemInput[];
 }
@@ -377,6 +436,9 @@ export interface PurchaseOrderItem {
   /** @nullable */
   medicineName?: string | null;
   quantity: number;
+  /** @nullable */
+  unitName?: string | null;
+  conversionFactorToBase?: number;
   unitPrice: string;
 }
 
@@ -384,6 +446,8 @@ export interface PurchaseOrderItemInput {
   medicineId: number;
   /** @minimum 1 */
   quantity: number;
+  /** ID of the packaging unit being ordered. If omitted, base unit is assumed. */
+  unitId?: number;
   unitPrice: string;
 }
 
@@ -411,6 +475,87 @@ export interface PurchaseOrderInput {
   supplierId: number;
   /** @minItems 1 */
   items: PurchaseOrderItemInput[];
+}
+
+export interface SupplierLedgerSummary {
+  supplierId: number;
+  supplierName: string;
+  totalOrdered: string;
+  totalPaid: string;
+  balance: string;
+  /** @nullable */
+  lastActivity?: string | null;
+}
+
+export type SupplierLedgerEntryEntryType = typeof SupplierLedgerEntryEntryType[keyof typeof SupplierLedgerEntryEntryType];
+
+
+export const SupplierLedgerEntryEntryType = {
+  purchase_order: 'purchase_order',
+  payment: 'payment',
+} as const;
+
+export interface SupplierLedgerEntry {
+  id: number;
+  entryType: SupplierLedgerEntryEntryType;
+  /** @nullable */
+  purchaseOrderId?: number | null;
+  /** @nullable */
+  paymentId?: number | null;
+  date: string;
+  description: string;
+  debit: string;
+  credit: string;
+  runningBalance: string;
+}
+
+export interface SupplierLedgerDetail {
+  supplierId: number;
+  supplierName: string;
+  /** @nullable */
+  contactName?: string | null;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  totalOrdered: string;
+  totalPaid: string;
+  balance: string;
+  entries: SupplierLedgerEntry[];
+}
+
+export type SupplierPaymentInputMethod = typeof SupplierPaymentInputMethod[keyof typeof SupplierPaymentInputMethod];
+
+
+export const SupplierPaymentInputMethod = {
+  cash: 'cash',
+  bank: 'bank',
+  cheque: 'cheque',
+  transfer: 'transfer',
+} as const;
+
+export interface SupplierPaymentInput {
+  supplierId: number;
+  /** @nullable */
+  purchaseOrderId?: number | null;
+  amount: string;
+  method: SupplierPaymentInputMethod;
+  /** @nullable */
+  note?: string | null;
+}
+
+export interface SupplierPayment {
+  id: number;
+  supplierId: number;
+  /** @nullable */
+  supplierName?: string | null;
+  /** @nullable */
+  purchaseOrderId?: number | null;
+  amount: string;
+  method: string;
+  /** @nullable */
+  note?: string | null;
+  createdAt: string;
 }
 
 export interface SalesByDay {
@@ -450,6 +595,14 @@ export interface RevenueReport {
   byDate: RevenueByRange[];
 }
 
+export type ChangePassword200 = {
+  message?: string;
+};
+
+export type ListPatientsParams = {
+search?: string;
+};
+
 export type ListMedicinesParams = {
 search?: string;
 categoryId?: number;
@@ -465,3 +618,4 @@ export type GetRevenueReportParams = {
 from?: string;
 to?: string;
 };
+

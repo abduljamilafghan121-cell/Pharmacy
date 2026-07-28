@@ -7,6 +7,8 @@
  */
 
 export interface PrescriptionInput {
-  imageUrl?: string;
+  patientId?: number;
+  patientName?: string;
+  doctorName?: string;
   notes?: string;
 }

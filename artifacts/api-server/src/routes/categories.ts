@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { db, categoriesTable } from "@workspace/db";
 import { CreateCategoryBody, UpdateCategoryBody, UpdateCategoryParams, DeleteCategoryParams } from "@workspace/api-zod";
 import { requireAuth, requireRole } from "../middlewares/auth";
-import { formatZodError, getDbErrorMessage } from "../lib/api-errors";
+import { formatZodError, getDbErrorMessage, getDeleteErrorMessage } from "../lib/api-errors";
 
 const router: IRouter = Router();
 
@@ -51,7 +51,7 @@ router.delete("/categories/:id", requireAuth, requireRole("admin"), async (req, 
     await db.delete(categoriesTable).where(eq(categoriesTable.id, params.data.id));
     res.sendStatus(204);
   } catch (err) {
-    res.status(500).json({ error: "Failed to delete category.", detail: getDbErrorMessage(err) });
+    res.status(409).json({ error: getDeleteErrorMessage(err, "category") });
   }
 });
 

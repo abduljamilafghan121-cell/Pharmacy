@@ -11,8 +11,6 @@ export type OrderStatusUpdateStatus = typeof OrderStatusUpdateStatus[keyof typeo
 
 export const OrderStatusUpdateStatus = {
   pending: 'pending',
-  processing: 'processing',
   dispensed: 'dispensed',
-  delivered: 'delivered',
   cancelled: 'cancelled',
 } as const;

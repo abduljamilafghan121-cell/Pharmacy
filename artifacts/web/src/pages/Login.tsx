@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation, Link } from "wouter";
 import { useLoginUser } from "@workspace/api-client-react";
 import { useAuth } from "@/hooks/use-auth";
@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Pill, ArrowRight, Loader2 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
+import { usePharmacySettings } from "@/hooks/use-pharmacy-settings";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -14,9 +15,17 @@ export default function Login() {
   const [, setLocation] = useLocation();
   const { login, user } = useAuth();
   const { toast } = useToast();
+  const { data: pharmacy } = usePharmacySettings();
+
+  // Bug fix: calling setLocation directly during render (instead of in an
+  // effect) is a React anti-pattern — it can trigger "update during render"
+  // warnings and race with other navigation. Redirecting a logged-in user
+  // away from /login belongs in an effect.
+  useEffect(() => {
+    if (user) setLocation("/dashboard");
+  }, [user, setLocation]);
 
   if (user) {
-    setLocation("/dashboard");
     return null;
   }
 
@@ -48,10 +57,14 @@ export default function Login() {
         <div className="w-full max-w-md space-y-8">
           <div>
             <div className="flex items-center gap-2 text-primary font-bold text-3xl tracking-tight mb-8">
-              <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-primary-foreground">
-                <Pill size={24} />
+              <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-primary-foreground overflow-hidden shrink-0">
+                {pharmacy?.logoUrl ? (
+                  <img src={pharmacy.logoUrl} alt="" className="w-full h-full object-contain" />
+                ) : (
+                  <Pill size={24} />
+                )}
               </div>
-              PharmaCore
+              {pharmacy?.name ?? "My Pharmacy"}
             </div>
             <h2 className="mt-6 text-3xl font-extrabold text-foreground tracking-tight">
               Sign in to your account
@@ -73,11 +86,14 @@ export default function Login() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@pharmacore.com"
+                  placeholder="you@pharmacy.com"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="password">Password</Label>
+                  <Link href="/forgot-password" className="text-xs text-primary hover:underline">Forgot password?</Link>
+                </div>
                 <Input
                   id="password"
                   name="password"

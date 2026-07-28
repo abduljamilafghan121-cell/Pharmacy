@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useRoute } from "wouter";
 import { useGetMedicine, useDeleteMedicine } from "@workspace/api-client-react";
 import { useAuth } from "@/hooks/use-auth";
@@ -6,10 +7,15 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Pill, ArrowLeft, Trash2, Info, AlertTriangle } from "lucide-react";
+import { Pill, ArrowLeft, Trash2, Info, AlertTriangle, CalendarClock, Layers, Ban, Truck } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useToast } from "@/components/ui/use-toast";
 import { Link } from "wouter";
+import { useMedicineBatches, useWriteOffBatch } from "@/hooks/use-medicine-batches";
+import { useCreateSupplierReturn } from "@/hooks/use-tier5";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 
 export default function MedicineDetail() {
   const [, params] = useRoute("/medicines/:id");
@@ -22,6 +28,15 @@ export default function MedicineDetail() {
   const { data: medicine, isLoading } = useGetMedicine(id, {
     query: { enabled: !!id } as any
   });
+  const { data: batches } = useMedicineBatches(id);
+  const writeOffMutation = useWriteOffBatch();
+  const [writeOffBatch, setWriteOffBatch] = useState<any | null>(null);
+  const [writeOffReason, setWriteOffReason] = useState("");
+  const createSupplierReturn = useCreateSupplierReturn();
+  const [returningBatch, setReturningBatch] = useState<any | null>(null);
+  const [returnQty, setReturnQty] = useState(1);
+  const [returnReason, setReturnReason] = useState("");
+  const [returnUnitCost, setReturnUnitCost] = useState<string>("");
 
   const deleteMutation = useDeleteMedicine({
     mutation: {
@@ -39,6 +54,7 @@ export default function MedicineDetail() {
 
   const isOutOfStock = medicine.quantity === 0;
   const isLowStock = medicine.quantity > 0 && medicine.quantity <= 10;
+  const isExpired = medicine.expiryDate && medicine.expiryDate < new Date().toISOString().slice(0, 10);
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto animate-in fade-in duration-300">
@@ -84,7 +100,12 @@ export default function MedicineDetail() {
           </div>
 
           {/* Stock status */}
-          {isOutOfStock ? (
+          {isExpired ? (
+            <div className="mb-6 flex items-center gap-2 rounded-xl bg-destructive/10 p-4 text-destructive">
+              <CalendarClock size={18} />
+              <span className="font-medium">Expired on {new Date(`${medicine.expiryDate}T00:00:00`).toLocaleDateString()} — not available for sale</span>
+            </div>
+          ) : isOutOfStock ? (
             <div className="flex items-center gap-2 p-4 rounded-xl bg-destructive/10 text-destructive mb-6">
               <AlertTriangle size={18} />
               <span className="font-medium">Out of Stock</span>
@@ -102,8 +123,8 @@ export default function MedicineDetail() {
           )}
 
           {/* Quick sale link */}
-          <Button size="lg" className="mb-4" asChild>
-            <Link href="/new-sale">Add to Sale</Link>
+          <Button size="lg" className="mb-4" asChild disabled={isExpired || isOutOfStock}>
+            <Link href={`/new-sale?medicineId=${medicine.id}`}>Add to Checkout</Link>
           </Button>
 
           {/* Admin actions */}
@@ -135,13 +156,13 @@ export default function MedicineDetail() {
         )}
         {medicine.batchNumber && (
           <Card><CardContent className="p-4">
-            <p className="text-xs text-muted-foreground mb-1">Batch Number</p>
+            <p className="text-xs text-muted-foreground mb-1">Next Batch to Sell (FEFO)</p>
             <p className="font-medium">{medicine.batchNumber}</p>
           </CardContent></Card>
         )}
         {medicine.expiryDate && (
           <Card><CardContent className="p-4">
-            <p className="text-xs text-muted-foreground mb-1">Expiry Date</p>
+            <p className="text-xs text-muted-foreground mb-1">Nearest Expiry</p>
             <p className="font-medium">{medicine.expiryDate}</p>
           </CardContent></Card>
         )}
@@ -152,6 +173,220 @@ export default function MedicineDetail() {
           </CardContent></Card>
         )}
       </div>
+
+      {/* Batch breakdown — the actual source of truth for stock, FEFO order */}
+      {batches && batches.length > 0 && (
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <Layers className="w-4 h-4 text-primary" />
+              <h2 className="font-semibold">Stock Batches</h2>
+              <span className="text-xs text-muted-foreground">(sold oldest-expiry-first)</span>
+            </div>
+            <div className="space-y-2">
+              {batches.map((batch, idx) => {
+                const isDepleted = batch.quantity === 0;
+                const today = new Date().toISOString().slice(0, 10);
+                const isBatchExpired = !!batch.expiryDate && batch.expiryDate < today;
+                const isNearExpiry = !!batch.expiryDate && !isBatchExpired &&
+                  batch.expiryDate <= new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+                const isNextUp = !isDepleted && batches.slice(0, idx).every(b => b.quantity === 0);
+
+                return (
+                  <div
+                    key={batch.id}
+                    className={`flex items-center justify-between rounded-lg border p-3 text-sm ${
+                      batch.writeOffAt ? "opacity-50 border-border" :
+                      isDepleted ? "opacity-40 border-border" :
+                      isBatchExpired ? "border-destructive/40 bg-destructive/5" :
+                      isNearExpiry ? "border-amber-400/50 bg-amber-500/5" :
+                      "border-border"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div>
+                        <p className="font-medium">
+                          {batch.batchNumber ?? "No batch number"}
+                          {isNextUp && (
+                            <Badge variant="outline" className="ml-2 border-primary/40 text-primary text-[10px]">Next up</Badge>
+                          )}
+                          {batch.writeOffAt && (
+                            <Badge variant="outline" className="ml-2 border-muted-foreground/40 text-muted-foreground text-[10px]">Written off</Badge>
+                          )}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {batch.expiryDate
+                            ? `Expires ${new Date(`${batch.expiryDate}T00:00:00`).toLocaleDateString()}`
+                            : "No expiry set"}
+                          {isBatchExpired && !batch.writeOffAt && <span className="text-destructive font-medium"> · Expired</span>}
+                          {isNearExpiry && <span className="text-amber-600 font-medium"> · Expiring soon</span>}
+                          {batch.writeOffAt && <span> · {batch.writeOffReason}</span>}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="text-right">
+                        <p className={`font-semibold ${isDepleted ? "text-muted-foreground" : ""}`}>
+                          {batch.quantity} units
+                        </p>
+                        {batch.costPrice && (
+                          <p className="text-xs text-muted-foreground">{formatCurrency(batch.costPrice)}/unit cost</p>
+                        )}
+                      </div>
+                      {batch.quantity > 0 && !batch.writeOffAt && (user?.role === "admin" || user?.role === "pharmacist") && (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => { setReturningBatch(batch); setReturnReason(""); setReturnQty(batch.quantity); setReturnUnitCost(batch.costPrice ?? ""); }}
+                          >
+                            <Truck className="w-3.5 h-3.5 mr-1" /> Return to Supplier
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => { setWriteOffBatch(batch); setWriteOffReason(""); }}
+                          >
+                            <Ban className="w-3.5 h-3.5 mr-1" /> Write off
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <Dialog open={!!returningBatch} onOpenChange={(o) => !o && setReturningBatch(null)}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>Return batch {returningBatch?.batchNumber ?? ""} to supplier</DialogTitle>
+          </DialogHeader>
+          {returningBatch && (
+            <div className="space-y-4 py-2">
+              {!medicine.supplierId ? (
+                <p className="text-sm text-destructive">This medicine has no supplier on record — set one before processing a return.</p>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="return-qty">
+                      Quantity to return <span className="text-muted-foreground font-normal">(max {returningBatch.quantity})</span>
+                    </Label>
+                    <Input
+                      id="return-qty"
+                      type="number"
+                      min={1}
+                      max={returningBatch.quantity}
+                      value={returnQty}
+                      onChange={(e) => setReturnQty(Math.max(1, Number(e.target.value) || 1))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="return-unit-cost">Unit cost credited <span className="text-muted-foreground font-normal">(per base unit)</span></Label>
+                    <Input
+                      id="return-unit-cost"
+                      type="number"
+                      min={0}
+                      step="0.0001"
+                      value={returnUnitCost}
+                      onChange={(e) => setReturnUnitCost(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="return-reason">Reason *</Label>
+                    <Textarea
+                      id="return-reason"
+                      placeholder="e.g. Damaged in transit, wrong item shipped, expired on arrival…"
+                      value={returnReason}
+                      onChange={(e) => setReturnReason(e.target.value)}
+                      rows={3}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    This removes the returned quantity from stock and credits {formatCurrency((parseFloat(returnUnitCost) || 0) * returnQty)} toward what you owe this supplier.
+                  </p>
+                  <Button
+                    className="w-full"
+                    disabled={!returnReason.trim() || createSupplierReturn.isPending}
+                    onClick={() => {
+                      createSupplierReturn.mutate(
+                        {
+                          supplierId: medicine.supplierId,
+                          reason: returnReason.trim(),
+                          items: [{
+                            medicineId: id,
+                            medicineBatchId: returningBatch.id,
+                            quantity: returnQty,
+                            unitCost: parseFloat(returnUnitCost) || undefined,
+                          }],
+                        },
+                        {
+                          onSuccess: (data) => {
+                            toast({ title: `Returned to supplier — credited ${formatCurrency(data.totalAmount)}` });
+                            setReturningBatch(null);
+                          },
+                          onError: (err) => toast({ title: "Return failed", description: err.message, variant: "destructive" }),
+                        }
+                      );
+                    }}
+                  >
+                    {createSupplierReturn.isPending ? "Processing…" : "Confirm Return"}
+                  </Button>
+                </>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!writeOffBatch} onOpenChange={(o) => !o && setWriteOffBatch(null)}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>Write off batch {writeOffBatch?.batchNumber ?? ""}</DialogTitle>
+          </DialogHeader>
+          {writeOffBatch && (
+            <div className="space-y-4 py-2">
+              <p className="text-sm text-muted-foreground">
+                This removes <strong>{writeOffBatch.quantity} units</strong> from sellable stock permanently (e.g. expired or damaged).
+                This cannot be undone.
+              </p>
+              <div className="space-y-2">
+                <Label htmlFor="writeoff-reason">Reason *</Label>
+                <Textarea
+                  id="writeoff-reason"
+                  placeholder="e.g. Expired, water damage, broken seal…"
+                  value={writeOffReason}
+                  onChange={(e) => setWriteOffReason(e.target.value)}
+                  rows={3}
+                />
+              </div>
+              <Button
+                variant="destructive"
+                className="w-full"
+                disabled={!writeOffReason.trim() || writeOffMutation.isPending}
+                onClick={() => {
+                  writeOffMutation.mutate(
+                    { medicineId: id, batchId: writeOffBatch.id, reason: writeOffReason.trim() },
+                    {
+                      onSuccess: (data) => {
+                        toast({ title: `Wrote off ${data.quantityWrittenOff} units` });
+                        setWriteOffBatch(null);
+                      },
+                      onError: (err) => toast({ title: "Write-off failed", description: err.message, variant: "destructive" }),
+                    }
+                  );
+                }}
+              >
+                {writeOffMutation.isPending ? "Processing…" : "Confirm Write-off"}
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

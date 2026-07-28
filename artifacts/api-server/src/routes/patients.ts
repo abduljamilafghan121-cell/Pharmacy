@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq, ilike } from "drizzle-orm";
 import { db, patientsTable } from "@workspace/db";
 import { CreatePatientBody, GetPatientParams, UpdatePatientParams, UpdatePatientBody } from "@workspace/api-zod";
-import { requireAuth } from "../middlewares/auth";
+import { requireAuth, requireRole } from "../middlewares/auth";
 import { formatZodError, getDbErrorMessage } from "../lib/api-errors";
 
 const router: IRouter = Router();
@@ -19,7 +19,7 @@ router.get("/patients", requireAuth, async (req, res): Promise<void> => {
   }
 });
 
-router.post("/patients", requireAuth, async (req, res): Promise<void> => {
+router.post("/patients", requireAuth, requireRole("admin", "pharmacist", "cashier"), async (req, res): Promise<void> => {
   const parsed = CreatePatientBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: formatZodError(parsed.error) });
@@ -45,7 +45,7 @@ router.get("/patients/:id", requireAuth, async (req, res): Promise<void> => {
   }
 });
 
-router.patch("/patients/:id", requireAuth, async (req, res): Promise<void> => {
+router.patch("/patients/:id", requireAuth, requireRole("admin", "pharmacist", "cashier"), async (req, res): Promise<void> => {
   const params = UpdatePatientParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: formatZodError(params.error) }); return; }
   const parsed = UpdatePatientBody.safeParse(req.body);

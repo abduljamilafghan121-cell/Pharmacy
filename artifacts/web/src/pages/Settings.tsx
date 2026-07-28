@@ -1,20 +1,151 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { UserCircle, Plus, Trash2, Tag } from "lucide-react";
-import { useListCategories, useCreateCategory, useDeleteCategory } from "@workspace/api-client-react";
+import { UserCircle, Plus, Trash2, Tag, Save, Lock, Building2, ImagePlus, X } from "lucide-react";
+import {
+  useListCategories,
+  useCreateCategory,
+  useDeleteCategory,
+  useUpdateProfile,
+  useChangePassword,
+} from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { getListCategoriesQueryKey } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
+import { usePharmacySettings, useUpdatePharmacySettings } from "@/hooks/use-pharmacy-settings";
 
 export default function Settings() {
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const isAdmin = user?.role === "admin";
 
+  // ── Pharmacy Details (branding, used on receipts / dispensing slips) ────
+  const { data: pharmacySettings, isLoading: pharmacySettingsLoading } = usePharmacySettings();
+  const updatePharmacySettings = useUpdatePharmacySettings();
+
+  const [pharmacyName, setPharmacyName] = useState("");
+  const [pharmacyAddress, setPharmacyAddress] = useState("");
+  const [pharmacyPhone, setPharmacyPhone] = useState("");
+  const [pharmacyEmail, setPharmacyEmail] = useState("");
+  const [pharmacyLicense, setPharmacyLicense] = useState("");
+  const [taxRatePercent, setTaxRatePercent] = useState("0");
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+
+  // Sync local form state once the settings load (or change from elsewhere).
+  useEffect(() => {
+    if (!pharmacySettings) return;
+    setPharmacyName(pharmacySettings.name ?? "");
+    setPharmacyAddress(pharmacySettings.address ?? "");
+    setPharmacyPhone(pharmacySettings.phone ?? "");
+    setPharmacyEmail(pharmacySettings.email ?? "");
+    setPharmacyLicense(pharmacySettings.licenseNumber ?? "");
+    setTaxRatePercent(pharmacySettings.taxRatePercent ?? "0");
+    setLogoPreview(pharmacySettings.logoUrl ?? null);
+  }, [pharmacySettings]);
+
+  const MAX_LOGO_MB = 2;
+
+  function handleLogoSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Please choose an image file", variant: "destructive" });
+      return;
+    }
+    if (file.size > MAX_LOGO_MB * 1024 * 1024) {
+      toast({ title: `Logo must be under ${MAX_LOGO_MB}MB`, variant: "destructive" });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => setLogoPreview(reader.result as string);
+    reader.readAsDataURL(file);
+  }
+
+  function handleRemoveLogo() {
+    setLogoPreview(null);
+    if (logoInputRef.current) logoInputRef.current.value = "";
+  }
+
+  function handleSavePharmacyDetails(e: React.FormEvent) {
+    e.preventDefault();
+    updatePharmacySettings.mutate(
+      {
+        name: pharmacyName.trim() || "My Pharmacy",
+        address: pharmacyAddress.trim() || null,
+        phone: pharmacyPhone.trim() || null,
+        email: pharmacyEmail.trim() || null,
+        licenseNumber: pharmacyLicense.trim() || null,
+        taxRatePercent: taxRatePercent.trim() || "0",
+        logoUrl: logoPreview,
+      } as any,
+      {
+        onSuccess: () => toast({ title: "Pharmacy details updated" }),
+        onError: (err: any) => toast({ title: err?.message ?? "Failed to update pharmacy details", variant: "destructive" }),
+      }
+    );
+  }
+
+  // ── Profile ────────────────────────────────────────────────────────────
+  const [name, setName] = useState(user?.name ?? "");
+  const [phone, setPhone] = useState(user?.phone ?? "");
+
+  const updateProfile = useUpdateProfile({
+    mutation: {
+      onSuccess: (updated) => {
+        updateUser({ name: updated.name, phone: updated.phone ?? undefined });
+        toast({ title: "Profile updated" });
+      },
+      onError: (err: any) => {
+        const msg = err?.response?.data?.error ?? "Failed to update profile";
+        toast({ title: msg, variant: "destructive" });
+      },
+    },
+  });
+
+  function handleSaveProfile(e: React.FormEvent) {
+    e.preventDefault();
+    updateProfile.mutate({ data: { name: name.trim(), phone: phone.trim() || null } });
+  }
+
+  // ── Password ───────────────────────────────────────────────────────────
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+
+  const changePassword = useChangePassword({
+    mutation: {
+      onSuccess: () => {
+        setCurrentPassword("");
+        setNewPassword("");
+        setConfirmPassword("");
+        toast({ title: "Password changed successfully" });
+      },
+      onError: (err: any) => {
+        const msg = err?.response?.data?.error ?? "Failed to change password";
+        toast({ title: msg, variant: "destructive" });
+      },
+    },
+  });
+
+  function handleChangePassword(e: React.FormEvent) {
+    e.preventDefault();
+    if (newPassword !== confirmPassword) {
+      toast({ title: "New passwords do not match", variant: "destructive" });
+      return;
+    }
+    if (newPassword.length < 6) {
+      toast({ title: "New password must be at least 6 characters", variant: "destructive" });
+      return;
+    }
+    changePassword.mutate({ data: { currentPassword, newPassword } });
+  }
+
+  // ── Categories ─────────────────────────────────────────────────────────
   const { data: categories = [], isLoading: categoriesLoading } = useListCategories();
   const createCategory = useCreateCategory({
     mutation: {
@@ -53,40 +184,271 @@ export default function Settings() {
         <p className="text-muted-foreground mt-1">Manage your account and system configuration.</p>
       </div>
 
+      {/* Pharmacy Details */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Building2 className="w-5 h-5 text-primary" />
+            <div>
+              <CardTitle>Pharmacy Details</CardTitle>
+              <CardDescription>
+                Shown on printed receipts and dispensing slips.
+                {!isAdmin && " Only admins can make changes here."}
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {pharmacySettingsLoading ? (
+            <p className="text-sm text-muted-foreground">Loading…</p>
+          ) : (
+            <form onSubmit={handleSavePharmacyDetails} className="space-y-5">
+              {/* Logo */}
+              <div className="space-y-2">
+                <Label>Pharmacy Logo</Label>
+                <div className="flex items-center gap-4">
+                  <div className="w-20 h-20 rounded-lg border border-dashed border-border bg-muted/40 flex items-center justify-center overflow-hidden shrink-0">
+                    {logoPreview ? (
+                      <img src={logoPreview} alt="Pharmacy logo" className="w-full h-full object-contain" />
+                    ) : (
+                      <ImagePlus className="w-6 h-6 text-muted-foreground" />
+                    )}
+                  </div>
+                  {isAdmin && (
+                    <div className="space-y-2">
+                      <div className="flex gap-2">
+                        <Button type="button" variant="outline" size="sm" onClick={() => logoInputRef.current?.click()}>
+                          <ImagePlus className="w-4 h-4 mr-2" />
+                          {logoPreview ? "Change Logo" : "Upload Logo"}
+                        </Button>
+                        {logoPreview && (
+                          <Button type="button" variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={handleRemoveLogo}>
+                            <X className="w-4 h-4 mr-1" /> Remove
+                          </Button>
+                        )}
+                      </div>
+                      <input
+                        ref={logoInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleLogoSelect}
+                      />
+                      <p className="text-xs text-muted-foreground">PNG, JPG or SVG. Up to {MAX_LOGO_MB}MB.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="pharmacy-name">Pharmacy Name</Label>
+                  <Input
+                    id="pharmacy-name"
+                    value={pharmacyName}
+                    onChange={e => setPharmacyName(e.target.value)}
+                    placeholder="e.g. MediCare Pharmacy"
+                    disabled={!isAdmin}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="pharmacy-license">License Number</Label>
+                  <Input
+                    id="pharmacy-license"
+                    value={pharmacyLicense}
+                    onChange={e => setPharmacyLicense(e.target.value)}
+                    placeholder="e.g. PH-8842"
+                    disabled={!isAdmin}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="pharmacy-tax">Tax Rate (%)</Label>
+                  <Input
+                    id="pharmacy-tax"
+                    type="number"
+                    min={0}
+                    max={100}
+                    step="0.01"
+                    value={taxRatePercent}
+                    onChange={e => setTaxRatePercent(e.target.value)}
+                    placeholder="e.g. 5 for 5%"
+                    disabled={!isAdmin}
+                  />
+                  <p className="text-xs text-muted-foreground">Applied automatically to every sale at checkout. Leave 0 if not applicable.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="pharmacy-phone">Phone Number</Label>
+                  <Input
+                    id="pharmacy-phone"
+                    value={pharmacyPhone}
+                    onChange={e => setPharmacyPhone(e.target.value)}
+                    placeholder="e.g. +1 555 000 0000"
+                    disabled={!isAdmin}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="pharmacy-email">Contact Email</Label>
+                  <Input
+                    id="pharmacy-email"
+                    type="email"
+                    value={pharmacyEmail}
+                    onChange={e => setPharmacyEmail(e.target.value)}
+                    placeholder="e.g. contact@pharmacy.com"
+                    disabled={!isAdmin}
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="pharmacy-address">Address</Label>
+                  <Input
+                    id="pharmacy-address"
+                    value={pharmacyAddress}
+                    onChange={e => setPharmacyAddress(e.target.value)}
+                    placeholder="Street, city, area"
+                    disabled={!isAdmin}
+                  />
+                </div>
+              </div>
+
+              {isAdmin && (
+                <div className="flex justify-end">
+                  <Button type="submit" disabled={updatePharmacySettings.isPending}>
+                    <Save className="w-4 h-4 mr-2" />
+                    {updatePharmacySettings.isPending ? "Saving…" : "Save Pharmacy Details"}
+                  </Button>
+                </div>
+              )}
+            </form>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Profile */}
       <Card>
         <CardHeader>
-          <CardTitle>Profile Details</CardTitle>
-          <CardDescription>Your personal account information.</CardDescription>
+          <div className="flex items-center gap-2">
+            <UserCircle className="w-5 h-5 text-primary" />
+            <div>
+              <CardTitle>Profile Details</CardTitle>
+              <CardDescription>Update your name and phone number.</CardDescription>
+            </div>
+          </div>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="flex items-center gap-4 pb-4 border-b border-border">
-            <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center text-primary">
-              <UserCircle className="w-12 h-12" />
+        <CardContent>
+          <div className="flex items-center gap-4 pb-5 mb-5 border-b border-border">
+            <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center text-primary">
+              <UserCircle className="w-10 h-10" />
             </div>
             <div>
-              <p className="font-bold text-xl">{user?.name}</p>
-              <p className="text-muted-foreground capitalize">{user?.role} Account</p>
+              <p className="font-bold text-lg">{user?.name}</p>
+              <p className="text-sm text-muted-foreground capitalize">{user?.role} Account</p>
+              <p className="text-sm text-muted-foreground">{user?.email}</p>
             </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <Label>Full Name</Label>
-              <Input value={user?.name} readOnly disabled />
+          <form onSubmit={handleSaveProfile} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="profile-name">Full Name</Label>
+                <Input
+                  id="profile-name"
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  placeholder="Your full name"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="profile-phone">Phone Number</Label>
+                <Input
+                  id="profile-phone"
+                  value={phone}
+                  onChange={e => setPhone(e.target.value)}
+                  placeholder="e.g. +1 555 000 0000"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Email Address</Label>
+                <Input value={user?.email ?? ""} readOnly disabled className="opacity-60" />
+                <p className="text-xs text-muted-foreground">Email cannot be changed here.</p>
+              </div>
+              <div className="space-y-2">
+                <Label>Member Since</Label>
+                <Input
+                  value={user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : ""}
+                  readOnly
+                  disabled
+                  className="opacity-60"
+                />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>Email Address</Label>
-              <Input value={user?.email} readOnly disabled />
+            <div className="flex justify-end">
+              <Button type="submit" disabled={updateProfile.isPending}>
+                <Save className="w-4 h-4 mr-2" />
+                {updateProfile.isPending ? "Saving…" : "Save Profile"}
+              </Button>
             </div>
-            <div className="space-y-2">
-              <Label>Phone Number</Label>
-              <Input value={user?.phone || "Not provided"} readOnly disabled />
-            </div>
-            <div className="space-y-2">
-              <Label>Account Created</Label>
-              <Input value={user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : ""} readOnly disabled />
+          </form>
+        </CardContent>
+      </Card>
+
+      {/* Password */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Lock className="w-5 h-5 text-primary" />
+            <div>
+              <CardTitle>Change Password</CardTitle>
+              <CardDescription>Enter your current password then choose a new one.</CardDescription>
             </div>
           </div>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleChangePassword} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="current-password">Current Password</Label>
+              <Input
+                id="current-password"
+                type="password"
+                value={currentPassword}
+                onChange={e => setCurrentPassword(e.target.value)}
+                placeholder="Your current password"
+                required
+                autoComplete="current-password"
+              />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="new-password">New Password</Label>
+                <Input
+                  id="new-password"
+                  type="password"
+                  value={newPassword}
+                  onChange={e => setNewPassword(e.target.value)}
+                  placeholder="At least 6 characters"
+                  required
+                  autoComplete="new-password"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="confirm-password">Confirm New Password</Label>
+                <Input
+                  id="confirm-password"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={e => setConfirmPassword(e.target.value)}
+                  placeholder="Repeat new password"
+                  required
+                  autoComplete="new-password"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <Button type="submit" disabled={changePassword.isPending}>
+                <Lock className="w-4 h-4 mr-2" />
+                {changePassword.isPending ? "Changing…" : "Change Password"}
+              </Button>
+            </div>
+          </form>
         </CardContent>
       </Card>
 
@@ -102,7 +464,6 @@ export default function Settings() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Add form */}
           <form onSubmit={handleAddCategory} className="flex gap-2">
             <Input
               placeholder="Category name (e.g. Antibiotics)"
@@ -122,7 +483,6 @@ export default function Settings() {
             </Button>
           </form>
 
-          {/* List */}
           {categoriesLoading ? (
             <p className="text-sm text-muted-foreground">Loading…</p>
           ) : categories.length === 0 ? (

@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { db, suppliersTable } from "@workspace/db";
 import { CreateSupplierBody, UpdateSupplierBody, GetSupplierParams, UpdateSupplierParams, DeleteSupplierParams } from "@workspace/api-zod";
 import { requireAuth, requireRole } from "../middlewares/auth";
-import { formatZodError, getDbErrorMessage } from "../lib/api-errors";
+import { formatZodError, getDbErrorMessage, getDeleteErrorMessage } from "../lib/api-errors";
 
 const router: IRouter = Router();
 
@@ -63,7 +63,7 @@ router.delete("/suppliers/:id", requireAuth, requireRole("admin"), async (req, r
     await db.delete(suppliersTable).where(eq(suppliersTable.id, params.data.id));
     res.sendStatus(204);
   } catch (err) {
-    res.status(500).json({ error: "Failed to delete supplier.", detail: getDbErrorMessage(err) });
+    res.status(409).json({ error: getDeleteErrorMessage(err, "supplier") });
   }
 });
 

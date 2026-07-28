@@ -9,5 +9,12 @@
       "tag": "0000_greedy_plazm",
       "breakpoints": true
     }
+    ,{
+      "idx": 1,
+      "version": "7",
+      "when": 1753430400000,
+      "tag": "0001_supplier_payments",
+      "breakpoints": true
+    }
   ]
 }

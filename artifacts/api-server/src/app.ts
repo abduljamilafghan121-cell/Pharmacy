@@ -26,7 +26,13 @@ app.use(
     },
   }),
 );
-app.use(cors());
+app.use(
+  cors({
+    origin: true,          // echo back the request Origin (same-origin passes through too)
+    allowedHeaders: ["Authorization", "Content-Type", "Accept"],
+    credentials: true,
+  }),
+);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

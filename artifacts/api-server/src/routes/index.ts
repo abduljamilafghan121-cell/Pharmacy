@@ -10,7 +10,14 @@ import prescriptionsRouter from "./prescriptions";
 import ordersRouter from "./orders";
 import paymentsRouter from "./payments";
 import purchaseOrdersRouter from "./purchase-orders";
+import supplierLedgerRouter from "./supplier-ledger";
 import reportsRouter from "./reports";
+import settingsRouter from "./settings";
+import auditLogsRouter from "./audit-logs";
+import notificationsRouter from "./notifications";
+import supplierReturnsRouter from "./supplier-returns";
+import cashShiftsRouter from "./cash-shifts";
+import insuranceClaimsRouter from "./insurance-claims";
 
 const router: IRouter = Router();
 
@@ -25,6 +32,13 @@ router.use(prescriptionsRouter);
 router.use(ordersRouter);
 router.use(paymentsRouter);
 router.use(purchaseOrdersRouter);
+router.use(supplierLedgerRouter);
 router.use(reportsRouter);
+router.use(settingsRouter);
+router.use(auditLogsRouter);
+router.use(notificationsRouter);
+router.use(supplierReturnsRouter);
+router.use(cashShiftsRouter);
+router.use(insuranceClaimsRouter);
 
 export default router;

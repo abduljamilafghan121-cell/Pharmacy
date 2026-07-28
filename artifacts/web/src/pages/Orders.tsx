@@ -1,14 +1,47 @@
+import { useMemo, useState } from "react";
 import { useListOrders } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { Receipt, ArrowRight } from "lucide-react";
+import { Receipt, ArrowRight, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function Sales() {
   const { data: orders, isLoading } = useListOrders();
+
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [paymentFilter, setPaymentFilter] = useState<string>("all");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+
+  const hasActiveFilters = !!(search || statusFilter !== "all" || paymentFilter !== "all" || fromDate || toDate);
+
+  const filteredOrders = useMemo(() => {
+    if (!orders) return orders;
+    const q = search.trim().toLowerCase();
+    return orders.filter((order: any) => {
+      if (statusFilter !== "all" && order.status !== statusFilter) return false;
+      if (paymentFilter !== "all" && order.paymentStatus !== paymentFilter) return false;
+      const orderDate = order.createdAt?.slice(0, 10);
+      if (fromDate && orderDate < fromDate) return false;
+      if (toDate && orderDate > toDate) return false;
+      if (q) {
+        const saleNo = `#${order.id.toString().padStart(4, "0")}`.toLowerCase();
+        const haystack = `${saleNo} ${order.id} ${order.patientName ?? ""} ${order.servedByName ?? ""}`.toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [orders, search, statusFilter, paymentFilter, fromDate, toDate]);
+
+  function clearFilters() {
+    setSearch(""); setStatusFilter("all"); setPaymentFilter("all"); setFromDate(""); setToDate("");
+  }
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -21,6 +54,54 @@ export default function Sales() {
           <Link href="/new-sale">+ New Sale</Link>
         </Button>
       </div>
+
+      <Card>
+        <CardContent className="p-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by sale #, patient, or staff…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-full sm:w-[150px]"><SelectValue placeholder="Status" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All statuses</SelectItem>
+              <SelectItem value="dispensed">Dispensed</SelectItem>
+              <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="cancelled">Cancelled</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={paymentFilter} onValueChange={setPaymentFilter}>
+            <SelectTrigger className="w-full sm:w-[150px]"><SelectValue placeholder="Payment" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All payments</SelectItem>
+              <SelectItem value="paid">Paid</SelectItem>
+              <SelectItem value="unpaid">Unpaid</SelectItem>
+              <SelectItem value="refunded">Refunded</SelectItem>
+            </SelectContent>
+          </Select>
+          <div className="flex items-center gap-2">
+            <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="w-[150px]" aria-label="From date" />
+            <span className="text-muted-foreground text-sm">to</span>
+            <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="w-[150px]" aria-label="To date" />
+          </div>
+          {hasActiveFilters && (
+            <Button variant="ghost" size="sm" onClick={clearFilters}>
+              <X className="w-4 h-4 mr-1" /> Clear
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+
+      {hasActiveFilters && !isLoading && (
+        <p className="text-sm text-muted-foreground -mt-3">
+          Showing {filteredOrders?.length ?? 0} of {orders?.length ?? 0} sales
+        </p>
+      )}
 
       <Card>
         <CardContent className="p-0">
@@ -54,8 +135,18 @@ export default function Sales() {
                     </div>
                   </TableCell>
                 </TableRow>
+              ) : filteredOrders?.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
+                    <div className="flex flex-col items-center justify-center space-y-3">
+                      <Search className="w-10 h-10 text-muted-foreground/50" />
+                      <p>No sales match your filters.</p>
+                      <Button variant="outline" size="sm" onClick={clearFilters}>Clear filters</Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
               ) : (
-                orders?.map((order) => (
+                filteredOrders?.map((order) => (
                   <TableRow key={order.id} className="hover:bg-muted/30 transition-colors">
                     <TableCell className="font-medium text-foreground">
                       <Link href={`/sales/${order.id}`} className="hover:underline">

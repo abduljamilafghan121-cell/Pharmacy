@@ -4,6 +4,7 @@ import { z } from "zod/v4";
 import { usersTable } from "./users";
 import { patientsTable } from "./patients";
 import { medicinesTable } from "./medicines";
+import { prescriptionsTable } from "./prescriptions";
 
 export const orderStatusEnum = pgEnum("order_status", ["pending", "dispensed", "cancelled"]);
 export const paymentStatusEnum = pgEnum("payment_status", ["unpaid", "paid", "refunded"]);
@@ -12,9 +13,12 @@ export const ordersTable = pgTable("orders", {
   id: serial("id").primaryKey(),
   patientId: integer("patient_id").references(() => patientsTable.id),
   patientName: text("patient_name"),             // quick walk-in name if no patient record
+  prescriptionId: integer("prescription_id").references(() => prescriptionsTable.id),
   servedBy: integer("served_by").references(() => usersTable.id), // pharmacist who made the sale
   status: orderStatusEnum("status").notNull().default("dispensed"),
   subtotal: numeric("subtotal", { precision: 10, scale: 2 }).notNull().default("0"),
+  discountAmount: numeric("discount_amount", { precision: 10, scale: 2 }).notNull().default("0"),
+  taxAmount: numeric("tax_amount", { precision: 10, scale: 2 }).notNull().default("0"),
   total: numeric("total", { precision: 10, scale: 2 }).notNull().default("0"),
   paymentStatus: paymentStatusEnum("payment_status").notNull().default("unpaid"),
   notes: text("notes"),
@@ -26,8 +30,22 @@ export const orderItemsTable = pgTable("order_items", {
   id: serial("id").primaryKey(),
   orderId: integer("order_id").notNull().references(() => ordersTable.id),
   medicineId: integer("medicine_id").notNull().references(() => medicinesTable.id),
+  // quantity is the user-facing amount (e.g. 2 strips). conversionFactorToBase converts to base units.
   quantity: integer("quantity").notNull(),
+  unitName: text("unit_name"),
+  conversionFactorToBase: integer("conversion_factor_to_base").notNull().default(1),
   price: numeric("price", { precision: 10, scale: 2 }).notNull(),
+  returnedQuantity: integer("returned_quantity").notNull().default(0),
+});
+
+export const orderItemReturnsTable = pgTable("order_item_returns", {
+  id: serial("id").primaryKey(),
+  orderItemId: integer("order_item_id").notNull().references(() => orderItemsTable.id),
+  quantity: integer("quantity").notNull(), // in the item's display unit, same as orderItems.quantity
+  reason: text("reason"),
+  refundAmount: numeric("refund_amount", { precision: 10, scale: 2 }).notNull(),
+  processedBy: integer("processed_by").references(() => usersTable.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const insertOrderSchema = createInsertSchema(ordersTable).omit({ id: true, createdAt: true, updatedAt: true });

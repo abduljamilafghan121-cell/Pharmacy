@@ -11,6 +11,9 @@ export const prescriptionsTable = pgTable("prescriptions", {
   patientId: integer("patient_id").references(() => patientsTable.id),
   patientName: text("patient_name"),       // quick name if no patient record
   doctorName: text("doctor_name"),
+  // Uploaded prescription image/PDF, stored as a data URI (consistent with
+  // how the pharmacy logo is stored — no external file storage required).
+  attachmentUrl: text("attachment_url"),
   status: prescriptionStatusEnum("status").notNull().default("pending"),
   verifiedBy: integer("verified_by").references(() => usersTable.id),
   notes: text("notes"),

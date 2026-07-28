@@ -6,12 +6,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { FileText, CheckCircle, XCircle, Plus, User, Stethoscope } from "lucide-react";
+import { FileText, CheckCircle, XCircle, Plus, User, Stethoscope, Paperclip, ImagePlus, AlertCircle } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { getErrorMessage } from "@/lib/errors";
 import { useToast } from "@/components/ui/use-toast";
 import { ErrorState } from "@/components/ui/error-state";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { useAttachPrescriptionFile } from "@/hooks/use-prescription-attachment";
 
 export default function Prescriptions() {
   const { data: prescriptions, isLoading, isError, error, refetch } = useListPrescriptions();
@@ -64,8 +65,31 @@ function NewPrescriptionDialog({ onClose }: { onClose: () => void }) {
   const [patientName, setPatientName] = useState("");
   const [doctorName, setDoctorName] = useState("");
   const [notes, setNotes] = useState("");
+  const [attachmentUrl, setAttachmentUrl] = useState<string | null>(null);
+  const [attachmentName, setAttachmentName] = useState<string | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  const MAX_MB = 5;
+
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/") && file.type !== "application/pdf") {
+      toast({ title: "Please choose an image or PDF file", variant: "destructive" });
+      return;
+    }
+    if (file.size > MAX_MB * 1024 * 1024) {
+      toast({ title: `File must be under ${MAX_MB}MB`, variant: "destructive" });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setAttachmentUrl(reader.result as string);
+      setAttachmentName(file.name);
+    };
+    reader.readAsDataURL(file);
+  }
 
   const createMutation = useCreatePrescription({
     mutation: {
@@ -87,7 +111,8 @@ function NewPrescriptionDialog({ onClose }: { onClose: () => void }) {
         patientName: patientName.trim() || undefined,
         doctorName: doctorName.trim() || undefined,
         notes: notes.trim() || undefined,
-      },
+        ...(attachmentUrl ? { attachmentUrl } : {}),
+      } as any,
     });
   };
 
@@ -109,6 +134,29 @@ function NewPrescriptionDialog({ onClose }: { onClose: () => void }) {
           <Label htmlFor="rxNotes">Prescription Notes</Label>
           <Input id="rxNotes" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Medicines, dosage, instructions…" />
         </div>
+        <div className="space-y-1.5">
+          <Label>Prescription Image / PDF</Label>
+          {attachmentUrl ? (
+            <div className="flex items-center gap-3 border border-border rounded-md p-2">
+              {attachmentUrl.startsWith("data:image") ? (
+                <img src={attachmentUrl} alt="Prescription" className="w-14 h-14 object-cover rounded" />
+              ) : (
+                <FileText className="w-8 h-8 text-muted-foreground" />
+              )}
+              <span className="text-sm text-muted-foreground truncate flex-1">{attachmentName}</span>
+              <Button type="button" variant="ghost" size="sm" onClick={() => { setAttachmentUrl(null); setAttachmentName(null); }}>
+                Remove
+              </Button>
+            </div>
+          ) : (
+            <label className="flex items-center justify-center gap-2 border border-dashed border-border rounded-md p-4 cursor-pointer hover:border-primary/50 text-sm text-muted-foreground">
+              <ImagePlus className="w-4 h-4" />
+              Upload prescription image or PDF
+              <input type="file" accept="image/*,application/pdf" className="hidden" onChange={handleFileSelect} />
+            </label>
+          )}
+          <p className="text-xs text-muted-foreground">Required for verification — a pharmacist must see the original before approving it.</p>
+        </div>
         <div className="flex gap-2 justify-end pt-2">
           <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
           <Button type="submit" disabled={createMutation.isPending}>
@@ -125,6 +173,32 @@ function PrescriptionCard({ rx }: { rx: any }) {
   const queryClient = useQueryClient();
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
+
+  const attachMutation = useAttachPrescriptionFile();
+
+  function handleInlineAttach(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/") && file.type !== "application/pdf") {
+      toast({ title: "Please choose an image or PDF file", variant: "destructive" });
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: "File must be under 5MB", variant: "destructive" });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      attachMutation.mutate(
+        { id: rx.id, attachmentUrl: reader.result as string },
+        {
+          onSuccess: () => toast({ title: "Prescription image attached." }),
+          onError: (err) => toast({ title: "Failed to attach file", description: getErrorMessage(err), variant: "destructive" }),
+        }
+      );
+    };
+    reader.readAsDataURL(file);
+  }
 
   const verifyMutation = useVerifyPrescription({
     mutation: {
@@ -188,52 +262,81 @@ function PrescriptionCard({ rx }: { rx: any }) {
               <p>{rx.notes}</p>
             </div>
           )}
+
+          {rx.attachmentUrl ? (
+            <a
+              href={rx.attachmentUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 border border-border rounded-md p-2 hover:border-primary/50 transition-colors"
+            >
+              {rx.attachmentUrl.startsWith("data:image") ? (
+                <img src={rx.attachmentUrl} alt="Prescription" className="w-10 h-10 object-cover rounded" />
+              ) : (
+                <FileText className="w-6 h-6 text-muted-foreground" />
+              )}
+              <span className="text-xs text-muted-foreground">View attached file</span>
+            </a>
+          ) : rx.status === "pending" ? (
+            <label className="flex items-center gap-2 border border-dashed border-amber-400/60 bg-amber-500/5 rounded-md p-2 cursor-pointer text-xs text-amber-700">
+              <Paperclip className="w-3.5 h-3.5" />
+              {attachMutation.isPending ? "Uploading…" : "Attach prescription image (required to verify)"}
+              <input type="file" accept="image/*,application/pdf" className="hidden" onChange={handleInlineAttach} disabled={attachMutation.isPending} />
+            </label>
+          ) : null}
         </div>
 
         {rx.status === 'pending' && (
-          <div className="flex gap-2 mt-auto pt-4 border-t border-border">
-            <Button
-              variant="default"
-              className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
-              disabled={verifyMutation.isPending}
-              onClick={() => verifyMutation.mutate({ id: rx.id, data: { notes: "Verified by pharmacist" } })}
-            >
-              <CheckCircle className="w-4 h-4 mr-2" /> Verify
-            </Button>
+          <div className="flex flex-col gap-2 mt-auto pt-4 border-t border-border">
+            {!rx.attachmentUrl && (
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <AlertCircle className="w-3.5 h-3.5" /> Attach the prescription image before verifying
+              </p>
+            )}
+            <div className="flex gap-2">
+              <Button
+                variant="default"
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                disabled={verifyMutation.isPending || !rx.attachmentUrl}
+                onClick={() => verifyMutation.mutate({ id: rx.id, data: { notes: "Verified by pharmacist" } })}
+              >
+                <CheckCircle className="w-4 h-4 mr-2" /> Verify
+              </Button>
 
-            <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
-              <DialogTrigger asChild>
-                <Button variant="destructive" className="flex-1">
-                  <XCircle className="w-4 h-4 mr-2" /> Reject
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Reject Prescription</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4 mt-2">
-                  <div className="space-y-1">
-                    <Label htmlFor="rejectReason">Reason for rejection *</Label>
-                    <Input
-                      id="rejectReason"
-                      value={rejectReason}
-                      onChange={e => setRejectReason(e.target.value)}
-                      placeholder="e.g. Illegible, expired, missing signature…"
-                    />
+              <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="destructive" className="flex-1">
+                    <XCircle className="w-4 h-4 mr-2" /> Reject
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Reject Prescription</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4 mt-2">
+                    <div className="space-y-1">
+                      <Label htmlFor="rejectReason">Reason for rejection *</Label>
+                      <Input
+                        id="rejectReason"
+                        value={rejectReason}
+                        onChange={e => setRejectReason(e.target.value)}
+                        placeholder="e.g. Illegible, expired, missing signature…"
+                      />
+                    </div>
+                    <div className="flex gap-2 justify-end">
+                      <Button variant="outline" onClick={() => setRejectDialogOpen(false)}>Cancel</Button>
+                      <Button
+                        variant="destructive"
+                        disabled={!rejectReason.trim() || rejectMutation.isPending}
+                        onClick={() => rejectMutation.mutate({ id: rx.id, data: { notes: rejectReason } })}
+                      >
+                        {rejectMutation.isPending ? "Rejecting…" : "Confirm Rejection"}
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex gap-2 justify-end">
-                    <Button variant="outline" onClick={() => setRejectDialogOpen(false)}>Cancel</Button>
-                    <Button
-                      variant="destructive"
-                      disabled={!rejectReason.trim() || rejectMutation.isPending}
-                      onClick={() => rejectMutation.mutate({ id: rx.id, data: { notes: rejectReason } })}
-                    >
-                      {rejectMutation.isPending ? "Rejecting…" : "Confirm Rejection"}
-                    </Button>
-                  </div>
-                </div>
-              </DialogContent>
-            </Dialog>
+                </DialogContent>
+              </Dialog>
+            </div>
           </div>
         )}
       </CardContent>

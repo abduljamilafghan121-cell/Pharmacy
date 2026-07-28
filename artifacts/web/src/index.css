@@ -118,3 +118,28 @@
     @apply font-sans antialiased bg-background text-foreground;
   }
 }
+
+/* Printable slips (receipt, dispensing slip, etc.) render inside an element
+   with id="printable-receipt" / "printable-slip". On print, hide everything
+   else on the page and show only that element, full width. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #printable-receipt,
+  #printable-receipt *,
+  #printable-slip,
+  #printable-slip * {
+    visibility: visible;
+  }
+  #printable-receipt,
+  #printable-slip {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+  @page {
+    margin: 12mm;
+  }
+}

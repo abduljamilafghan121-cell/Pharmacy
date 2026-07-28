@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Pill, ArrowRight, Loader2, ShieldCheck } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
+import { usePharmacySettings } from "@/hooks/use-pharmacy-settings";
 
 export default function Register() {
   const [name, setName] = useState("");
@@ -16,12 +17,13 @@ export default function Register() {
   const [, setLocation] = useLocation();
   const { login } = useAuth();
   const { toast } = useToast();
+  const { data: pharmacy } = usePharmacySettings();
 
   const registerMutation = useRegisterUser({
     mutation: {
       onSuccess: (data) => {
         login(data.token);
-        toast({ title: "Admin account created!", description: "Welcome to PharmaCore." });
+        toast({ title: "Admin account created!", description: "Welcome — you're all set up." });
         setLocation("/dashboard");
       },
       onError: (err: any) => {
@@ -51,10 +53,14 @@ export default function Register() {
           {/* Logo */}
           <div>
             <div className="flex items-center gap-2 text-primary font-bold text-3xl tracking-tight mb-6">
-              <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-primary-foreground">
-                <Pill size={24} />
+              <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-primary-foreground overflow-hidden shrink-0">
+                {pharmacy?.logoUrl ? (
+                  <img src={pharmacy.logoUrl} alt="" className="w-full h-full object-contain" />
+                ) : (
+                  <Pill size={24} />
+                )}
               </div>
-              PharmaCore
+              {pharmacy?.name ?? "My Pharmacy"}
             </div>
 
             {/* First-run badge */}
