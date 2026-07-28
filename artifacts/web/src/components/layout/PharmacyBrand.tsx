@@ -1,18 +1,11 @@
-import { Pill } from "lucide-react";
-import { usePharmacySettings } from "@/hooks/use-pharmacy-settings";
+import { BRAND } from "@/lib/brand";
 
-export function PharmacyBrand({ iconSize = 18, boxClassName = "w-8 h-8" }: { iconSize?: number; boxClassName?: string }) {
-  const { data: pharmacy } = usePharmacySettings();
+export function PharmacyBrand({ className = "h-8" }: { className?: string }) {
   return (
-    <>
-      <div className={`${boxClassName} rounded-lg bg-primary flex items-center justify-center text-primary-foreground overflow-hidden shrink-0`}>
-        {pharmacy?.logoUrl ? (
-          <img src={pharmacy.logoUrl} alt="" className="w-full h-full object-contain" />
-        ) : (
-          <Pill size={iconSize} />
-        )}
-      </div>
-      <span className="truncate">{pharmacy?.name ?? "My Pharmacy"}</span>
-    </>
+    <img
+      src={BRAND.logoUrl}
+      alt={BRAND.name}
+      className={`w-auto object-contain ${className}`}
+    />
   );
 }

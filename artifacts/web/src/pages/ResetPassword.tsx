@@ -3,9 +3,9 @@ import { Link, useSearch } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Pill, ArrowRight, Loader2, CheckCircle2 } from "lucide-react";
+import { ArrowRight, Loader2, CheckCircle2 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
-import { usePharmacySettings } from "@/hooks/use-pharmacy-settings";
+import { BRAND } from "@/lib/brand";
 
 const URL_ENDPOINT = `${import.meta.env.BASE_URL}api/auth/reset-password`.replace(/\/+/g, "/").replace(":/", "://");
 
@@ -17,7 +17,6 @@ export default function ResetPassword() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const { toast } = useToast();
-  const { data: pharmacy } = usePharmacySettings();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -45,11 +44,8 @@ export default function ResetPassword() {
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-muted/30 p-4">
       <div className="w-full max-w-md">
-        <div className="flex items-center gap-2 text-primary font-bold text-2xl tracking-tight mb-8 justify-center">
-          <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center text-primary-foreground overflow-hidden shrink-0">
-            {pharmacy?.logoUrl ? <img src={pharmacy.logoUrl} alt="" className="w-full h-full object-contain" /> : <Pill size={20} />}
-          </div>
-          {pharmacy?.name ?? "My Pharmacy"}
+        <div className="flex justify-center mb-8">
+          <img src={BRAND.logoUrl} alt={BRAND.name} className="h-20 w-auto object-contain" />
         </div>
 
         <div className="bg-card border border-border rounded-2xl p-8 shadow-sm">

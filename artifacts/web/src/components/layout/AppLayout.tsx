@@ -30,7 +30,8 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { NotificationBell } from "@/components/layout/NotificationBell";
-import { usePharmacySettings } from "@/hooks/use-pharmacy-settings";
+import { BRAND } from "@/lib/brand";
+import { useEffect } from "react";
 
 interface NavItem {
   label: string;
@@ -60,26 +61,15 @@ const navItems: NavItem[] = [
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
   const [location] = useLocation();
-  const { data: pharmacy } = usePharmacySettings();
-
   if (!user) return <>{children}</>;
+
+  // Set the browser tab title to the product name on mount
+  useEffect(() => { document.title = BRAND.name; }, []);
 
   const filteredNav = navItems.filter(item => item.roles.includes(user.role));
 
-  const brandName = pharmacy?.name ?? "PharmaCore";
-  const logoUrl = pharmacy?.logoUrl;
-
   const BrandLogo = () => (
-    <div className="flex items-center gap-2 text-primary font-bold text-xl tracking-tight">
-      <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground overflow-hidden shrink-0">
-        {logoUrl ? (
-          <img src={logoUrl} alt="" className="w-full h-full object-contain" />
-        ) : (
-          <Pill size={18} />
-        )}
-      </div>
-      <span className="truncate">{brandName}</span>
-    </div>
+    <img src={BRAND.logoUrl} alt={BRAND.name} className="h-9 w-auto object-contain" />
   );
 
   return (
@@ -151,11 +141,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               </SheetTrigger>
               <SheetContent side="left" className="w-[min(88vw,320px)] p-0">
                 <SheetHeader className="border-b border-border px-6 py-5 text-left">
-                  <SheetTitle className="flex items-center gap-2 text-primary">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground overflow-hidden">
-                      {logoUrl ? <img src={logoUrl} alt="" className="w-full h-full object-contain" /> : <Pill size={18} />}
-                    </span>
-                    {brandName}
+                  <SheetTitle className="flex items-center gap-2">
+                    <img src={BRAND.logoUrl} alt={BRAND.name} className="h-8 w-auto object-contain" />
                   </SheetTitle>
                   <SheetDescription>Pharmacy workspace navigation</SheetDescription>
                 </SheetHeader>

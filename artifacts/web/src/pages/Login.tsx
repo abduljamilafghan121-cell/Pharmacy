@@ -5,9 +5,9 @@ import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Pill, ArrowRight, Loader2 } from "lucide-react";
+import { ArrowRight, Loader2 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
-import { usePharmacySettings } from "@/hooks/use-pharmacy-settings";
+import { BRAND } from "@/lib/brand";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -15,8 +15,6 @@ export default function Login() {
   const [, setLocation] = useLocation();
   const { login, user } = useAuth();
   const { toast } = useToast();
-  const { data: pharmacy } = usePharmacySettings();
-
   // Bug fix: calling setLocation directly during render (instead of in an
   // effect) is a React anti-pattern — it can trigger "update during render"
   // warnings and race with other navigation. Redirecting a logged-in user
@@ -56,15 +54,8 @@ export default function Login() {
       <div className="flex-1 flex flex-col justify-center items-center px-6 py-12 lg:px-8">
         <div className="w-full max-w-md space-y-8">
           <div>
-            <div className="flex items-center gap-2 text-primary font-bold text-3xl tracking-tight mb-8">
-              <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-primary-foreground overflow-hidden shrink-0">
-                {pharmacy?.logoUrl ? (
-                  <img src={pharmacy.logoUrl} alt="" className="w-full h-full object-contain" />
-                ) : (
-                  <Pill size={24} />
-                )}
-              </div>
-              {pharmacy?.name ?? "My Pharmacy"}
+            <div className="flex justify-start mb-8">
+              <img src={BRAND.logoUrl} alt={BRAND.name} className="h-20 w-auto object-contain" />
             </div>
             <h2 className="mt-6 text-3xl font-extrabold text-foreground tracking-tight">
               Sign in to your account
