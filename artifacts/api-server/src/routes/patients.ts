@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, ilike } from "drizzle-orm";
+import { eq, ilike, sql } from "drizzle-orm";
 import { db, patientsTable } from "@workspace/db";
 import { CreatePatientBody, GetPatientParams, UpdatePatientParams, UpdatePatientBody } from "@workspace/api-zod";
 import { requireAuth, requireRole } from "../middlewares/auth";
@@ -10,10 +10,24 @@ const router: IRouter = Router();
 router.get("/patients", requireAuth, async (req, res): Promise<void> => {
   try {
     const search = req.query["search"] as string | undefined;
-    const rows = search
-      ? await db.select().from(patientsTable).where(ilike(patientsTable.name, `%${search}%`)).orderBy(patientsTable.name)
-      : await db.select().from(patientsTable).orderBy(patientsTable.name);
-    res.json(rows);
+    const pageRaw = req.query["page"];
+    const limitRaw = req.query["limit"];
+    const paginate = pageRaw != null || limitRaw != null;
+    const limit = Math.min(Math.max(parseInt(String(limitRaw ?? "50"), 10) || 50, 1), 200);
+    const page = Math.max(parseInt(String(pageRaw ?? "1"), 10) || 1, 1);
+    const offset = (page - 1) * limit;
+    const whereClause = search ? ilike(patientsTable.name, `%${search}%`) : undefined;
+
+    if (paginate) {
+      const [rows, countResult] = await Promise.all([
+        db.select().from(patientsTable).where(whereClause).orderBy(patientsTable.name).limit(limit).offset(offset),
+        db.select({ count: sql<number>`count(*)::int` }).from(patientsTable).where(whereClause),
+      ]);
+      res.json({ data: rows, total: countResult[0]?.count ?? 0, page, limit });
+    } else {
+      const rows = await db.select().from(patientsTable).where(whereClause).orderBy(patientsTable.name);
+      res.json(rows);
+    }
   } catch (err) {
     res.status(500).json({ error: "Failed to load patients.", detail: getDbErrorMessage(err) });
   }

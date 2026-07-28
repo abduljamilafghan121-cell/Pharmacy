@@ -13,7 +13,29 @@ router.post("/payments", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  // status is not part of the public PaymentInput schema; always complete on creation
+  // Validate the order exists, is not already paid, and the amount matches
+  const [order] = await db
+    .select({ id: ordersTable.id, total: ordersTable.total, paymentStatus: ordersTable.paymentStatus })
+    .from(ordersTable)
+    .where(eq(ordersTable.id, parsed.data.orderId));
+
+  if (!order) {
+    res.status(404).json({ error: "Order not found." });
+    return;
+  }
+  if (order.paymentStatus === "paid") {
+    res.status(409).json({ error: "This order is already paid." });
+    return;
+  }
+  const orderTotal = parseFloat(order.total);
+  const paymentAmount = parseFloat(parsed.data.amount);
+  if (Math.abs(paymentAmount - orderTotal) > 0.01) {
+    res.status(400).json({
+      error: `Payment amount (${paymentAmount.toFixed(2)}) does not match order total (${orderTotal.toFixed(2)}).`,
+    });
+    return;
+  }
+
   const status = "completed" as const;
   const transactionId = parsed.data.transactionId ?? null;
 
@@ -25,12 +47,7 @@ router.post("/payments", requireAuth, async (req, res): Promise<void> => {
     transactionId,
   }).returning();
 
-  // Only mark the order as paid when the payment actually completed
-  if (status === "completed") {
-    await db.update(ordersTable).set({ paymentStatus: "paid" }).where(eq(ordersTable.id, parsed.data.orderId));
-  } else if (status === "failed") {
-    await db.update(ordersTable).set({ paymentStatus: "unpaid" }).where(eq(ordersTable.id, parsed.data.orderId));
-  }
+  await db.update(ordersTable).set({ paymentStatus: "paid" }).where(eq(ordersTable.id, parsed.data.orderId));
 
   res.status(201).json(payment);
 });

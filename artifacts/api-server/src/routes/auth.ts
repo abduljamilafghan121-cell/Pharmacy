@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import bcrypt from "bcryptjs";
-import { eq } from "drizzle-orm";
+import { randomBytes } from "crypto";
+import { eq, and, gt } from "drizzle-orm";
 import { z } from "zod";
 import { db, usersTable } from "@workspace/db";
 import { RegisterUserBody, LoginUserBody } from "@workspace/api-zod";
@@ -250,6 +251,113 @@ router.patch("/users/:id", requireAuth, requireRole("admin"), async (req, res): 
   } catch (err) {
     logger.error({ err }, "users: failed to update staff account");
     res.status(500).json({ error: "Failed to update account.", detail: getDbErrorMessage(err) });
+  }
+});
+
+// ── Self-service forgot / reset password ─────────────────────────────────────
+
+const ForgotPasswordBody = z.object({ email: z.string().email() });
+
+router.post("/auth/forgot-password", async (req, res): Promise<void> => {
+  const parsed = ForgotPasswordBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: formatZodError(parsed.error) });
+    return;
+  }
+  try {
+    const [user] = await db
+      .select({ id: usersTable.id, email: usersTable.email, isActive: usersTable.isActive })
+      .from(usersTable)
+      .where(eq(usersTable.email, parsed.data.email));
+
+    // Always respond the same way regardless of whether the email exists —
+    // this avoids leaking which email addresses are registered.
+    if (!user || !user.isActive) {
+      res.json({ message: "If an account exists for that email, a reset link has been sent." });
+      return;
+    }
+
+    const rawToken = randomBytes(32).toString("hex");
+    const tokenHash = await bcrypt.hash(rawToken, 10);
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
+
+    await db.update(usersTable)
+      .set({ resetTokenHash: tokenHash, resetTokenExpiresAt: expiresAt })
+      .where(eq(usersTable.id, user.id));
+
+    // Construct the reset URL — embed userId so we can look up the user without
+    // a full-table scan: token format is "<userId>.<rawToken>"
+    const domain = process.env["REPLIT_DEV_DOMAIN"];
+    const base = domain ? `https://${domain}` : `http://localhost:5173`;
+    const resetLink = `${base}/reset-password?token=${user.id}.${rawToken}`;
+
+    logger.info({ userId: user.id }, "forgot-password: reset token issued");
+
+    // In development (no email provider), return the link directly so it can
+    // be used immediately. In production this would be sent via email.
+    const isProduction = process.env["NODE_ENV"] === "production";
+    res.json({
+      message: "If an account exists for that email, a reset link has been sent.",
+      ...(isProduction ? {} : { resetLink }),
+    });
+  } catch (err) {
+    logger.error({ err }, "forgot-password: failed");
+    res.status(500).json({ error: "Failed to process request.", detail: getDbErrorMessage(err) });
+  }
+});
+
+const ResetPasswordTokenBody = z.object({
+  token: z.string().min(1),
+  newPassword: z.string().min(6),
+});
+
+router.post("/auth/reset-password", async (req, res): Promise<void> => {
+  const parsed = ResetPasswordTokenBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: formatZodError(parsed.error) });
+    return;
+  }
+
+  // Token format: "<userId>.<rawToken>"
+  const dotIndex = parsed.data.token.indexOf(".");
+  if (dotIndex === -1) {
+    res.status(400).json({ error: "Invalid or expired reset link." });
+    return;
+  }
+  const userId = parseInt(parsed.data.token.slice(0, dotIndex), 10);
+  const rawToken = parsed.data.token.slice(dotIndex + 1);
+  if (!userId || !rawToken) {
+    res.status(400).json({ error: "Invalid or expired reset link." });
+    return;
+  }
+
+  try {
+    const [user] = await db
+      .select({ id: usersTable.id, resetTokenHash: usersTable.resetTokenHash, resetTokenExpiresAt: usersTable.resetTokenExpiresAt })
+      .from(usersTable)
+      .where(and(eq(usersTable.id, userId), gt(usersTable.resetTokenExpiresAt, new Date())));
+
+    if (!user || !user.resetTokenHash) {
+      res.status(400).json({ error: "This reset link has expired or already been used. Please request a new one." });
+      return;
+    }
+
+    const valid = await bcrypt.compare(rawToken, user.resetTokenHash);
+    if (!valid) {
+      res.status(400).json({ error: "This reset link has expired or already been used. Please request a new one." });
+      return;
+    }
+
+    const passwordHash = await bcrypt.hash(parsed.data.newPassword, 10);
+    await db.update(usersTable)
+      .set({ passwordHash, resetTokenHash: null, resetTokenExpiresAt: null })
+      .where(eq(usersTable.id, user.id));
+
+    logger.info({ userId: user.id }, "reset-password: password updated");
+    res.json({ message: "Password has been reset. You can now log in with your new password." });
+  } catch (err) {
+    logger.error({ err }, "reset-password: failed");
+    res.status(500).json({ error: "Failed to reset password.", detail: getDbErrorMessage(err) });
   }
 });
 

@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, ilike, or, and, lte, sql } from "drizzle-orm";
+import { eq, ilike, or, and, sql } from "drizzle-orm";
 import { db, medicinesTable, categoriesTable, medicineUnitsTable } from "@workspace/db";
 import {
   CreateMedicineBody, UpdateMedicineBody,
@@ -9,6 +9,7 @@ import {
 import { z } from "zod";
 import { requireAuth, requireRole } from "../middlewares/auth";
 import { formatZodError, getDbErrorMessage } from "../lib/api-errors";
+import { logAudit } from "../lib/audit";
 
 const router: IRouter = Router();
 
@@ -47,7 +48,7 @@ router.get("/medicines/low-stock", requireAuth, async (_req, res): Promise<void>
       .select(MEDICINE_SELECT)
       .from(medicinesTable)
       .leftJoin(categoriesTable, eq(medicinesTable.categoryId, categoriesTable.id))
-      .where(lte(medicinesTable.quantity, 10));
+      .where(sql`${medicinesTable.quantity} <= ${medicinesTable.reorderLevel}`);
     // Attach units
     const withUnits = await Promise.all(rows.map(async (r) => ({
       ...r, units: await fetchUnitsForMedicine(r.id),
@@ -84,7 +85,7 @@ router.get("/medicines/expiring", requireAuth, async (_req, res): Promise<void> 
   }
 });
 
-router.get("/medicines", async (req, res): Promise<void> => {
+router.get("/medicines", requireAuth, async (req, res): Promise<void> => {
   const params = ListMedicinesQueryParams.safeParse(req.query);
   if (!params.success) {
     res.status(400).json({ error: formatZodError(params.error) });
@@ -92,6 +93,13 @@ router.get("/medicines", async (req, res): Promise<void> => {
   }
   try {
     const { search, categoryId, prescriptionRequired } = params.data;
+    const pageRaw = req.query["page"];
+    const limitRaw = req.query["limit"];
+    const paginate = pageRaw != null || limitRaw != null;
+    const limit = Math.min(Math.max(parseInt(String(limitRaw ?? "50"), 10) || 50, 1), 200);
+    const page = Math.max(parseInt(String(pageRaw ?? "1"), 10) || 1, 1);
+    const offset = (page - 1) * limit;
+
     const conditions = [];
     if (search) {
       // Search by name, generic name, or barcode (barcode allows exact scan-to-search)
@@ -105,16 +113,31 @@ router.get("/medicines", async (req, res): Promise<void> => {
     }
     if (categoryId != null) conditions.push(eq(medicinesTable.categoryId, categoryId));
     if (prescriptionRequired != null) conditions.push(eq(medicinesTable.prescriptionRequired, prescriptionRequired));
-    const rows = await db
+    const whereClause = conditions.length ? and(...conditions) : undefined;
+
+    const baseQuery = db
       .select(MEDICINE_SELECT)
       .from(medicinesTable)
       .leftJoin(categoriesTable, eq(medicinesTable.categoryId, categoriesTable.id))
-      .where(conditions.length ? and(...conditions) : undefined)
+      .where(whereClause)
       .orderBy(medicinesTable.name);
-    const withUnits = await Promise.all(rows.map(async (r) => ({
-      ...r, units: await fetchUnitsForMedicine(r.id),
-    })));
-    res.json(withUnits);
+
+    if (paginate) {
+      const [rows, countResult] = await Promise.all([
+        baseQuery.limit(limit).offset(offset),
+        db.select({ count: sql<number>`count(*)::int` }).from(medicinesTable).where(whereClause),
+      ]);
+      const withUnits = await Promise.all(rows.map(async (r) => ({
+        ...r, units: await fetchUnitsForMedicine(r.id),
+      })));
+      res.json({ data: withUnits, total: countResult[0]?.count ?? 0, page, limit });
+    } else {
+      const rows = await baseQuery;
+      const withUnits = await Promise.all(rows.map(async (r) => ({
+        ...r, units: await fetchUnitsForMedicine(r.id),
+      })));
+      res.json(withUnits);
+    }
   } catch (err) {
     res.status(500).json({ error: "Failed to load medicines.", detail: getDbErrorMessage(err) });
   }
@@ -133,13 +156,14 @@ router.post("/medicines", requireAuth, requireRole("admin", "pharmacist"), async
     };
     const [row] = await db.insert(medicinesTable).values(values).returning();
     const full = await fetchMedicineWithUnits(row.id);
+    await logAudit(req.auth!.userId, "CREATE", "medicine", row.id, `Created medicine "${row.name}"`);
     res.status(201).json(full);
   } catch (err) {
     res.status(500).json({ error: "Failed to create medicine.", detail: getDbErrorMessage(err) });
   }
 });
 
-router.get("/medicines/:id", async (req, res): Promise<void> => {
+router.get("/medicines/:id", requireAuth, async (req, res): Promise<void> => {
   const params = GetMedicineParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: formatZodError(params.error) });
@@ -170,6 +194,7 @@ router.patch("/medicines/:id", requireAuth, requireRole("admin", "pharmacist"), 
     const [updated] = await db.update(medicinesTable).set(values).where(eq(medicinesTable.id, params.data.id)).returning();
     if (!updated) { res.status(404).json({ error: "Medicine not found." }); return; }
     const full = await fetchMedicineWithUnits(updated.id);
+    await logAudit(req.auth!.userId, "UPDATE", "medicine", updated.id, `Updated medicine "${updated.name}"`);
     res.json(full);
   } catch (err) {
     res.status(500).json({ error: "Failed to update medicine.", detail: getDbErrorMessage(err) });
@@ -180,10 +205,19 @@ router.delete("/medicines/:id", requireAuth, requireRole("admin", "pharmacist"),
   const params = DeleteMedicineParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: formatZodError(params.error) }); return; }
   try {
+    const [med] = await db.select({ name: medicinesTable.name }).from(medicinesTable).where(eq(medicinesTable.id, params.data.id));
+    if (!med) { res.status(404).json({ error: "Medicine not found." }); return; }
     await db.delete(medicinesTable).where(eq(medicinesTable.id, params.data.id));
+    await logAudit(req.auth!.userId, "DELETE", "medicine", params.data.id, `Deleted medicine "${med.name}"`);
     res.sendStatus(204);
   } catch (err) {
-    res.status(500).json({ error: "Failed to delete medicine.", detail: getDbErrorMessage(err) });
+    const msg = getDbErrorMessage(err);
+    // Foreign-key violation — medicine is referenced by sales history
+    if (msg.includes("foreign key") || msg.includes("violates")) {
+      res.status(409).json({ error: "Cannot delete this medicine because it has sales or purchase history. Deactivate it instead." });
+      return;
+    }
+    res.status(500).json({ error: "Failed to delete medicine.", detail: msg });
   }
 });
 
@@ -209,9 +243,10 @@ router.post("/medicines/:id/write-off", requireAuth, requireRole("admin", "pharm
       return;
     }
     const [updated] = await db.update(medicinesTable)
-      .set({ quantity: med.quantity - body.data.quantity })
+      .set({ quantity: sql`${medicinesTable.quantity} - ${body.data.quantity}` })
       .where(eq(medicinesTable.id, params.data.id))
       .returning();
+    await logAudit(req.auth!.userId, "WRITE_OFF", "medicine", updated.id, `Wrote off ${body.data.quantity} unit(s) of "${updated.name}": ${body.data.reason}`);
     res.json({ id: updated.id, name: updated.name, quantity: updated.quantity, written_off: body.data.quantity, reason: body.data.reason });
   } catch (err) {
     res.status(500).json({ error: "Failed to write off stock.", detail: getDbErrorMessage(err) });
