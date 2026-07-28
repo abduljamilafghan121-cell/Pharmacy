@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useListMedicines, useCreateOrder } from "@workspace/api-client-react";
+import { usePharmacySettings } from "@/hooks/use-pharmacy-settings";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,6 +54,7 @@ export default function NewSale() {
   const [patientName, setPatientName] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "card" | "insurance">("cash");
   const [notes, setNotes] = useState("");
+  const [discountAmount, setDiscountAmount] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [completedSale, setCompletedSale] = useState<any>(null);
 
@@ -64,6 +66,8 @@ export default function NewSale() {
   const initialMedicineHandled = useRef(false);
 
   const { data: medicines } = useListMedicines({ search: search || undefined });
+  const { data: pharmacySettings } = usePharmacySettings();
+  const taxRatePct = parseFloat(pharmacySettings?.taxRatePercent ?? "0");
   const createOrderMutation = useCreateOrder();
 
   const filteredMedicines = search.trim()
@@ -136,6 +140,10 @@ export default function NewSale() {
   const subtotal = saleItems.reduce((sum, i) => {
     return sum + priceForUnit(i.medicine.price, i.conversionFactor) * i.quantity;
   }, 0);
+  const discountClamped = Math.min(discountAmount, subtotal);
+  const afterDiscount = subtotal - discountClamped;
+  const taxAmount = (afterDiscount * taxRatePct) / 100;
+  const grandTotal = afterDiscount + taxAmount;
 
   const handleProcessSale = async () => {
     if (saleItems.length === 0) {
@@ -165,6 +173,7 @@ export default function NewSale() {
             quantity: i.quantity,
             ...(i.unitId ? { unitId: i.unitId } : {}),
           })) as any,
+          ...(discountClamped > 0 ? { discountAmount: discountClamped } as any : {}),
         },
       });
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
@@ -186,6 +195,7 @@ export default function NewSale() {
     setPatientName("");
     setPaymentMethod("cash");
     setNotes("");
+    setDiscountAmount(0);
     setCompletedSale(null);
     searchRef.current?.focus();
   };
@@ -473,12 +483,35 @@ export default function NewSale() {
 
           <div className="bg-muted/30 border border-border rounded-xl p-4 space-y-2">
             <div className="flex justify-between text-sm text-muted-foreground">
-              <span>Items</span>
-              <span>{saleItems.reduce((s, i) => s + i.quantity, 0)}</span>
-            </div>
-            <div className="flex justify-between font-bold text-xl">
-              <span>Total</span>
+              <span>Subtotal</span>
               <span>{formatCurrency(subtotal)}</span>
+            </div>
+            {/* Discount */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground shrink-0">Discount</span>
+              <div className="flex items-center gap-1 ml-auto">
+                <span className="text-sm text-muted-foreground">$</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={subtotal}
+                  step={0.01}
+                  value={discountAmount || ""}
+                  placeholder="0.00"
+                  onChange={(e) => setDiscountAmount(Math.max(0, parseFloat(e.target.value) || 0))}
+                  className="w-24 text-right h-7 rounded border border-input bg-background px-2 py-1 text-sm"
+                />
+              </div>
+            </div>
+            {taxRatePct > 0 && (
+              <div className="flex justify-between text-sm text-muted-foreground">
+                <span>Tax ({taxRatePct}%)</span>
+                <span>{formatCurrency(taxAmount)}</span>
+              </div>
+            )}
+            <div className="flex justify-between font-bold text-xl border-t border-border pt-2">
+              <span>Total</span>
+              <span>{formatCurrency(grandTotal)}</span>
             </div>
           </div>
 
@@ -488,7 +521,7 @@ export default function NewSale() {
             disabled={saleItems.length === 0 || isSubmitting}
           >
             {isSubmitting ? <Loader2 className="animate-spin mr-2" size={18} /> : null}
-            Process Sale · {formatCurrency(subtotal)}
+            Process Sale · {formatCurrency(grandTotal)}
           </Button>
         </div>
       </div>

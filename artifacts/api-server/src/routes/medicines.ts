@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, ilike, and, lte, sql } from "drizzle-orm";
+import { eq, ilike, or, and, lte, sql } from "drizzle-orm";
 import { db, medicinesTable, categoriesTable, medicineUnitsTable } from "@workspace/db";
 import {
   CreateMedicineBody, UpdateMedicineBody,
@@ -14,6 +14,7 @@ const router: IRouter = Router();
 
 const MEDICINE_SELECT = {
   id: medicinesTable.id, name: medicinesTable.name, genericName: medicinesTable.genericName,
+  barcode: medicinesTable.barcode,
   categoryId: medicinesTable.categoryId, categoryName: categoriesTable.name,
   supplierId: medicinesTable.supplierId, manufacturer: medicinesTable.manufacturer,
   batchNumber: medicinesTable.batchNumber, expiryDate: medicinesTable.expiryDate,
@@ -92,7 +93,16 @@ router.get("/medicines", async (req, res): Promise<void> => {
   try {
     const { search, categoryId, prescriptionRequired } = params.data;
     const conditions = [];
-    if (search) conditions.push(ilike(medicinesTable.name, `%${search}%`));
+    if (search) {
+      // Search by name, generic name, or barcode (barcode allows exact scan-to-search)
+      conditions.push(
+        or(
+          ilike(medicinesTable.name, `%${search}%`),
+          ilike(medicinesTable.genericName, `%${search}%`),
+          eq(medicinesTable.barcode, search),
+        )!
+      );
+    }
     if (categoryId != null) conditions.push(eq(medicinesTable.categoryId, categoryId));
     if (prescriptionRequired != null) conditions.push(eq(medicinesTable.prescriptionRequired, prescriptionRequired));
     const rows = await db
@@ -174,6 +184,37 @@ router.delete("/medicines/:id", requireAuth, requireRole("admin", "pharmacist"),
     res.sendStatus(204);
   } catch (err) {
     res.status(500).json({ error: "Failed to delete medicine.", detail: getDbErrorMessage(err) });
+  }
+});
+
+// ── Expired-stock write-off (T3.12) ──────────────────────────────────────────
+
+const WriteOffParams = z.object({ id: z.coerce.number().int().positive() });
+const WriteOffBody = z.object({
+  quantity: z.number().int().min(1),
+  reason: z.string().min(1).max(500),
+});
+
+router.post("/medicines/:id/write-off", requireAuth, requireRole("admin", "pharmacist"), async (req, res): Promise<void> => {
+  const params = WriteOffParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  const body = WriteOffBody.safeParse(req.body);
+  if (!body.success) { res.status(400).json({ error: formatZodError(body.error) }); return; }
+  try {
+    const [med] = await db.select({ id: medicinesTable.id, name: medicinesTable.name, quantity: medicinesTable.quantity })
+      .from(medicinesTable).where(eq(medicinesTable.id, params.data.id));
+    if (!med) { res.status(404).json({ error: "Medicine not found." }); return; }
+    if (body.data.quantity > med.quantity) {
+      res.status(400).json({ error: `Cannot write off ${body.data.quantity} units — only ${med.quantity} in stock.` });
+      return;
+    }
+    const [updated] = await db.update(medicinesTable)
+      .set({ quantity: med.quantity - body.data.quantity })
+      .where(eq(medicinesTable.id, params.data.id))
+      .returning();
+    res.json({ id: updated.id, name: updated.name, quantity: updated.quantity, written_off: body.data.quantity, reason: body.data.reason });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to write off stock.", detail: getDbErrorMessage(err) });
   }
 });
 

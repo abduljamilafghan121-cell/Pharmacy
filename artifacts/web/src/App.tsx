@@ -25,6 +25,12 @@ import Reports from '@/pages/Reports';
 import Settings from '@/pages/Settings';
 import Users from '@/pages/Users';
 import SupplierLedger from '@/pages/SupplierLedger';
+import ForgotPassword from '@/pages/ForgotPassword';
+import ResetPassword from '@/pages/ResetPassword';
+import AuditLog from '@/pages/AuditLog';
+import CashRegister from '@/pages/CashRegister';
+import InsuranceClaims from '@/pages/InsuranceClaims';
+import SupplierReturns from '@/pages/SupplierReturns';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -138,6 +144,20 @@ function Router() {
         <Route path="/users">
           <ProtectedRoute component={Users} roles={['admin']} />
         </Route>
+        <Route path="/audit-log">
+          <ProtectedRoute component={AuditLog} roles={['admin']} />
+        </Route>
+        <Route path="/cash-register">
+          <ProtectedRoute component={CashRegister} roles={['admin', 'pharmacist', 'cashier']} />
+        </Route>
+        <Route path="/insurance-claims">
+          <ProtectedRoute component={InsuranceClaims} roles={['admin', 'pharmacist']} />
+        </Route>
+        <Route path="/supplier-returns">
+          <ProtectedRoute component={SupplierReturns} roles={['admin', 'pharmacist']} />
+        </Route>
+        <Route path="/forgot-password" component={ForgotPassword} />
+        <Route path="/reset-password" component={ResetPassword} />
         <Route component={NotFound} />
       </Switch>
     </SetupGate>

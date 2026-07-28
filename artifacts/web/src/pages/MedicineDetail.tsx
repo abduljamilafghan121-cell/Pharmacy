@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useRoute } from "wouter";
 import { useGetMedicine, useDeleteMedicine } from "@workspace/api-client-react";
 import { useAuth } from "@/hooks/use-auth";
@@ -6,10 +7,19 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Pill, ArrowLeft, Trash2, Info, AlertTriangle, CalendarClock } from "lucide-react";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Pill, ArrowLeft, Trash2, Info, AlertTriangle, CalendarClock, PackageX, Loader2 } from "lucide-react";
+import { formatCurrency } from "@/lib/utils";
 import { useToast } from "@/components/ui/use-toast";
 import { Link } from "wouter";
+
+function authHeaders(): HeadersInit {
+  let token: string | null = null;
+  try { token = localStorage.getItem("pharma_token"); } catch { /* sandboxed */ }
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 export default function MedicineDetail() {
   const [, params] = useRoute("/medicines/:id");
@@ -18,6 +28,10 @@ export default function MedicineDetail() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [writeOffOpen, setWriteOffOpen] = useState(false);
+  const [writeOffQty, setWriteOffQty] = useState(1);
+  const [writeOffReason, setWriteOffReason] = useState("");
+  const [writeOffPending, setWriteOffPending] = useState(false);
 
   const { data: medicine, isLoading } = useGetMedicine(id, {
     query: { enabled: !!id } as any
@@ -33,6 +47,30 @@ export default function MedicineDetail() {
       onError: () => toast({ title: "Delete failed", variant: "destructive" }),
     }
   });
+
+  async function handleWriteOff() {
+    if (!writeOffReason.trim()) { toast({ title: "Please enter a reason", variant: "destructive" }); return; }
+    setWriteOffPending(true);
+    try {
+      const base = `${import.meta.env.BASE_URL}api/medicines/${id}/write-off`.replace(/\/+/g, "/").replace(":/", "://");
+      const res = await fetch(base, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ quantity: writeOffQty, reason: writeOffReason.trim() }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error ?? "Write-off failed");
+      toast({ title: `${writeOffQty} unit(s) written off from ${medicine?.name}` });
+      queryClient.invalidateQueries({ queryKey: ['/api/medicines'] });
+      setWriteOffOpen(false);
+      setWriteOffQty(1);
+      setWriteOffReason("");
+    } catch (err: any) {
+      toast({ title: err.message ?? "Write-off failed", variant: "destructive" });
+    } finally {
+      setWriteOffPending(false);
+    }
+  }
 
   if (isLoading) return <div className="p-10 text-center">Loading...</div>;
   if (!medicine) return <div className="p-10 text-center">Medicine not found.</div>;
@@ -114,20 +152,61 @@ export default function MedicineDetail() {
 
           {/* Admin actions */}
           {(user?.role === "admin" || user?.role === "pharmacist") && (
-            <Button
-              variant="destructive"
-              className="bg-destructive/10 text-destructive hover:bg-destructive hover:text-white"
-              onClick={() => {
-                if (confirm(`Delete "${medicine.name}"?`)) {
-                  deleteMutation.mutate({ id });
-                }
-              }}
-              disabled={deleteMutation.isPending}
-            >
-              <Trash2 className="w-4 h-4 mr-2" />
-              Delete Medicine
-            </Button>
+            <div className="flex flex-col gap-2">
+              {/* Write-off expired/damaged stock */}
+              {medicine.quantity > 0 && (
+                <Button
+                  variant="outline"
+                  className="border-amber-500/40 text-amber-700 hover:bg-amber-500/10"
+                  onClick={() => setWriteOffOpen(true)}
+                >
+                  <PackageX className="w-4 h-4 mr-2" />
+                  Write Off Stock
+                </Button>
+              )}
+              <Button
+                variant="destructive"
+                className="bg-destructive/10 text-destructive hover:bg-destructive hover:text-white"
+                onClick={() => {
+                  if (confirm(`Delete "${medicine.name}"?`)) {
+                    deleteMutation.mutate({ id });
+                  }
+                }}
+                disabled={deleteMutation.isPending}
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete Medicine
+              </Button>
+            </div>
           )}
+
+          {/* Write-off dialog */}
+          <Dialog open={writeOffOpen} onOpenChange={setWriteOffOpen}>
+            <DialogContent className="sm:max-w-[400px]">
+              <DialogHeader>
+                <DialogTitle>Write Off Stock — {medicine.name}</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-2">
+                <div className="space-y-2">
+                  <Label>Quantity to write off <span className="text-muted-foreground font-normal">(max {medicine.quantity})</span></Label>
+                  <Input type="number" min={1} max={medicine.quantity} value={writeOffQty}
+                    onChange={(e) => setWriteOffQty(Math.min(medicine.quantity, Math.max(1, parseInt(e.target.value) || 1)))} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Reason <span className="text-destructive">*</span></Label>
+                  <Input placeholder="e.g. Expired, damaged, contaminated…" value={writeOffReason}
+                    onChange={(e) => setWriteOffReason(e.target.value)} />
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <Button variant="outline" className="flex-1" onClick={() => setWriteOffOpen(false)}>Cancel</Button>
+                  <Button variant="destructive" className="flex-1" onClick={handleWriteOff} disabled={writeOffPending}>
+                    {writeOffPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Confirm Write-Off
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 

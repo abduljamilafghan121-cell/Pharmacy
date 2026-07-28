@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
+import { z } from "zod";
 import { db, usersTable } from "@workspace/db";
 import { RegisterUserBody, LoginUserBody } from "@workspace/api-zod";
 import { signToken, requireAuth, requireRole } from "../middlewares/auth";
@@ -165,6 +166,7 @@ router.get("/users", requireAuth, requireRole("admin"), async (_req, res): Promi
         email: usersTable.email,
         phone: usersTable.phone,
         role: usersTable.role,
+        isActive: usersTable.isActive,
         createdAt: usersTable.createdAt,
       })
       .from(usersTable)
@@ -204,12 +206,72 @@ router.post("/users", requireAuth, requireRole("admin"), async (req, res): Promi
       email: usersTable.email,
       phone: usersTable.phone,
       role: usersTable.role,
+      isActive: usersTable.isActive,
       createdAt: usersTable.createdAt,
     });
     res.status(201).json(user);
   } catch (err) {
     logger.error({ err, email }, "users: failed to create staff account");
     res.status(500).json({ error: "Failed to create staff account.", detail: getDbErrorMessage(err) });
+  }
+});
+
+// Edit a staff account (role, name, phone, active status)
+const EditUserParams = z.object({ id: z.coerce.number().int().positive() });
+const EditUserBody = z.object({
+  name: z.string().min(1).optional(),
+  phone: z.string().optional().nullable(),
+  role: z.enum(["admin", "pharmacist", "cashier", "viewer"]).optional(),
+  isActive: z.boolean().optional(),
+});
+
+router.patch("/users/:id", requireAuth, requireRole("admin"), async (req, res): Promise<void> => {
+  const params = EditUserParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: formatZodError(params.error) }); return; }
+  const body = EditUserBody.safeParse(req.body);
+  if (!body.success) { res.status(400).json({ error: formatZodError(body.error) }); return; }
+
+  try {
+    const updates: Record<string, unknown> = {};
+    if (body.data.name !== undefined) updates.name = body.data.name;
+    if (body.data.phone !== undefined) updates.phone = body.data.phone;
+    if (body.data.role !== undefined) updates.role = body.data.role;
+    if (body.data.isActive !== undefined) updates.isActive = body.data.isActive;
+
+    if (Object.keys(updates).length === 0) {
+      res.status(400).json({ error: "No fields to update." });
+      return;
+    }
+
+    const [user] = await db.update(usersTable).set(updates).where(eq(usersTable.id, params.data.id))
+      .returning({ id: usersTable.id, name: usersTable.name, email: usersTable.email, phone: usersTable.phone, role: usersTable.role, isActive: usersTable.isActive, createdAt: usersTable.createdAt });
+    if (!user) { res.status(404).json({ error: "User not found." }); return; }
+    res.json(user);
+  } catch (err) {
+    logger.error({ err }, "users: failed to update staff account");
+    res.status(500).json({ error: "Failed to update account.", detail: getDbErrorMessage(err) });
+  }
+});
+
+// Admin resets another user's password
+const ResetPasswordBody = z.object({ newPassword: z.string().min(6) });
+
+router.post("/users/:id/reset-password", requireAuth, requireRole("admin"), async (req, res): Promise<void> => {
+  const params = EditUserParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: formatZodError(params.error) }); return; }
+  const body = ResetPasswordBody.safeParse(req.body);
+  if (!body.success) { res.status(400).json({ error: formatZodError(body.error) }); return; }
+
+  try {
+    const passwordHash = await bcrypt.hash(body.data.newPassword, 10);
+    const [user] = await db.update(usersTable).set({ passwordHash }).where(eq(usersTable.id, params.data.id))
+      .returning({ id: usersTable.id, name: usersTable.name });
+    if (!user) { res.status(404).json({ error: "User not found." }); return; }
+    logger.info({ userId: params.data.id, by: req.auth!.userId }, "admin reset password for user");
+    res.json({ message: `Password for ${user.name} has been reset.` });
+  } catch (err) {
+    logger.error({ err }, "users: failed to reset password");
+    res.status(500).json({ error: "Failed to reset password.", detail: getDbErrorMessage(err) });
   }
 });
 

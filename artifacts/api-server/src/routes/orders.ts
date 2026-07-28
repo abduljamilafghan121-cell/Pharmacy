@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, sql, inArray } from "drizzle-orm";
-import { db, ordersTable, orderItemsTable, medicinesTable, usersTable, paymentsTable, medicineUnitsTable } from "@workspace/db";
+import { db, ordersTable, orderItemsTable, orderItemReturnsTable, medicinesTable, usersTable, paymentsTable, medicineUnitsTable, pharmacySettingsTable } from "@workspace/db";
 import { z } from "zod";
 import {
   CreateOrderBody, UpdateOrderStatusBody,
@@ -54,6 +54,10 @@ router.post("/orders", requireAuth, async (req, res): Promise<void> => {
   const { patientId, patientName, paymentMethod = "cash", notes } = parsed.data;
   const items = itemsRaw.data;
 
+  // Optional discount from request body (not in generated schema)
+  const discountRaw = (req.body as Record<string, unknown>).discountAmount;
+  const discountAmount = typeof discountRaw === "number" && discountRaw >= 0 ? discountRaw : 0;
+
   // Fetch all medicines
   const medicineIds = items.map((i) => i.medicineId);
   const medicines = await db.select().from(medicinesTable).where(inArray(medicinesTable.id, medicineIds));
@@ -96,7 +100,14 @@ router.post("/orders", requireAuth, async (req, res): Promise<void> => {
   for (const ri of resolvedItems) {
     subtotal += parseFloat(ri.med.price) * ri.baseUnitsNeeded;
   }
-  const total = subtotal;
+
+  // Apply discount then tax
+  const afterDiscount = Math.max(0, subtotal - discountAmount);
+  const [settingsRow] = await db.select({ taxRatePercent: pharmacySettingsTable.taxRatePercent })
+    .from(pharmacySettingsTable).where(eq(pharmacySettingsTable.id, 1));
+  const taxRatePct = settingsRow ? parseFloat(settingsRow.taxRatePercent) : 0;
+  const taxAmount = (afterDiscount * taxRatePct) / 100;
+  const total = afterDiscount + taxAmount;
 
   // Run order creation, stock decrement, and payment inside a single transaction
   const { order, orderItems, staffName } = await db.transaction(async (tx) => {
@@ -105,6 +116,8 @@ router.post("/orders", requireAuth, async (req, res): Promise<void> => {
       patientName: patientName ?? null,
       servedBy: req.auth!.userId,
       subtotal: subtotal.toFixed(2),
+      discountAmount: discountAmount.toFixed(2),
+      taxAmount: taxAmount.toFixed(2),
       total: total.toFixed(2),
       status: "dispensed",
       paymentStatus: "paid",
@@ -260,6 +273,89 @@ router.patch("/orders/:id/status", requireAuth, async (req, res): Promise<void> 
 
   if (!row) { res.status(404).json({ error: "Sale not found" }); return; }
   res.json({ ...row, servedByName: null });
+});
+
+// ── Partial item return (T3.11) ────────────────────────────────────────────
+
+const ReturnItemParams = z.object({
+  id: z.coerce.number().int().positive(),
+  itemId: z.coerce.number().int().positive(),
+});
+const ReturnItemBody = z.object({
+  quantity: z.number().int().min(1),
+  reason: z.string().optional(),
+});
+
+router.post("/orders/:id/items/:itemId/return", requireAuth, async (req, res): Promise<void> => {
+  const params = ReturnItemParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  const body = ReturnItemBody.safeParse(req.body);
+  if (!body.success) { res.status(400).json({ error: body.error.message }); return; }
+
+  const { id: orderId, itemId } = params.data;
+  const { quantity, reason } = body.data;
+
+  try {
+    const result = await db.transaction(async (tx) => {
+      const [order] = await tx.select().from(ordersTable).where(eq(ordersTable.id, orderId));
+      if (!order) return { error: "Sale not found", status: 404 };
+      if (order.status === "cancelled") return { error: "Cannot return items from a cancelled sale.", status: 400 };
+
+      const [item] = await tx.select().from(orderItemsTable).where(
+        sql`${orderItemsTable.id} = ${itemId} AND ${orderItemsTable.orderId} = ${orderId}`
+      );
+      if (!item) return { error: "Item not found on this sale.", status: 404 };
+
+      const alreadyReturned = item.returnedQuantity ?? 0;
+      const returnable = item.quantity - alreadyReturned;
+      if (quantity > returnable) {
+        return { error: `Can only return up to ${returnable} more unit(s) of this item.`, status: 400 };
+      }
+
+      const unitPrice = parseFloat(item.price) / item.quantity;
+      const refundAmount = unitPrice * quantity * (item.conversionFactorToBase ?? 1);
+
+      // Record the return
+      await tx.insert(orderItemReturnsTable).values({
+        orderItemId: itemId,
+        quantity,
+        reason: reason ?? null,
+        refundAmount: refundAmount.toFixed(2),
+        processedBy: req.auth!.userId,
+      });
+
+      // Update returned quantity on the item
+      await tx.update(orderItemsTable)
+        .set({ returnedQuantity: alreadyReturned + quantity })
+        .where(eq(orderItemsTable.id, itemId));
+
+      // Restore stock (base units)
+      const baseUnitsToRestore = quantity * (item.conversionFactorToBase ?? 1);
+      const [med] = await tx.select({ quantity: medicinesTable.quantity })
+        .from(medicinesTable).where(eq(medicinesTable.id, item.medicineId));
+      if (med) {
+        await tx.update(medicinesTable)
+          .set({ quantity: med.quantity + baseUnitsToRestore })
+          .where(eq(medicinesTable.id, item.medicineId));
+      }
+
+      // Adjust order total
+      const newTotal = Math.max(0, parseFloat(order.total) - refundAmount);
+      await tx.update(ordersTable)
+        .set({ total: newTotal.toFixed(2) })
+        .where(eq(ordersTable.id, orderId));
+
+      return { message: "Return processed.", refundAmount: refundAmount.toFixed(2), newTotal: newTotal.toFixed(2) };
+    });
+
+    if ("error" in result) {
+      res.status((result as any).status ?? 400).json({ error: result.error });
+      return;
+    }
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to process return." });
+  }
 });
 
 export default router;
