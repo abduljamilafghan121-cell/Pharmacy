@@ -20,6 +20,7 @@ import { ArrowLeft, CheckCircle2, RotateCcw, User, Stethoscope, Printer, Package
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useToast } from "@/components/ui/use-toast";
 import { SaleStatusBadge, PaymentStatusBadge } from "./Orders";
+import { PrintableReceipt } from "@/components/PrintableReceipt";
 
 export default function SaleDetail() {
   const [, params] = useRoute("/sales/:id");
@@ -80,7 +81,11 @@ export default function SaleDetail() {
   };
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto animate-in fade-in duration-300">
+    <>
+    {/* Hidden receipt — only visible when printing */}
+    <PrintableReceipt order={order as any} />
+
+    <div className="space-y-6 max-w-5xl mx-auto animate-in fade-in duration-300 print:hidden">
       <Button variant="ghost" className="mb-2 -ml-4" onClick={() => window.history.back()}>
         <ArrowLeft className="w-4 h-4 mr-2" /> Back to Sales
       </Button>
@@ -126,9 +131,21 @@ export default function SaleDetail() {
               <div className="mt-6 pt-4 border-t border-border space-y-2">
                 <div className="flex justify-between text-sm text-muted-foreground">
                   <span>Subtotal</span>
-                  <span>{formatCurrency(order.subtotal ?? order.total)}</span>
+                  <span>{formatCurrency((order as any).subtotal ?? order.total)}</span>
                 </div>
-                <div className="flex justify-between font-bold text-xl">
+                {!!((order as any).discountAmount) && parseFloat((order as any).discountAmount) > 0 && (
+                  <div className="flex justify-between text-sm text-muted-foreground">
+                    <span>Discount</span>
+                    <span className="text-green-600">−{formatCurrency((order as any).discountAmount)}</span>
+                  </div>
+                )}
+                {!!((order as any).taxAmount) && parseFloat((order as any).taxAmount) > 0 && (
+                  <div className="flex justify-between text-sm text-muted-foreground">
+                    <span>Tax</span>
+                    <span>{formatCurrency((order as any).taxAmount)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between font-bold text-xl pt-1 border-t border-border">
                   <span>Total</span>
                   <span>{formatCurrency(order.total)}</span>
                 </div>
@@ -273,5 +290,6 @@ export default function SaleDetail() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+    </>
   );
 }
