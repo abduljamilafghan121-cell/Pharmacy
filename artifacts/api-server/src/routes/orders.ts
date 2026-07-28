@@ -10,7 +10,7 @@ import {
   CreateOrderBody, UpdateOrderStatusBody,
   GetOrderParams, UpdateOrderStatusParams,
 } from "@workspace/api-zod";
-import { requireAuth } from "../middlewares/auth";
+import { requireAuth, requireRole } from "../middlewares/auth";
 import { getDbErrorMessage } from "../lib/api-errors";
 import { allocateFefo, restoreAllocations, InsufficientStockError } from "../lib/batch-helpers";
 import { logAudit } from "../lib/audit";
