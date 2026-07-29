@@ -72,7 +72,7 @@ export default function SupplierLedger() {
       },
       onError: (err) => {
         toast({
-          title: "Failed to record payment",
+          title: "Couldn't record payment",
           description: getErrorMessage(err),
           variant: "destructive",
         });

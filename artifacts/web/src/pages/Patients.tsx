@@ -49,7 +49,7 @@ export default function Patients() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to load patients.";
       setLoadError(msg);
-      toast({ title: "Failed to load patients", description: msg, variant: "destructive" });
+      toast({ title: "Couldn't load patients", description: msg, variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
@@ -71,13 +71,13 @@ export default function Patients() {
         method: "POST",
         body: JSON.stringify({ name: newName.trim(), phone: newPhone.trim() || undefined, notes: newNotes.trim() || undefined }),
       });
-      toast({ title: "Patient registered successfully." });
+      toast({ title: "Patient registered", description: "Their record is now in the system." });
       setNewName(""); setNewPhone(""); setNewNotes("");
       setDialogOpen(false);
       loadPatients(search);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to register patient.";
-      toast({ title: "Failed to register patient", description: msg, variant: "destructive" });
+      toast({ title: "Couldn't register patient", description: msg, variant: "destructive" });
     } finally {
       setIsSaving(false);
     }

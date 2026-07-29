@@ -94,12 +94,12 @@ function NewPrescriptionDialog({ onClose }: { onClose: () => void }) {
   const createMutation = useCreatePrescription({
     mutation: {
       onSuccess: () => {
-        toast({ title: "Prescription recorded successfully." });
+        toast({ title: "Prescription recorded" });
         queryClient.invalidateQueries({ queryKey: getListPrescriptionsQueryKey() });
         onClose();
       },
       onError: (err) => {
-        toast({ title: "Failed to save prescription", description: getErrorMessage(err), variant: "destructive" });
+        toast({ title: "Couldn't save prescription", description: getErrorMessage(err), variant: "destructive" });
       },
     },
   });
@@ -192,8 +192,8 @@ function PrescriptionCard({ rx }: { rx: any }) {
       attachMutation.mutate(
         { id: rx.id, attachmentUrl: reader.result as string },
         {
-          onSuccess: () => toast({ title: "Prescription image attached." }),
-          onError: (err) => toast({ title: "Failed to attach file", description: getErrorMessage(err), variant: "destructive" }),
+          onSuccess: () => toast({ title: "Image attached" }),
+          onError: (err) => toast({ title: "Couldn't attach file", description: getErrorMessage(err), variant: "destructive" }),
         }
       );
     };
@@ -203,11 +203,11 @@ function PrescriptionCard({ rx }: { rx: any }) {
   const verifyMutation = useVerifyPrescription({
     mutation: {
       onSuccess: () => {
-        toast({ title: "Prescription verified." });
+        toast({ title: "Prescription verified", description: "Marked as approved and ready to dispense." });
         queryClient.invalidateQueries({ queryKey: getListPrescriptionsQueryKey() });
       },
       onError: (err) => {
-        toast({ title: "Failed to verify prescription", description: getErrorMessage(err), variant: "destructive" });
+        toast({ title: "Couldn't verify prescription", description: getErrorMessage(err), variant: "destructive" });
       },
     },
   });
@@ -215,13 +215,13 @@ function PrescriptionCard({ rx }: { rx: any }) {
   const rejectMutation = useRejectPrescription({
     mutation: {
       onSuccess: () => {
-        toast({ title: "Prescription rejected." });
+        toast({ title: "Prescription rejected" });
         queryClient.invalidateQueries({ queryKey: getListPrescriptionsQueryKey() });
         setRejectDialogOpen(false);
         setRejectReason("");
       },
       onError: (err) => {
-        toast({ title: "Failed to reject prescription", description: getErrorMessage(err), variant: "destructive" });
+        toast({ title: "Couldn't reject prescription", description: getErrorMessage(err), variant: "destructive" });
       },
     },
   });

@@ -50,8 +50,9 @@ export default function Register() {
         <div className="w-full max-w-md space-y-8">
           {/* Logo */}
           <div>
-            <div className="flex justify-start mb-6">
-              <img src={BRAND.logoUrl} alt={BRAND.name} className="h-20 w-auto object-contain" />
+            <div className="flex flex-col items-start mb-6 gap-1">
+              <img src={BRAND.logoUrl} alt={BRAND.name} className="h-14 w-auto object-contain" />
+              <p className="text-[10px] font-medium text-primary/60 tracking-wide uppercase pl-0.5">{BRAND.tagline}</p>
             </div>
 
             {/* First-run badge */}

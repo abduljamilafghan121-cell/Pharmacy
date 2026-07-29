@@ -31,7 +31,7 @@ export default function CashRegister() {
       { openingFloat: parseFloat(openingFloat) || 0 },
       {
         onSuccess: () => { toast({ title: "Register opened" }); setOpeningFloat(""); },
-        onError: (err) => toast({ title: "Failed to open register", description: err.message, variant: "destructive" }),
+        onError: (err) => toast({ title: "Couldn't open register", description: err.message, variant: "destructive" }),
       }
     );
   }
@@ -51,7 +51,7 @@ export default function CashRegister() {
           setCloseResult(data);
           setClosingCash(""); setManualCashOut(""); setNotes("");
         },
-        onError: (err) => toast({ title: "Failed to close register", description: err.message, variant: "destructive" }),
+        onError: (err) => toast({ title: "Couldn't close register", description: err.message, variant: "destructive" }),
       }
     );
   }

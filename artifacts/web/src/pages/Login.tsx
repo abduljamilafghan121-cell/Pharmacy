@@ -35,9 +35,10 @@ export default function Login() {
         setLocation("/dashboard");
       },
       onError: (err: any) => {
+        const serverMsg = err?.response?.data?.error ?? err?.message ?? "";
         toast({ 
-          title: "Login failed", 
-          description: err.response?.data?.error || "Invalid credentials", 
+          title: "Couldn't sign you in",
+          description: serverMsg || "Please check your email and password and try again.",
           variant: "destructive" 
         });
       }
@@ -54,8 +55,9 @@ export default function Login() {
       <div className="flex-1 flex flex-col justify-center items-center px-6 py-12 lg:px-8">
         <div className="w-full max-w-md space-y-8">
           <div>
-            <div className="flex justify-start mb-8">
-              <img src={BRAND.logoUrl} alt={BRAND.name} className="h-20 w-auto object-contain" />
+            <div className="flex flex-col items-start mb-8 gap-1">
+              <img src={BRAND.logoUrl} alt={BRAND.name} className="h-14 w-auto object-contain" />
+              <p className="text-[10px] font-medium text-primary/60 tracking-wide uppercase pl-0.5">{BRAND.tagline}</p>
             </div>
             <h2 className="mt-6 text-3xl font-extrabold text-foreground tracking-tight">
               Sign in to your account

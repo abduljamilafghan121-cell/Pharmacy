@@ -39,7 +39,7 @@ function StaffDashboard() {
               disabled={sendDigest.isPending}
               onClick={() => sendDigest.mutate(undefined, {
                 onSuccess: (data) => toast({ title: "Digest sent", description: `${data.summary.lowStockCount} low-stock, ${data.summary.expiringCount} expiring, ${data.summary.pendingPrescriptionCount} prescriptions pending. (Logged server-side — no email provider connected yet.)` }),
-                onError: (err) => toast({ title: "Failed to send digest", description: err.message, variant: "destructive" }),
+                onError: (err) => toast({ title: "Couldn't send digest", description: err.message, variant: "destructive" }),
               })}
             >
               <Mail className="w-4 h-4 mr-2" /> {sendDigest.isPending ? "Sending…" : "Email Digest Now"}

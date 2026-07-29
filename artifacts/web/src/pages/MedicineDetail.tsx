@@ -44,7 +44,7 @@ export default function MedicineDetail() {
         queryClient.invalidateQueries({ queryKey: ['/api/medicines'] });
         setLocation("/medicines");
       },
-      onError: () => toast({ title: "Delete failed", variant: "destructive" }),
+      onError: () => toast({ title: "Couldn't delete medicine", description: "Something went wrong. Please try again.", variant: "destructive" }),
     }
   });
 
@@ -66,7 +66,7 @@ export default function MedicineDetail() {
       setWriteOffQty(1);
       setWriteOffReason("");
     } catch (err: any) {
-      toast({ title: err.message ?? "Write-off failed", variant: "destructive" });
+      toast({ title: "Write-off failed", description: err.message ?? "Something went wrong. Please try again.", variant: "destructive" });
     } finally {
       setWriteOffPending(false);
     }

@@ -39,8 +39,9 @@ export default function ForgotPassword() {
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-muted/30 p-4">
       <div className="w-full max-w-md">
-        <div className="flex justify-center mb-8">
-          <img src={BRAND.logoUrl} alt={BRAND.name} className="h-20 w-auto object-contain" />
+        <div className="flex flex-col items-center mb-8 gap-1">
+          <img src={BRAND.logoUrl} alt={BRAND.name} className="h-14 w-auto object-contain" />
+          <p className="text-[10px] font-medium text-primary/60 tracking-wide uppercase">{BRAND.tagline}</p>
         </div>
 
         <div className="bg-card border border-border rounded-2xl p-8 shadow-sm">

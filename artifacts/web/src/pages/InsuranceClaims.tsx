@@ -111,7 +111,7 @@ function ClaimRow({ claim, canManage }: { claim: InsuranceClaim; canManage: bool
               { id: claim.id, status },
               {
                 onSuccess: () => toast({ title: "Claim updated" }),
-                onError: (err) => toast({ title: "Update failed", description: err.message, variant: "destructive" }),
+                onError: (err) => toast({ title: "Couldn't update claim", description: err.message, variant: "destructive" }),
               }
             )}
           >
@@ -150,7 +150,7 @@ function NewClaimDialog({ onClose }: { onClose: () => void }) {
       },
       {
         onSuccess: () => { toast({ title: "Claim filed" }); onClose(); },
-        onError: (err) => toast({ title: "Failed to file claim", description: err.message, variant: "destructive" }),
+        onError: (err) => toast({ title: "Couldn't file claim", description: err.message, variant: "destructive" }),
       }
     );
   }

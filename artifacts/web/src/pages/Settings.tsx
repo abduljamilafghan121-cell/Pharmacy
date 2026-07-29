@@ -79,7 +79,7 @@ export default function Settings() {
       },
       {
         onSuccess: () => toast({ title: "Pharmacy settings saved" }),
-        onError: (err) => toast({ title: err.message ?? "Save failed", variant: "destructive" }),
+        onError: (err) => toast({ title: "Couldn't save settings", description: err.message, variant: "destructive" }),
       }
     );
   }
@@ -95,8 +95,8 @@ export default function Settings() {
         toast({ title: "Profile updated" });
       },
       onError: (err: any) => {
-        const msg = err?.response?.data?.error ?? "Failed to update profile";
-        toast({ title: msg, variant: "destructive" });
+        const msg = err?.response?.data?.error ?? "Something went wrong.";
+        toast({ title: "Couldn't update profile", description: msg, variant: "destructive" });
       },
     },
   });
@@ -120,8 +120,8 @@ export default function Settings() {
         toast({ title: "Password changed successfully" });
       },
       onError: (err: any) => {
-        const msg = err?.response?.data?.error ?? "Failed to change password";
-        toast({ title: msg, variant: "destructive" });
+        const msg = err?.response?.data?.error ?? "Something went wrong.";
+        toast({ title: "Couldn't change password", description: msg, variant: "destructive" });
       },
     },
   });
@@ -149,7 +149,7 @@ export default function Settings() {
         setNewCategoryDescription("");
         toast({ title: "Category created" });
       },
-      onError: () => toast({ title: "Failed to create category", variant: "destructive" }),
+      onError: () => toast({ title: "Couldn't create category", variant: "destructive" }),
     },
   });
   const deleteCategory = useDeleteCategory({
@@ -158,7 +158,7 @@ export default function Settings() {
         queryClient.invalidateQueries({ queryKey: getListCategoriesQueryKey() });
         toast({ title: "Category deleted" });
       },
-      onError: () => toast({ title: "Failed to delete category", variant: "destructive" }),
+      onError: () => toast({ title: "Couldn't delete category", variant: "destructive" }),
     },
   });
 

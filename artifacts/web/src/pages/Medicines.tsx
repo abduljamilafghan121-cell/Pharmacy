@@ -191,9 +191,9 @@ function ManageUnitsDialog({ medicine, units }: { medicine: Medicine; units: Med
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListMedicineUnitsQueryKey(medicine.id) });
         queryClient.invalidateQueries({ queryKey: getListMedicinesQueryKey() });
-        toast({ title: "Packaging unit added." });
+        toast({ title: "Packaging unit added" });
       },
-      onError: (err) => toast({ title: "Failed to add unit", description: getErrorMessage(err), variant: "destructive" }),
+      onError: (err) => toast({ title: "Couldn't add packaging unit", description: getErrorMessage(err), variant: "destructive" }),
     },
   });
 
@@ -202,9 +202,9 @@ function ManageUnitsDialog({ medicine, units }: { medicine: Medicine; units: Med
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListMedicineUnitsQueryKey(medicine.id) });
         queryClient.invalidateQueries({ queryKey: getListMedicinesQueryKey() });
-        toast({ title: "Packaging unit removed." });
+        toast({ title: "Packaging unit removed" });
       },
-      onError: (err) => toast({ title: "Failed to remove unit", description: getErrorMessage(err), variant: "destructive" }),
+      onError: (err) => toast({ title: "Couldn't remove packaging unit", description: getErrorMessage(err), variant: "destructive" }),
     },
   });
 
@@ -336,12 +336,12 @@ function MedicineFormDialog() {
   const createMutation = useCreateMedicine({
     mutation: {
       onSuccess: () => {
-        toast({ title: "Medicine added successfully." });
+        toast({ title: "Medicine added", description: "It's now available in your inventory." });
         queryClient.invalidateQueries({ queryKey: getListMedicinesQueryKey() });
         setOpen(false);
       },
       onError: (err) => {
-        toast({ title: "Failed to add medicine", description: getErrorMessage(err), variant: "destructive" });
+        toast({ title: "Couldn't add medicine", description: getErrorMessage(err), variant: "destructive" });
       },
     },
   });

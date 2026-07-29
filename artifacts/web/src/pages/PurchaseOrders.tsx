@@ -80,7 +80,7 @@ export default function PurchaseOrders() {
   const createMutation = useCreatePurchaseOrder({
     mutation: {
       onSuccess: () => {
-        toast({ title: "Purchase order created." });
+        toast({ title: "Purchase order created" });
         queryClient.invalidateQueries({ queryKey: getListPurchaseOrdersQueryKey() });
         setCreateOpen(false);
         resetDraft();

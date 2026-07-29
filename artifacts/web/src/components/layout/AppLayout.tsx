@@ -199,9 +199,16 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        {/* Desktop topbar with notification bell */}
-        <div className="hidden md:flex h-12 border-b border-border bg-card/50 items-center justify-end px-6 gap-2">
-          <NotificationBell />
+        {/* Desktop topbar — page title + user + notifications */}
+        <div className="hidden md:flex h-14 border-b border-border bg-card/50 items-center justify-between px-6">
+          <span className="text-sm font-semibold text-foreground">
+            {navItems.find(n => location === n.href || location.startsWith(n.href + '/'))?.label
+              ?? (location === '/settings' ? 'Settings' : '')}
+          </span>
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-muted-foreground hidden lg:block">{user.name}</span>
+            <NotificationBell />
+          </div>
         </div>
 
         {/* Mobile bottom nav */}

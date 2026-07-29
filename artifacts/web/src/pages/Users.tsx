@@ -183,7 +183,7 @@ function StaffRow({ staff, isSelf, onPatch, onResetPassword, toast }: {
       setEditOpen(false);
       toast({ title: "Account updated" });
     } catch (err: any) {
-      toast({ title: err.message ?? "Update failed", variant: "destructive" });
+      toast({ title: "Couldn't update account", description: err.message, variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -201,7 +201,7 @@ function StaffRow({ staff, isSelf, onPatch, onResetPassword, toast }: {
       setResetOpen(false);
       toast({ title: `Password reset for ${staff.name}` });
     } catch (err: any) {
-      toast({ title: err.message ?? "Reset failed", variant: "destructive" });
+      toast({ title: "Couldn't reset password", description: err.message, variant: "destructive" });
     } finally {
       setResetting(false);
     }

@@ -21,12 +21,12 @@ export default function Suppliers() {
   const createMutation = useCreateSupplier({
     mutation: {
       onSuccess: () => {
-        toast({ title: "Supplier added successfully." });
+        toast({ title: "Supplier added" });
         queryClient.invalidateQueries({ queryKey: getListSuppliersQueryKey() });
         setOpen(false);
       },
       onError: (err) => {
-        toast({ title: "Failed to add supplier", description: getErrorMessage(err), variant: "destructive" });
+        toast({ title: "Couldn't add supplier", description: getErrorMessage(err), variant: "destructive" });
       },
     },
   });

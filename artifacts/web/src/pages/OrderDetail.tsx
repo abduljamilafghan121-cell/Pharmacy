@@ -55,7 +55,7 @@ export default function SaleDetail() {
           queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
           queryClient.invalidateQueries({ queryKey: [`/api/orders/${id}`] });
         },
-        onError: () => toast({ title: "Update failed", variant: "destructive" }),
+        onError: () => toast({ title: "Couldn't update sale status", description: "Something went wrong. Please try again.", variant: "destructive" }),
       }
     );
   };
