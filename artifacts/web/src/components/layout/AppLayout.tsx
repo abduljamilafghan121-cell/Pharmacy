@@ -75,23 +75,33 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-[100dvh] bg-background">
       {/* Sidebar */}
-      <aside className="w-64 border-r border-border bg-card flex flex-col hidden md:flex sticky top-0 h-screen">
-        <div className="h-16 flex items-center px-6 border-b border-border">
-          <BrandLogo />
+      <aside className="w-64 flex flex-col hidden md:flex sticky top-0 h-screen bg-card border-r border-border shadow-[2px_0_12px_0_rgba(0,0,0,0.04)]">
+
+        {/* Brand header with gradient accent */}
+        <div className="relative h-20 flex items-center px-5 overflow-hidden shrink-0">
+          {/* Gradient wave accent — mirrors the reference's brand section divider */}
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/12 via-primary/6 to-transparent pointer-events-none" />
+          <div className="absolute -right-4 -top-4 w-24 h-24 rounded-full bg-primary/8 blur-2xl pointer-events-none" />
+          <div className="relative flex flex-col gap-0.5">
+            <BrandLogo />
+            <p className="text-[10px] font-medium text-primary/60 tracking-wide uppercase pl-0.5">
+              {BRAND.tagline}
+            </p>
+          </div>
         </div>
 
-        <div className="flex-1 py-6 px-4 space-y-1 overflow-y-auto">
+        <div className="flex-1 py-3 px-3 space-y-0.5 overflow-y-auto">
           {filteredNav.map((item) => {
             const isActive = location === item.href || location.startsWith(item.href + '/');
             return (
               <Link key={item.href} href={item.href} className="block">
                 <div className={cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors",
+                  "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150",
                   isActive
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:bg-primary/8 hover:text-foreground"
                 )}>
-                  <item.icon size={18} />
+                  <item.icon size={16} className={cn(isActive ? "opacity-100" : "opacity-70")} />
                   {item.label}
                 </div>
               </Link>
@@ -99,30 +109,34 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           })}
         </div>
 
-        <div className="p-4 border-t border-border space-y-1">
+        <div className="p-3 border-t border-border space-y-0.5">
           <Link href="/settings" className="block">
             <div className={cn(
-              "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors",
+              "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150",
               location === "/settings"
-                ? "bg-primary/10 text-primary"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:bg-primary/8 hover:text-foreground"
             )}>
-              <Settings size={18} />
+              <Settings size={16} className={cn(location === "/settings" ? "opacity-100" : "opacity-70")} />
               Settings
             </div>
           </Link>
 
-          <button
-            onClick={logout}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors"
-          >
-            <LogOut size={18} />
-            Log Out
-          </button>
-
-          <div className="px-3 pt-2 mt-1 border-t border-border">
-            <p className="text-sm font-medium text-foreground truncate">{user.name}</p>
-            <p className="text-xs text-muted-foreground capitalize">{user.role}</p>
+          {/* User info + pill-style logout */}
+          <div className="mt-2 pt-2 border-t border-border/60">
+            <div className="flex items-center justify-between px-3 py-1.5">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-foreground truncate">{user.name}</p>
+                <p className="text-xs text-muted-foreground capitalize">{user.role}</p>
+              </div>
+              <button
+                onClick={logout}
+                title="Log Out"
+                className="ml-2 shrink-0 flex items-center justify-center w-8 h-8 rounded-xl text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all duration-150"
+              >
+                <LogOut size={15} />
+              </button>
+            </div>
           </div>
         </div>
       </aside>
