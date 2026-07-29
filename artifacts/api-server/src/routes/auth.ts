@@ -8,6 +8,7 @@ import { RegisterUserBody, LoginUserBody } from "@workspace/api-zod";
 import { signToken, requireAuth, requireRole } from "../middlewares/auth";
 import { logger } from "../lib/logger";
 import { formatZodError, getDbErrorMessage } from "../lib/api-errors";
+import { sendPasswordResetEmail } from "../lib/mailer";
 
 const router: IRouter = Router();
 
@@ -279,22 +280,36 @@ router.post("/auth/forgot-password", async (req, res): Promise<void> => {
 
     const rawToken = randomBytes(32).toString("hex");
     const tokenHash = await bcrypt.hash(rawToken, 10);
-    const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
 
     await db.update(usersTable)
       .set({ resetTokenHash: tokenHash, resetTokenExpiresAt: expiresAt })
       .where(eq(usersTable.id, user.id));
 
-    // Construct the reset URL — embed userId so we can look up the user without
-    // a full-table scan: token format is "<userId>.<rawToken>"
-    const domain = process.env["REPLIT_DEV_DOMAIN"];
-    const base = domain ? `https://${domain}` : `http://localhost:5173`;
-    const resetLink = `${base}/reset-password?token=${user.id}.${rawToken}`;
+    // Construct the reset URL.
+    // Priority: APP_URL env var → REPLIT_DEV_DOMAIN (dev preview) → localhost fallback.
+    // Token format "<userId>.<rawToken>" lets the reset route look up the user
+    // directly without a full-table scan.
+    const appBase =
+      process.env["APP_URL"] ??
+      (process.env["REPLIT_DEV_DOMAIN"]
+        ? `https://${process.env["REPLIT_DEV_DOMAIN"]}`
+        : "http://localhost:5173");
+    const resetLink = `${appBase}/reset-password?token=${user.id}.${rawToken}`;
 
-    logger.info({ userId: user.id }, "forgot-password: reset token issued");
+    logger.info({ userId: user.id }, "forgot-password: reset token issued, sending email");
 
-    // In development (no email provider), return the link directly so it can
-    // be used immediately. In production this would be sent via email.
+    // Send the reset email. If the mailer throws (e.g. bad credentials, SMTP
+    // timeout) we log the failure but still return the standard success message
+    // — the token is already stored so the user can retry the request.
+    try {
+      await sendPasswordResetEmail(user.email, resetLink);
+    } catch (mailErr) {
+      logger.error({ err: mailErr, userId: user.id }, "forgot-password: email delivery failed");
+    }
+
+    // In non-production mode also surface the link in the JSON response so
+    // developers can test the full reset flow without email credentials.
     const isProduction = process.env["NODE_ENV"] === "production";
     res.json({
       message: "If an account exists for that email, a reset link has been sent.",
