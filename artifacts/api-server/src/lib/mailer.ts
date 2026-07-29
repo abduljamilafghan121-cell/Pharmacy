@@ -201,15 +201,11 @@ export async function sendPasswordResetEmail(to: string, resetLink: string): Pro
   const transporter = createTransporter();
 
   if (!transporter) {
-    // Dev-mode fallback — never log in production
-    if (process.env["NODE_ENV"] !== "production") {
-      logger.info({ to }, "mailer: DEV MODE — no email credentials configured; reset link printed below");
-      // Use process.stdout directly so the full link appears even if pino truncates
-      process.stdout.write(`\n[mailer] Reset link for ${to}:\n${resetLink}\n\n`);
-    } else {
-      logger.error({ to }, "mailer: GMAIL_USER / GMAIL_PASS not set — email NOT delivered in production");
-    }
-    return;
+    // Credentials are not configured — this is always a hard error.
+    // Set GMAIL_USER and GMAIL_PASS in your environment to enable delivery.
+    throw new Error(
+      "Email delivery is not configured: GMAIL_USER and GMAIL_PASS environment variables are required.",
+    );
   }
 
   logger.info({ to }, "mailer: sending password-reset email");

@@ -286,15 +286,16 @@ router.post("/auth/forgot-password", async (req, res): Promise<void> => {
       .set({ resetTokenHash: tokenHash, resetTokenExpiresAt: expiresAt })
       .where(eq(usersTable.id, user.id));
 
-    // Construct the reset URL.
-    // Priority: APP_URL env var → REPLIT_DEV_DOMAIN (dev preview) → localhost fallback.
+    // Construct the reset URL from APP_URL — set this to your Vercel deployment
+    // URL (e.g. https://pharmacore.vercel.app) in your environment variables.
     // Token format "<userId>.<rawToken>" lets the reset route look up the user
     // directly without a full-table scan.
-    const appBase =
-      process.env["APP_URL"] ??
-      (process.env["REPLIT_DEV_DOMAIN"]
-        ? `https://${process.env["REPLIT_DEV_DOMAIN"]}`
-        : "http://localhost:5173");
+    const appBase = process.env["APP_URL"];
+    if (!appBase) {
+      logger.error("forgot-password: APP_URL is not set — cannot generate reset link");
+      res.status(500).json({ error: "Failed to process request." });
+      return;
+    }
     const resetLink = `${appBase}/reset-password?token=${user.id}.${rawToken}`;
 
     logger.info({ userId: user.id }, "forgot-password: reset token issued, sending email");
@@ -308,13 +309,9 @@ router.post("/auth/forgot-password", async (req, res): Promise<void> => {
       logger.error({ err: mailErr, userId: user.id }, "forgot-password: email delivery failed");
     }
 
-    // In non-production mode also surface the link in the JSON response so
-    // developers can test the full reset flow without email credentials.
-    const isProduction = process.env["NODE_ENV"] === "production";
-    res.json({
-      message: "If an account exists for that email, a reset link has been sent.",
-      ...(isProduction ? {} : { resetLink }),
-    });
+    // Always return the same message regardless of outcome — prevents leaking
+    // whether an email was sent or which address is registered.
+    res.json({ message: "If an account exists for that email, a reset link has been sent." });
   } catch (err) {
     logger.error({ err }, "forgot-password: failed");
     res.status(500).json({ error: "Failed to process request.", detail: getDbErrorMessage(err) });
