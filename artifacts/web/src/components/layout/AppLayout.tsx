@@ -24,6 +24,7 @@ import {
 import { cn } from "@/lib/utils";
 import {
   Sheet,
+  SheetClose,
   SheetContent,
   SheetDescription,
   SheetHeader,
@@ -77,8 +78,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-[100dvh] bg-background">
-      {/* Sidebar */}
-      <aside className="w-64 flex flex-col hidden md:flex sticky top-0 h-screen bg-card border-r border-border shadow-[2px_0_12px_0_rgba(0,0,0,0.04)]">
+      {/* Sidebar — hidden on mobile, flex column on md+ */}
+      <aside className="hidden md:flex w-64 flex-col sticky top-0 h-screen bg-card border-r border-border shadow-[2px_0_12px_0_rgba(0,0,0,0.04)]">
 
         {/* Brand header with gradient accent */}
         <div className="relative h-20 flex items-center px-5 overflow-hidden shrink-0">
@@ -167,26 +168,30 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                   {filteredNav.map((item) => {
                     const isActive = location === item.href || location.startsWith(item.href + '/');
                     return (
-                      <Link key={item.href} href={item.href} className="block">
-                        <div className={cn(
-                          "flex items-center gap-3 rounded-md px-3 py-3 text-sm font-medium transition-colors",
-                          isActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                        )}>
-                          <item.icon size={18} />
-                          {item.label}
-                        </div>
-                      </Link>
+                      <SheetClose asChild key={item.href}>
+                        <Link href={item.href} className="block">
+                          <div className={cn(
+                            "flex items-center gap-3 rounded-md px-3 py-3 text-sm font-medium transition-colors",
+                            isActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                          )}>
+                            <item.icon size={18} />
+                            {item.label}
+                          </div>
+                        </Link>
+                      </SheetClose>
                     );
                   })}
-                  <Link href="/settings" className="block">
-                    <div className={cn(
-                      "flex items-center gap-3 rounded-md px-3 py-3 text-sm font-medium transition-colors",
-                      location === "/settings" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                    )}>
-                      <Settings size={18} />
-                      Settings
-                    </div>
-                  </Link>
+                  <SheetClose asChild>
+                    <Link href="/settings" className="block">
+                      <div className={cn(
+                        "flex items-center gap-3 rounded-md px-3 py-3 text-sm font-medium transition-colors",
+                        location === "/settings" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      )}>
+                        <Settings size={18} />
+                        Settings
+                      </div>
+                    </Link>
+                  </SheetClose>
                 </nav>
                 <div className="absolute inset-x-0 bottom-0 border-t border-border p-4">
                   <div className="mb-3 px-3">
@@ -248,33 +253,39 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 {filteredNav.slice(4).map((item) => {
                   const isActive = location === item.href || location.startsWith(item.href + '/');
                   return (
-                    <Link key={item.href} href={item.href} className="block">
-                      <div className={cn(
-                        "flex min-h-16 items-center gap-3 rounded-xl border px-3 text-sm font-medium",
-                        isActive ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"
-                      )}>
-                        <item.icon size={18} />
-                        <span>{item.label}</span>
-                      </div>
-                    </Link>
+                    <SheetClose asChild key={item.href}>
+                      <Link href={item.href} className="block">
+                        <div className={cn(
+                          "flex min-h-16 items-center gap-3 rounded-xl border px-3 text-sm font-medium",
+                          isActive ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"
+                        )}>
+                          <item.icon size={18} />
+                          <span>{item.label}</span>
+                        </div>
+                      </Link>
+                    </SheetClose>
                   );
                 })}
-                <Link href="/settings" className="block">
-                  <div className={cn(
-                    "flex min-h-16 items-center gap-3 rounded-xl border px-3 text-sm font-medium",
-                    location === "/settings" ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"
-                  )}>
-                    <Settings size={18} />
-                    <span>Settings</span>
-                  </div>
-                </Link>
-                <button
-                  onClick={logout}
-                  className="flex min-h-16 w-full items-center gap-3 rounded-xl border border-destructive/40 px-3 text-sm font-medium text-destructive"
-                >
-                  <LogOut size={18} />
-                  <span>Log Out</span>
-                </button>
+                <SheetClose asChild>
+                  <Link href="/settings" className="block">
+                    <div className={cn(
+                      "flex min-h-16 items-center gap-3 rounded-xl border px-3 text-sm font-medium",
+                      location === "/settings" ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"
+                    )}>
+                      <Settings size={18} />
+                      <span>Settings</span>
+                    </div>
+                  </Link>
+                </SheetClose>
+                <SheetClose asChild>
+                  <button
+                    onClick={logout}
+                    className="flex min-h-16 w-full items-center gap-3 rounded-xl border border-destructive/40 px-3 text-sm font-medium text-destructive"
+                  >
+                    <LogOut size={18} />
+                    <span>Log Out</span>
+                  </button>
+                </SheetClose>
               </nav>
             </SheetContent>
           </Sheet>
