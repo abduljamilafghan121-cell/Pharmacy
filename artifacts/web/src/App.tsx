@@ -34,6 +34,7 @@ import PreAuthorizations from '@/pages/PreAuthorizations';
 import SupplierReturns from '@/pages/SupplierReturns';
 import ControlledSubstanceLogs from '@/pages/ControlledSubstanceLogs';
 import Stocktake from '@/pages/Stocktake';
+import DrugInteractions from '@/pages/DrugInteractions';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -167,6 +168,9 @@ function Router() {
         </Route>
         <Route path="/stocktake">
           <ProtectedRoute component={Stocktake} roles={['admin', 'pharmacist']} />
+        </Route>
+        <Route path="/drug-interactions">
+          <ProtectedRoute component={DrugInteractions} roles={['admin', 'pharmacist']} />
         </Route>
         <Route path="/forgot-password" component={ForgotPassword} />
         <Route path="/reset-password" component={ResetPassword} />

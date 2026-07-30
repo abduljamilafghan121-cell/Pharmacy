@@ -4,13 +4,15 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { UserCircle, Plus, Trash2, Tag, Save, Lock, Building2, ImagePlus, X, Loader2 } from "lucide-react";
+import { UserCircle, Plus, Trash2, Tag, Save, Lock, Building2, ImagePlus, X, Loader2, Pencil, Check } from "lucide-react";
 import {
   useListCategories,
   useCreateCategory,
   useDeleteCategory,
+  useUpdateCategory,
   useUpdateProfile,
   useChangePassword,
+  type Category,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { getListCategoriesQueryKey } from "@workspace/api-client-react";
@@ -161,9 +163,33 @@ export default function Settings() {
       onError: () => toast({ title: "Couldn't delete category", variant: "destructive" }),
     },
   });
+  const updateCategory = useUpdateCategory({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListCategoriesQueryKey() });
+        setEditingCategoryId(null);
+        toast({ title: "Category updated" });
+      },
+      onError: () => toast({ title: "Couldn't update category", variant: "destructive" }),
+    },
+  });
 
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newCategoryDescription, setNewCategoryDescription] = useState("");
+  const [editingCategoryId, setEditingCategoryId] = useState<number | null>(null);
+  const [editCategoryName, setEditCategoryName] = useState("");
+  const [editCategoryDescription, setEditCategoryDescription] = useState("");
+
+  function startEditCategory(cat: Category) {
+    setEditingCategoryId(cat.id);
+    setEditCategoryName(cat.name);
+    setEditCategoryDescription(cat.description ?? "");
+  }
+
+  function handleSaveCategory(id: number) {
+    if (!editCategoryName.trim()) return;
+    updateCategory.mutate({ id, data: { name: editCategoryName.trim(), description: editCategoryDescription.trim() || undefined } });
+  }
 
   function handleAddCategory(e: React.FormEvent) {
     e.preventDefault();
@@ -453,20 +479,67 @@ export default function Settings() {
           ) : (
             <div className="divide-y divide-border rounded-md border">
               {categories.map(cat => (
-                <div key={cat.id} className="flex items-center justify-between px-4 py-3">
-                  <div>
-                    <p className="font-medium">{cat.name}</p>
-                    {cat.description && <p className="text-xs text-muted-foreground">{cat.description}</p>}
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="text-destructive hover:text-destructive"
-                    disabled={deleteCategory.isPending}
-                    onClick={() => deleteCategory.mutate({ id: cat.id })}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
+                <div key={cat.id} className="px-4 py-3">
+                  {editingCategoryId === cat.id ? (
+                    <div className="flex items-center gap-2">
+                      <Input
+                        className="h-8 text-sm flex-1"
+                        value={editCategoryName}
+                        onChange={e => setEditCategoryName(e.target.value)}
+                        placeholder="Category name"
+                        autoFocus
+                      />
+                      <Input
+                        className="h-8 text-sm flex-1"
+                        value={editCategoryDescription}
+                        onChange={e => setEditCategoryDescription(e.target.value)}
+                        placeholder="Description (optional)"
+                      />
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8 text-primary"
+                        disabled={updateCategory.isPending || !editCategoryName.trim()}
+                        onClick={() => handleSaveCategory(cat.id)}
+                      >
+                        <Check className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8 text-muted-foreground"
+                        onClick={() => setEditingCategoryId(null)}
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium">{cat.name}</p>
+                        {cat.description && <p className="text-xs text-muted-foreground">{cat.description}</p>}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                          onClick={() => startEditCategory(cat)}
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive hover:text-destructive"
+                          disabled={deleteCategory.isPending}
+                          onClick={() => deleteCategory.mutate({ id: cat.id })}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

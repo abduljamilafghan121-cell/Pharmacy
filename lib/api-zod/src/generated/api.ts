@@ -234,6 +234,8 @@ export const ListPatientsResponse = zod.array(ListPatientsResponseItem)
 export const CreatePatientBody = zod.object({
   "name": zod.string().min(1),
   "phone": zod.string().optional(),
+  "dateOfBirth": zod.string().optional(),
+  "gender": zod.enum(["male", "female", "other"]).optional(),
   "notes": zod.string().optional()
 })
 
@@ -241,6 +243,8 @@ export const CreatePatientResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
   "phone": zod.string().nullish(),
+  "dateOfBirth": zod.string().nullish(),
+  "gender": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 })
@@ -257,6 +261,8 @@ export const GetPatientResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
   "phone": zod.string().nullish(),
+  "dateOfBirth": zod.string().nullish(),
+  "gender": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 })
@@ -275,6 +281,8 @@ export const UpdatePatientParams = zod.object({
 export const UpdatePatientBody = zod.object({
   "name": zod.string().min(1).optional(),
   "phone": zod.string().optional(),
+  "dateOfBirth": zod.string().optional(),
+  "gender": zod.enum(["male", "female", "other"]).optional(),
   "notes": zod.string().optional()
 })
 
@@ -282,6 +290,8 @@ export const UpdatePatientResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
   "phone": zod.string().nullish(),
+  "dateOfBirth": zod.string().nullish(),
+  "gender": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 })

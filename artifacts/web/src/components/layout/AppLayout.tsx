@@ -21,6 +21,7 @@ import {
   CreditCard,
   Lock,
   FileCheck,
+  Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -60,6 +61,7 @@ const navItems: NavItem[] = [
   { label: "Reports", href: "/reports", icon: BarChart3, roles: ["admin", "pharmacist", "viewer"] },
   { label: "Controlled Substances", href: "/controlled-substance-logs", icon: Lock, roles: ["admin", "pharmacist"] },
   { label: "Stocktake", href: "/stocktake", icon: ClipboardList, roles: ["admin", "pharmacist"] },
+  { label: "Drug Interactions", href: "/drug-interactions", icon: Zap, roles: ["admin", "pharmacist"] },
   { label: "Audit Log", href: "/audit-log", icon: ShieldCheck, roles: ["admin"] },
   { label: "User Management", href: "/users", icon: Users, roles: ["admin"] },
 ];
