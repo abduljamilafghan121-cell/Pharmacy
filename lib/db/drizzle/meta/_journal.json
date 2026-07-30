@@ -8,12 +8,19 @@
       "when": 1784814469399,
       "tag": "0000_greedy_plazm",
       "breakpoints": true
-    }
-    ,{
+    },
+    {
       "idx": 1,
       "version": "7",
       "when": 1753430400000,
       "tag": "0001_supplier_payments",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785381177528,
+      "tag": "0002_fluffy_microchip",
       "breakpoints": true
     }
   ]
