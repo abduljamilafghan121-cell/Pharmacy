@@ -1,7 +1,8 @@
 import { Router, type IRouter } from "express";
 import { eq, ilike, sql } from "drizzle-orm";
-import { db, patientsTable, patientAllergiesTable } from "@workspace/db";
+import { db, patientsTable, patientAllergiesTable, ordersTable, orderItemsTable, medicinesTable, usersTable } from "@workspace/db";
 import { CreatePatientBody, GetPatientParams, UpdatePatientParams, UpdatePatientBody } from "@workspace/api-zod";
+import { z } from "zod";
 import { requireAuth, requireRole } from "../middlewares/auth";
 import { formatZodError, getDbErrorMessage } from "../lib/api-errors";
 
@@ -88,6 +89,61 @@ router.patch("/patients/:id", requireAuth, requireRole("admin", "pharmacist", "c
     res.json(row);
   } catch (err) {
     res.status(500).json({ error: "Failed to update patient.", detail: getDbErrorMessage(err) });
+  }
+});
+
+// ── Dispensing history ────────────────────────────────────────────────────
+const DispensingHistoryParams = z.object({ id: z.coerce.number().int().positive() });
+
+router.get("/patients/:id/dispensing-history", requireAuth, async (req, res): Promise<void> => {
+  const params = DispensingHistoryParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: formatZodError(params.error) }); return; }
+
+  const limitRaw = req.query["limit"];
+  const pageRaw  = req.query["page"];
+  const limit = Math.min(Math.max(parseInt(String(limitRaw ?? "20"), 10) || 20, 1), 500);
+  const page  = Math.max(parseInt(String(pageRaw  ?? "1"),  10) || 1, 1);
+  const offset = (page - 1) * limit;
+
+  try {
+    const [patient] = await db.select({ id: patientsTable.id }).from(patientsTable)
+      .where(eq(patientsTable.id, params.data.id));
+    if (!patient) { res.status(404).json({ error: "Patient not found." }); return; }
+
+    const baseQuery = db
+      .select({
+        orderId:          ordersTable.id,
+        orderDate:        ordersTable.createdAt,
+        orderStatus:      ordersTable.status,
+        orderTotal:       ordersTable.total,
+        servedByName:     usersTable.name,
+        itemId:           orderItemsTable.id,
+        medicineId:       orderItemsTable.medicineId,
+        medicineName:     medicinesTable.name,
+        medicineStrength: medicinesTable.strength,
+        quantity:         orderItemsTable.quantity,
+        unitName:         orderItemsTable.unitName,
+        price:            orderItemsTable.price,
+        returnedQuantity: orderItemsTable.returnedQuantity,
+      })
+      .from(ordersTable)
+      .leftJoin(usersTable,      eq(ordersTable.servedBy,          usersTable.id))
+      .innerJoin(orderItemsTable, eq(orderItemsTable.orderId,       ordersTable.id))
+      .leftJoin(medicinesTable,  eq(orderItemsTable.medicineId,    medicinesTable.id))
+      .where(eq(ordersTable.patientId, params.data.id))
+      .orderBy(sql`${ordersTable.createdAt} DESC`);
+
+    const [rows, countResult] = await Promise.all([
+      baseQuery.limit(limit).offset(offset),
+      db.select({ count: sql<number>`count(*)::int` })
+        .from(ordersTable)
+        .innerJoin(orderItemsTable, eq(orderItemsTable.orderId, ordersTable.id))
+        .where(eq(ordersTable.patientId, params.data.id)),
+    ]);
+
+    res.json({ data: rows, total: countResult[0]?.count ?? 0, page, limit });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to load dispensing history.", detail: getDbErrorMessage(err) });
   }
 });
 

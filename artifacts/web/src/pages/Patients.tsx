@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Users, Plus, Search, Phone, ShieldAlert, Activity, Trash2, Loader2, AlertTriangle } from "lucide-react";
+import { Users, Plus, Search, Phone, ShieldAlert, Activity, Trash2, Loader2, AlertTriangle, ClipboardList, Printer, ChevronLeft, ChevronRight } from "lucide-react";
 import { ErrorState } from "@/components/ui/error-state";
 import { useToast } from "@/components/ui/use-toast";
 import { formatDate } from "@/lib/utils";
@@ -48,6 +48,22 @@ interface PatientCondition {
   id: number;
   condition: string;
   notes?: string | null;
+}
+
+interface DispensingHistoryItem {
+  orderId: number;
+  orderDate: string;
+  orderStatus: string;
+  orderTotal: string;
+  servedByName?: string | null;
+  itemId: number;
+  medicineId: number;
+  medicineName?: string | null;
+  medicineStrength?: string | null;
+  quantity: number;
+  unitName?: string | null;
+  price: string;
+  returnedQuantity?: number | null;
 }
 
 const SEVERITY_BADGE: Record<string, string> = {
@@ -277,6 +293,16 @@ function PatientSafetyDialog({ patient, onClose }: { patient: Patient; onClose: 
   const [condNotes, setCondNotes] = useState("");
   const [savingC, setSavingC] = useState(false);
 
+  // Dispensing history
+  const [history, setHistory] = useState<DispensingHistoryItem[]>([]);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [printHistory, setPrintHistory] = useState<DispensingHistoryItem[] | null>(null);
+  const [printLoading, setPrintLoading] = useState(false);
+  const HISTORY_LIMIT = 20;
+
   useEffect(() => {
     apiFetch<PatientAllergy[]>(`/api/patients/${patient.id}/allergies`)
       .then(setAllergies).catch(() => {}).finally(() => setLoadingA(false));
@@ -338,9 +364,41 @@ function PatientSafetyDialog({ patient, onClose }: { patient: Patient; onClose: 
     }
   };
 
+  const loadHistory = useCallback(async (page: number) => {
+    setHistoryLoading(true);
+    try {
+      const data = await apiFetch<{ data: DispensingHistoryItem[]; total: number; page: number }>(
+        `/api/patients/${patient.id}/dispensing-history?page=${page}&limit=${HISTORY_LIMIT}`
+      );
+      setHistory(data.data);
+      setHistoryTotal(data.total);
+      setHistoryPage(page);
+      setHistoryLoaded(true);
+    } catch {
+      toast({ title: "Couldn't load dispensing history", variant: "destructive" });
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [patient.id, toast]);
+
+  const handlePrintHistory = async () => {
+    setPrintLoading(true);
+    try {
+      const data = await apiFetch<{ data: DispensingHistoryItem[] }>(
+        `/api/patients/${patient.id}/dispensing-history?limit=500`
+      );
+      setPrintHistory(data.data);
+      setTimeout(() => window.print(), 100);
+    } catch {
+      toast({ title: "Couldn't load history for printing", variant: "destructive" });
+    } finally {
+      setPrintLoading(false);
+    }
+  };
+
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto print:max-w-none print:shadow-none print:max-h-none print:overflow-visible">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Users size={18} />
@@ -364,6 +422,14 @@ function PatientSafetyDialog({ patient, onClose }: { patient: Patient; onClose: 
             <TabsTrigger value="conditions" className="flex-1 gap-1.5">
               <Activity size={14} /> Conditions
               {conditions.length > 0 && <Badge variant="secondary" className="ml-1 text-[10px] py-0">{conditions.length}</Badge>}
+            </TabsTrigger>
+            <TabsTrigger
+              value="history"
+              className="flex-1 gap-1.5"
+              onClick={() => { if (!historyLoaded) loadHistory(1); }}
+            >
+              <ClipboardList size={14} /> History
+              {historyTotal > 0 && <Badge variant="secondary" className="ml-1 text-[10px] py-0">{historyTotal}</Badge>}
             </TabsTrigger>
           </TabsList>
 
@@ -425,6 +491,111 @@ function PatientSafetyDialog({ patient, onClose }: { patient: Patient; onClose: 
                 Add Allergy
               </Button>
             </form>
+          </TabsContent>
+
+          {/* ── Dispensing History ── */}
+          <TabsContent value="history" className="mt-4">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-medium text-muted-foreground">
+                {historyTotal > 0 ? `${historyTotal} dispensing record${historyTotal === 1 ? "" : "s"}` : ""}
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 gap-1.5 print:hidden"
+                onClick={handlePrintHistory}
+                disabled={printLoading}
+              >
+                {printLoading ? <Loader2 size={13} className="animate-spin" /> : <Printer size={13} />}
+                Print History
+              </Button>
+            </div>
+
+            {historyLoading ? (
+              <div className="flex items-center justify-center py-10 text-muted-foreground">
+                <Loader2 size={18} className="animate-spin mr-2" /> Loading history…
+              </div>
+            ) : !historyLoaded ? (
+              <div className="flex flex-col items-center gap-3 py-10 text-muted-foreground">
+                <ClipboardList size={32} className="opacity-40" />
+                <p className="text-sm">Click the History tab to load records.</p>
+              </div>
+            ) : history.length === 0 ? (
+              <div className="flex flex-col items-center gap-3 py-10 text-muted-foreground">
+                <ClipboardList size={32} className="opacity-40" />
+                <p className="text-sm italic">No dispensing history found for this patient.</p>
+              </div>
+            ) : (
+              <div className="rounded-md border overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50">
+                    <tr>
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground">Date</th>
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground">Order #</th>
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground">Medicine</th>
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground">Qty</th>
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground">Pharmacist</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {history.map((row) => (
+                      <tr key={row.itemId} className="border-t hover:bg-muted/30 transition-colors">
+                        <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
+                          {new Date(row.orderDate).toLocaleDateString()}
+                        </td>
+                        <td className="px-3 py-2 font-medium">
+                          #{row.orderId}
+                          {row.orderStatus === "cancelled" && (
+                            <span className="ml-1 text-[10px] text-red-600 font-semibold">(void)</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2">
+                          <span className="font-medium">{row.medicineName ?? "—"}</span>
+                          {row.medicineStrength && (
+                            <span className="ml-1 text-muted-foreground text-xs">{row.medicineStrength}</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          {row.quantity}{row.unitName ? ` ${row.unitName}` : ""}
+                          {(row.returnedQuantity ?? 0) > 0 && (
+                            <span className="ml-1 text-xs text-amber-600">({row.returnedQuantity} returned)</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-muted-foreground text-xs">{row.servedByName ?? "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Pagination */}
+            {historyTotal > HISTORY_LIMIT && (
+              <div className="flex items-center justify-between mt-3 text-sm text-muted-foreground">
+                <span>Page {historyPage} of {Math.ceil(historyTotal / HISTORY_LIMIT)}</span>
+                <div className="flex gap-1">
+                  <Button
+                    size="sm" variant="outline" className="h-7 px-2"
+                    disabled={historyPage <= 1 || historyLoading}
+                    onClick={() => loadHistory(historyPage - 1)}
+                  >
+                    <ChevronLeft size={14} />
+                  </Button>
+                  <Button
+                    size="sm" variant="outline" className="h-7 px-2"
+                    disabled={historyPage >= Math.ceil(historyTotal / HISTORY_LIMIT) || historyLoading}
+                    onClick={() => loadHistory(historyPage + 1)}
+                  >
+                    <ChevronRight size={14} />
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Print-only view — hidden on screen, visible when window.print() fires */}
+            {printHistory && (
+              <PrintablePatientHistory patient={patient} items={printHistory} />
+            )}
           </TabsContent>
 
           {/* ── Conditions ── */}
