@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback } from "react";
+import { useBarcodeScanner } from "@/hooks/use-barcode-scanner";
 import { Link } from "wouter";
 import {
   getGetPurchaseOrderQueryKey,
@@ -48,6 +49,8 @@ import {
   Plus,
   Trash2,
   Truck,
+  Scan,
+  X,
 } from "lucide-react";
 
 function getMedicineUnits(medicine: Medicine): MedicineUnit[] {
@@ -76,6 +79,11 @@ export default function PurchaseOrders() {
     { key: 1, medicineId: 0, quantity: 1, unitId: undefined, unitPrice: "" },
   ]);
   const [nextKey, setNextKey] = useState(2);
+
+  // Scan-to-receive state (per-dialog session)
+  const [poScanMode, setPoScanMode] = useState(false);
+  const [scannedCounts, setScannedCounts] = useState<Record<number, number>>({});
+  const [poScanFlash, setPoScanFlash] = useState<string | null>(null);
 
   const createMutation = useCreatePurchaseOrder({
     mutation: {
@@ -126,6 +134,26 @@ export default function PurchaseOrders() {
   });
 
   const availableMedicines = useMemo(() => medicines ?? [], [medicines]);
+
+  // ── Scan-to-receive barcode handler ───────────────────────────────────────
+  const handlePoBarcodeScan = useCallback((barcode: string) => {
+    if (!selectedOrder.data) return;
+    const medicine = availableMedicines.find((m: any) => m.barcode === barcode);
+    if (!medicine) {
+      toast({ title: "Barcode not recognised", description: `No medicine found for: ${barcode}`, variant: "destructive" });
+      return;
+    }
+    const poItem = (selectedOrder.data.items ?? []).find((item: any) => item.medicineId === medicine.id);
+    if (!poItem) {
+      toast({ title: "Not on this order", description: `${medicine.name} is not a line on this purchase order.`, variant: "destructive" });
+      return;
+    }
+    setScannedCounts(prev => ({ ...prev, [medicine.id]: (prev[medicine.id] ?? 0) + 1 }));
+    setPoScanFlash(medicine.name);
+    setTimeout(() => setPoScanFlash(null), 1500);
+  }, [selectedOrder.data, availableMedicines, toast]);
+
+  useBarcodeScanner({ onScan: handlePoBarcodeScan, enabled: poScanMode });
 
   function resetDraft() {
     setDraftSupplierId("");
@@ -517,7 +545,14 @@ export default function PurchaseOrders() {
       </Dialog>
 
       {/* View PO dialog */}
-      <Dialog open={selectedId !== null} onOpenChange={(open) => !open && setSelectedId(null)}>
+      <Dialog open={selectedId !== null} onOpenChange={(open) => {
+        if (!open) {
+          setSelectedId(null);
+          setPoScanMode(false);
+          setScannedCounts({});
+          setPoScanFlash(null);
+        }
+      }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
@@ -539,15 +574,48 @@ export default function PurchaseOrders() {
                   {selectedOrder.data.status}
                 </Badge>
               </div>
+
+              {/* Scan-to-receive toggle + status bar */}
+              {selectedOrder.data.status === "pending" && (
+                <div className="space-y-2">
+                  <Button
+                    size="sm"
+                    variant={poScanMode ? "default" : "outline"}
+                    className={`w-full ${poScanMode ? "bg-emerald-600 hover:bg-emerald-700 text-white" : ""}`}
+                    onClick={() => setPoScanMode(v => !v)}
+                  >
+                    <Scan size={14} className="mr-2" />
+                    {poScanMode ? "Scanning — point at item…" : "Scan to Receive"}
+                  </Button>
+                  {poScanMode && (
+                    <div className="flex items-center gap-2 rounded-md bg-emerald-500/10 border border-emerald-500/30 px-3 py-2 text-xs">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                      <span className="text-emerald-700 font-medium flex-1">Scan mode active</span>
+                      {poScanFlash && (
+                        <span className="text-emerald-700 font-semibold">✓ {poScanFlash}</span>
+                      )}
+                      <button
+                        className="text-emerald-700 hover:text-emerald-900 ml-1"
+                        onClick={() => setPoScanMode(false)}
+                        aria-label="Stop scan mode"
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="space-y-2">
                 {selectedOrder.data.items?.map((item) => {
                   const unitLabel = (item as any).unitName
                     ? `${item.quantity} ${(item as any).unitName}${item.quantity !== 1 ? "s" : ""}`
                     : `${item.quantity} units`;
                   const factor = (item as any).conversionFactorToBase ?? 1;
+                  const scanned = scannedCounts[(item as any).medicineId] ?? 0;
                   return (
                     <div key={item.id} className="flex items-center justify-between border-b pb-2 text-sm last:border-0">
-                      <div>
+                      <div className="flex-1 min-w-0">
                         <p className="font-medium">{item.medicineName ?? "Medicine"}</p>
                         <p className="text-muted-foreground">
                           {unitLabel} × {formatCurrency(item.unitPrice)}
@@ -558,9 +626,16 @@ export default function PurchaseOrders() {
                           )}
                         </p>
                       </div>
-                      <span className="font-semibold">
-                        {formatCurrency(Number(item.unitPrice) * item.quantity)}
-                      </span>
+                      <div className="flex items-center gap-3 shrink-0 ml-3">
+                        {scanned > 0 && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold px-2 py-0.5">
+                            ✓ {scanned} scanned
+                          </span>
+                        )}
+                        <span className="font-semibold">
+                          {formatCurrency(Number(item.unitPrice) * item.quantity)}
+                        </span>
+                      </div>
                     </div>
                   );
                 })}

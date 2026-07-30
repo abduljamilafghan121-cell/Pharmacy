@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useBarcodeScanner } from "@/hooks/use-barcode-scanner";
 import { useListMedicines, useCreateOrder } from "@workspace/api-client-react";
 import { usePharmacySettings } from "@/hooks/use-pharmacy-settings";
 import { useQueryClient } from "@tanstack/react-query";
@@ -10,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Search, Plus, Minus, Trash2, ShoppingBag, Pill,
   CheckCircle2, Loader2, Receipt, AlertTriangle, ShieldAlert, Lock,
-  FileText, AlertCircle, X,
+  FileText, AlertCircle, X, Scan,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { formatStockDisplay, priceForUnit } from "@/lib/stock-format";
@@ -130,6 +131,10 @@ export default function NewSale() {
   const [prescriptionInfo, setPrescriptionInfo] = useState<PrescriptionInfo | null>(null);
   const [prescriptionLoading, setPrescriptionLoading] = useState(false);
 
+  // Barcode scan mode
+  const [scanMode, setScanMode] = useState(false);
+  const [scanFlash, setScanFlash] = useState<string | null>(null);
+
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const searchParams = new URLSearchParams(useSearch());
@@ -193,6 +198,27 @@ export default function NewSale() {
       setPrescriptionLoading(false);
     }
   }, [toast]);
+
+  // ── Barcode scan handler ──────────────────────────────────────────────────
+  const handleBarcodeScan = useCallback(async (barcode: string) => {
+    try {
+      const results = await apiFetch<Medicine[]>(`/api/medicines?search=${encodeURIComponent(barcode)}`);
+      // apiFetch may return paginated {data,[]} or a plain array depending on query params
+      const list: Medicine[] = Array.isArray(results) ? results : (results as any).data ?? [];
+      const match = list.find((m: any) => m.barcode === barcode);
+      if (!match) {
+        toast({ title: "Barcode not recognised", description: `No medicine found for: ${barcode}`, variant: "destructive" });
+        return;
+      }
+      addItem(match);
+      setScanFlash(match.name);
+      setTimeout(() => setScanFlash(null), 2000);
+    } catch {
+      toast({ title: "Scan lookup failed", description: "Could not reach the server.", variant: "destructive" });
+    }
+  }, [toast]); // addItem is stable (closure over setState calls)
+
+  useBarcodeScanner({ onScan: handleBarcodeScan, enabled: scanMode });
 
   // ── Allergy check ─────────────────────────────────────────────────────────
   const checkAllergies = useCallback(async (pid: number | null, items: SaleItem[]) => {
@@ -373,6 +399,8 @@ export default function NewSale() {
     setPrescriptionId(null);
     setPrescriptionInput("");
     setPrescriptionInfo(null);
+    setScanMode(false);
+    setScanFlash(null);
     searchRef.current?.focus();
   };
 
@@ -428,10 +456,44 @@ export default function NewSale() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">New Sale</h1>
-        <p className="text-muted-foreground mt-1">Search medicines and process a sale at the counter.</p>
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">New Sale</h1>
+          <p className="text-muted-foreground mt-1">Search medicines and process a sale at the counter.</p>
+        </div>
+        <Button
+          variant={scanMode ? "default" : "outline"}
+          size="sm"
+          className={scanMode ? "bg-emerald-600 hover:bg-emerald-700 text-white shrink-0" : "shrink-0"}
+          onClick={() => setScanMode(v => !v)}
+        >
+          <Scan size={15} className="mr-2" />
+          {scanMode ? "Scanning…" : "Scan Mode"}
+        </Button>
       </div>
+
+      {/* Scan mode status bar */}
+      {scanMode && (
+        <div className="flex items-center gap-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 px-4 py-2.5 text-sm">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+          <span className="font-medium text-emerald-700">Scan mode active — point scanner at medicine barcode</span>
+          <div className="ml-auto flex items-center gap-3">
+            {scanFlash && (
+              <span className="text-emerald-700 font-semibold animate-in fade-in slide-in-from-right-2 duration-200">
+                ✓ {scanFlash}
+              </span>
+            )}
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 px-2 text-emerald-700 hover:bg-emerald-500/20"
+              onClick={() => setScanMode(false)}
+            >
+              <X size={13} className="mr-1" /> Stop
+            </Button>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
         <div className="lg:col-span-3 space-y-4">
