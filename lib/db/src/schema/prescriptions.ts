@@ -17,6 +17,10 @@ export const prescriptionsTable = pgTable("prescriptions", {
   status: prescriptionStatusEnum("status").notNull().default("pending"),
   verifiedBy: integer("verified_by").references(() => usersTable.id),
   notes: text("notes"),
+  /** How many times this prescription may be refilled (0 = no refills, dispense once only) */
+  maxRefills: integer("max_refills").notNull().default(0),
+  /** Running count of how many times this prescription has been dispensed (first dispense = 0, increments on each refill) */
+  refillsUsed: integer("refills_used").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

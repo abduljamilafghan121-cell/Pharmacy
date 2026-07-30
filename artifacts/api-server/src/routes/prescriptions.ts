@@ -12,10 +12,11 @@ import { logAudit } from "../lib/audit";
 
 const router: IRouter = Router();
 
-// attachmentUrl isn't in the generated body yet — extend locally, same
-// pattern used for reorderLevel on medicines.
+// attachmentUrl and maxRefills aren't in the generated body yet — extend locally,
+// same pattern used for reorderLevel on medicines.
 const CreatePrescriptionBodyExt = CreatePrescriptionBody.extend({
   attachmentUrl: z.string().optional(),
+  maxRefills: z.number().int().min(0).optional(),
 });
 const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024; // ~5MB, images/scanned PDFs
 
@@ -28,6 +29,8 @@ const PRESCRIPTION_SELECT = {
   status: prescriptionsTable.status,
   verifiedBy: prescriptionsTable.verifiedBy,
   notes: prescriptionsTable.notes,
+  maxRefills: prescriptionsTable.maxRefills,
+  refillsUsed: prescriptionsTable.refillsUsed,
   createdAt: prescriptionsTable.createdAt,
 };
 
@@ -62,6 +65,7 @@ router.post("/prescriptions", requireAuth, requireRole("admin", "pharmacist", "c
       doctorName: parsed.data.doctorName ?? null,
       attachmentUrl: parsed.data.attachmentUrl ?? null,
       notes: parsed.data.notes ?? null,
+      maxRefills: parsed.data.maxRefills ?? 0,
     }).returning();
     res.status(201).json(row);
   } catch (err) {

@@ -65,6 +65,7 @@ function NewPrescriptionDialog({ onClose }: { onClose: () => void }) {
   const [patientName, setPatientName] = useState("");
   const [doctorName, setDoctorName] = useState("");
   const [notes, setNotes] = useState("");
+  const [maxRefills, setMaxRefills] = useState(0);
   const [attachmentUrl, setAttachmentUrl] = useState<string | null>(null);
   const [attachmentName, setAttachmentName] = useState<string | null>(null);
   const { toast } = useToast();
@@ -111,6 +112,7 @@ function NewPrescriptionDialog({ onClose }: { onClose: () => void }) {
         patientName: patientName.trim() || undefined,
         doctorName: doctorName.trim() || undefined,
         notes: notes.trim() || undefined,
+        maxRefills,
         ...(attachmentUrl ? { attachmentUrl } : {}),
       } as any,
     });
@@ -133,6 +135,20 @@ function NewPrescriptionDialog({ onClose }: { onClose: () => void }) {
         <div className="space-y-1">
           <Label htmlFor="rxNotes">Prescription Notes</Label>
           <Input id="rxNotes" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Medicines, dosage, instructions…" />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="rxRefills">Allowed Refills</Label>
+          <Input
+            id="rxRefills"
+            type="number"
+            min={0}
+            max={12}
+            value={maxRefills}
+            onChange={e => setMaxRefills(Math.max(0, parseInt(e.target.value) || 0))}
+          />
+          <p className="text-xs text-muted-foreground">
+            {maxRefills === 0 ? "Dispense once only — no refills" : `Can be filled ${maxRefills + 1} times total (original + ${maxRefills} refill${maxRefills !== 1 ? "s" : ""})`}
+          </p>
         </div>
         <div className="space-y-1.5">
           <Label>Prescription Image / PDF</Label>
@@ -256,6 +272,20 @@ function PrescriptionCard({ rx }: { rx: any }) {
             </p>
           )}
           <p className="text-sm text-muted-foreground">Recorded: {formatDate(rx.createdAt)}</p>
+          {(rx.maxRefills != null) && (
+            <div className={`flex items-center gap-2 text-sm rounded-md px-2 py-1 w-fit ${
+              rx.refillsUsed > rx.maxRefills
+                ? "bg-red-50 text-red-700 border border-red-200"
+                : rx.refillsUsed >= rx.maxRefills
+                  ? "bg-amber-50 text-amber-700 border border-amber-200"
+                  : "bg-muted/50 text-muted-foreground border border-border"
+            }`}>
+              <span className="font-medium">Refills:</span>
+              <span>{rx.refillsUsed ?? 0} / {rx.maxRefills}</span>
+              {rx.refillsUsed > rx.maxRefills && <span className="font-semibold">— exhausted</span>}
+              {rx.refillsUsed === rx.maxRefills && rx.maxRefills > 0 && <span>— last fill used</span>}
+            </div>
+          )}
           {rx.notes && (
             <div className="bg-muted/50 p-3 rounded-md text-sm border border-border">
               <p className="text-muted-foreground mb-1">Notes:</p>

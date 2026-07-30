@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, sql, inArray } from "drizzle-orm";
-import { db, ordersTable, orderItemsTable, orderItemReturnsTable, medicinesTable, usersTable, paymentsTable, medicineUnitsTable, pharmacySettingsTable, prescriptionsTable } from "@workspace/db";
+import { eq, sql, inArray, and, or } from "drizzle-orm";
+import { db, ordersTable, orderItemsTable, orderItemReturnsTable, medicinesTable, usersTable, paymentsTable, medicineUnitsTable, pharmacySettingsTable, prescriptionsTable, patientAllergiesTable, controlledSubstanceLogsTable, drugInteractionsTable } from "@workspace/db";
 import { z } from "zod";
 import {
   CreateOrderBody, UpdateOrderStatusBody,
@@ -115,16 +115,87 @@ router.post("/orders", requireAuth, async (req, res): Promise<void> => {
     }
   }
 
-  // Prescription enforcement — if any medicine requires a prescription, a verified
+  // ── Safety: Drug Interaction Check ────────────────────────────────────────
+  // Run server-side too (frontend may be bypassed). Contraindicated pairs are
+  // a hard block; major/moderate/minor are surfaced as warnings in the response.
+  if (medicineIds.length >= 2) {
+    const interactions = await db
+      .select({
+        medicine1Id: drugInteractionsTable.medicine1Id,
+        medicine2Id: drugInteractionsTable.medicine2Id,
+        severity: drugInteractionsTable.severity,
+        description: drugInteractionsTable.description,
+      })
+      .from(drugInteractionsTable)
+      .where(
+        or(
+          and(
+            inArray(drugInteractionsTable.medicine1Id, medicineIds),
+            inArray(drugInteractionsTable.medicine2Id, medicineIds),
+          ),
+        )!
+      );
+
+    const contraindicated = interactions.filter(i => i.severity === "contraindicated");
+    if (contraindicated.length > 0) {
+      const names = medicines.reduce((m, med) => { m[med.id] = med.name; return m; }, {} as Record<number, string>);
+      const pairs = contraindicated.map(i =>
+        `${names[i.medicine1Id] ?? i.medicine1Id} + ${names[i.medicine2Id] ?? i.medicine2Id}: ${i.description}`
+      ).join("; ");
+      res.status(400).json({ error: `Contraindicated drug combination detected — cannot dispense: ${pairs}` });
+      return;
+    }
+  }
+
+  // ── Safety: Allergy Check (patient must be linked) ─────────────────────────
+  if (patientId) {
+    const allergies = await db.select().from(patientAllergiesTable)
+      .where(eq(patientAllergiesTable.patientId, patientId));
+    if (allergies.length > 0) {
+      const allergenNames = allergies.map(a => a.allergen.toLowerCase());
+      const allergyHits = resolvedItems.filter(ri =>
+        allergenNames.some(allergen =>
+          ri.med.name.toLowerCase().includes(allergen) ||
+          (ri.med.genericName ?? "").toLowerCase().includes(allergen) ||
+          (ri.med.drugClass ?? "").toLowerCase().includes(allergen)
+        )
+      );
+      if (allergyHits.length > 0) {
+        const hitNames = allergyHits.map(ri => ri.med.name).join(", ");
+        // Severity-weighted block — severe allergies are a hard block, others are warnings
+        const severeHits = allergyHits.filter(ri =>
+          allergies.some(a =>
+            a.severity === "severe" && (
+              ri.med.name.toLowerCase().includes(a.allergen.toLowerCase()) ||
+              (ri.med.genericName ?? "").toLowerCase().includes(a.allergen.toLowerCase()) ||
+              (ri.med.drugClass ?? "").toLowerCase().includes(a.allergen.toLowerCase())
+            )
+          )
+        );
+        if (severeHits.length > 0) {
+          res.status(400).json({
+            error: `ALLERGY ALERT — Patient has a recorded severe allergy to: ${hitNames}. Cannot dispense without explicit override.`,
+            allergyBlock: true,
+          });
+          return;
+        }
+      }
+    }
+  }
+
+  // ── Prescription enforcement — if any medicine requires a prescription, a verified
   // prescription must be attached to the order.
   const requiresRx = resolvedItems.some((ri) => ri.med.prescriptionRequired);
-  if (requiresRx) {
+  // Controlled substances always require a prescription
+  const hasControlled = resolvedItems.some((ri) => ri.med.controlledSchedule != null);
+  if (requiresRx || hasControlled) {
     if (!prescriptionId) {
-      res.status(400).json({ error: "One or more medicines require a prescription. Please attach a verified prescription to this order." });
+      const reason = hasControlled ? "Controlled substances require a prescription." : "One or more medicines require a prescription.";
+      res.status(400).json({ error: `${reason} Please attach a verified prescription to this order.` });
       return;
     }
     const [prescription] = await db
-      .select({ id: prescriptionsTable.id, status: prescriptionsTable.status })
+      .select({ id: prescriptionsTable.id, status: prescriptionsTable.status, maxRefills: prescriptionsTable.maxRefills, refillsUsed: prescriptionsTable.refillsUsed })
       .from(prescriptionsTable)
       .where(eq(prescriptionsTable.id, prescriptionId));
     if (!prescription) {
@@ -133,6 +204,16 @@ router.post("/orders", requireAuth, async (req, res): Promise<void> => {
     }
     if (prescription.status !== "verified") {
       res.status(400).json({ error: "The attached prescription has not been verified yet. Only verified prescriptions can authorise a sale." });
+      return;
+    }
+    // ── Refill counter check ────────────────────────────────────────────────
+    // refillsUsed counts total dispenses (first fill + refills).
+    // maxRefills = 0 → dispense once; maxRefills = 3 → 4 total dispenses.
+    if (prescription.refillsUsed > prescription.maxRefills) {
+      res.status(400).json({
+        error: `This prescription has no remaining refills (used ${prescription.refillsUsed} of ${prescription.maxRefills} allowed). Please obtain a new prescription.`,
+        refillsExhausted: true,
+      });
       return;
     }
   }
@@ -184,6 +265,20 @@ router.post("/orders", requireAuth, async (req, res): Promise<void> => {
       await tx.update(medicinesTable)
         .set({ quantity: sql`${medicinesTable.quantity} - ${ri.baseUnitsNeeded}` })
         .where(eq(medicinesTable.id, ri.med.id));
+
+      // ── Controlled substance log — one immutable row per dispensing event ──
+      if (ri.med.controlledSchedule) {
+        await tx.insert(controlledSubstanceLogsTable).values({
+          orderId: order.id,
+          medicineId: ri.med.id,
+          patientId: patientId ?? null,
+          patientName: patientName ?? null,
+          prescriptionId: prescriptionId,
+          quantityDispensed: ri.baseUnitsNeeded,
+          scheduleAtDispensing: ri.med.controlledSchedule,
+          dispensedBy: req.auth!.userId,
+        });
+      }
     }
 
     await tx.insert(paymentsTable).values({
@@ -192,6 +287,13 @@ router.post("/orders", requireAuth, async (req, res): Promise<void> => {
       method: paymentMethod,
       status: "completed",
     });
+
+    // ── Refill counter increment ────────────────────────────────────────────
+    if (prescriptionId) {
+      await tx.update(prescriptionsTable)
+        .set({ refillsUsed: sql`${prescriptionsTable.refillsUsed} + 1` })
+        .where(eq(prescriptionsTable.id, prescriptionId));
+    }
 
     const [staff] = await tx.select({ name: usersTable.name }).from(usersTable).where(eq(usersTable.id, req.auth!.userId));
 

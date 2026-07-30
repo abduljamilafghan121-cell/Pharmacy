@@ -7,6 +7,17 @@ import {
   ListMedicinesQueryParams,
 } from "@workspace/api-zod";
 import { z } from "zod";
+
+// Extend generated bodies with new schema fields not yet in openapi.yaml
+const CONTROLLED_SCHEDULE = z.enum(["II", "III", "IV", "V"]).optional().nullable();
+const CreateMedicineBodyExt = CreateMedicineBody.extend({
+  controlledSchedule: CONTROLLED_SCHEDULE,
+  drugClass: z.string().optional().nullable(),
+});
+const UpdateMedicineBodyExt = UpdateMedicineBody.extend({
+  controlledSchedule: CONTROLLED_SCHEDULE,
+  drugClass: z.string().optional().nullable(),
+});
 import { requireAuth, requireRole } from "../middlewares/auth";
 import { formatZodError, getDbErrorMessage } from "../lib/api-errors";
 import { logAudit } from "../lib/audit";
@@ -21,6 +32,8 @@ const MEDICINE_SELECT = {
   batchNumber: medicinesTable.batchNumber, expiryDate: medicinesTable.expiryDate,
   quantity: medicinesTable.quantity, price: medicinesTable.price,
   prescriptionRequired: medicinesTable.prescriptionRequired,
+  controlledSchedule: medicinesTable.controlledSchedule,
+  drugClass: medicinesTable.drugClass,
   description: medicinesTable.description, imageUrl: medicinesTable.imageUrl,
   createdAt: medicinesTable.createdAt,
 };
@@ -144,7 +157,7 @@ router.get("/medicines", requireAuth, async (req, res): Promise<void> => {
 });
 
 router.post("/medicines", requireAuth, requireRole("admin", "pharmacist"), async (req, res): Promise<void> => {
-  const parsed = CreateMedicineBody.safeParse(req.body);
+  const parsed = CreateMedicineBodyExt.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: formatZodError(parsed.error) });
     return;
@@ -181,7 +194,7 @@ router.get("/medicines/:id", requireAuth, async (req, res): Promise<void> => {
 router.patch("/medicines/:id", requireAuth, requireRole("admin", "pharmacist"), async (req, res): Promise<void> => {
   const params = UpdateMedicineParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: formatZodError(params.error) }); return; }
-  const parsed = UpdateMedicineBody.safeParse(req.body);
+  const parsed = UpdateMedicineBodyExt.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: formatZodError(parsed.error) }); return; }
   try {
     const { expiryDate, ...medicineFields } = parsed.data;

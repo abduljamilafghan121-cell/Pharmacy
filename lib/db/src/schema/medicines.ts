@@ -1,8 +1,11 @@
-import { pgTable, text, serial, timestamp, integer, boolean, numeric, date } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, boolean, numeric, date, pgEnum } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { categoriesTable } from "./categories";
 import { suppliersTable } from "./suppliers";
+
+/** DEA / regulatory schedule for controlled substances. null = not controlled. */
+export const controlledScheduleEnum = pgEnum("controlled_schedule", ["II", "III", "IV", "V"]);
 
 export const medicinesTable = pgTable("medicines", {
   id: serial("id").primaryKey(),
@@ -18,6 +21,10 @@ export const medicinesTable = pgTable("medicines", {
   reorderLevel: integer("reorder_level").notNull().default(10),
   price: numeric("price", { precision: 10, scale: 2 }).notNull(),
   prescriptionRequired: boolean("prescription_required").notNull().default(false),
+  /** DEA/regulatory schedule. null = not a controlled substance. */
+  controlledSchedule: controlledScheduleEnum("controlled_schedule"),
+  /** Pharmacological class, e.g. "NSAID", "Beta-blocker", "ACE-inhibitor" — used for interaction matching */
+  drugClass: text("drug_class"),
   description: text("description"),
   imageUrl: text("image_url"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

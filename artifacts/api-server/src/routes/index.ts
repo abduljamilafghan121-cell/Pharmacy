@@ -18,6 +18,7 @@ import notificationsRouter from "./notifications";
 import supplierReturnsRouter from "./supplier-returns";
 import cashShiftsRouter from "./cash-shifts";
 import insuranceClaimsRouter from "./insurance-claims";
+import patientSafetyRouter from "./patient-safety";
 
 const router: IRouter = Router();
 
@@ -40,5 +41,6 @@ router.use(notificationsRouter);
 router.use(supplierReturnsRouter);
 router.use(cashShiftsRouter);
 router.use(insuranceClaimsRouter);
+router.use(patientSafetyRouter);
 
 export default router;

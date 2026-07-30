@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Search, Plus, Filter, AlertCircle, CalendarClock, Package, Trash2, Loader2 } from "lucide-react";
+import { Search, Plus, Filter, AlertCircle, CalendarClock, Package, Trash2, Loader2, Lock } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { ErrorState } from "@/components/ui/error-state";
 import { useToast } from "@/components/ui/use-toast";
@@ -114,6 +114,7 @@ function MedicineCard({ medicine, isAdmin }: { medicine: Medicine, isAdmin: bool
   const units = (medicine as any).units as MedicineUnit[] | undefined;
   const stockDisplay = formatStockDisplay(medicine.quantity, units);
   const hasUnits = units && units.length > 0;
+  const controlledSchedule = (medicine as any).controlledSchedule as string | null;
 
   return (
     <Card className="flex flex-col overflow-hidden hover-elevate transition-all group">
@@ -125,11 +126,16 @@ function MedicineCard({ medicine, isAdmin }: { medicine: Medicine, isAdmin: bool
             <span className="text-2xl font-bold">{medicine.name.charAt(0)}</span>
           </div>
         )}
-        {medicine.prescriptionRequired && (
-          <div className="absolute top-3 left-3">
+        <div className="absolute top-3 left-3 flex flex-col gap-1">
+          {medicine.prescriptionRequired && (
             <Badge variant="destructive" className="text-[10px] uppercase font-bold tracking-wider">Rx Required</Badge>
-          </div>
-        )}
+          )}
+          {controlledSchedule && (
+            <Badge className="text-[10px] uppercase font-bold tracking-wider bg-orange-600 hover:bg-orange-600 flex items-center gap-0.5">
+              <Lock size={9} /> Sch {controlledSchedule}
+            </Badge>
+          )}
+        </div>
       </Link>
       <CardContent className="p-5 flex-1 flex flex-col">
         <div className="mb-2">
@@ -352,14 +358,17 @@ function MedicineFormDialog() {
     createMutation.mutate({
       data: {
         name: fd.get("name") as string,
-        genericName: fd.get("genericName") as string,
+        genericName: fd.get("genericName") as string || undefined,
         categoryId: fd.get("categoryId") ? Number(fd.get("categoryId")) : undefined,
         quantity: Number(fd.get("quantity")),
         price: fd.get("price") as string,
         expiryDate: fd.get("expiryDate") as string,
         prescriptionRequired: fd.get("prescriptionRequired") === "on",
-        description: fd.get("description") as string,
-      },
+        description: (fd.get("description") as string) || undefined,
+        // Extended fields — passed through as any since they're not in the generated schema yet
+        ...(fd.get("controlledSchedule") ? { controlledSchedule: fd.get("controlledSchedule") } : {}),
+        ...(fd.get("drugClass") ? { drugClass: fd.get("drugClass") } : {}),
+      } as any,
     });
   };
 
@@ -415,6 +424,22 @@ function MedicineFormDialog() {
               className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               placeholder="Dosage instructions, side effects, etc."
             />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="controlledSchedule">Controlled Schedule</Label>
+              <select id="controlledSchedule" name="controlledSchedule" className="flex h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+                <option value="">Not controlled</option>
+                <option value="II">Schedule II</option>
+                <option value="III">Schedule III</option>
+                <option value="IV">Schedule IV</option>
+                <option value="V">Schedule V</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="drugClass">Drug Class</Label>
+              <Input id="drugClass" name="drugClass" placeholder="e.g. NSAID, Beta-blocker" />
+            </div>
           </div>
           <div className="flex items-center space-x-2 pt-2">
             <input type="checkbox" id="prescriptionRequired" name="prescriptionRequired" className="w-4 h-4 rounded border-input" />

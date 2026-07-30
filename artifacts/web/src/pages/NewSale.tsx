@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useListMedicines, useCreateOrder } from "@workspace/api-client-react";
 import { usePharmacySettings } from "@/hooks/use-pharmacy-settings";
 import { useQueryClient } from "@tanstack/react-query";
@@ -7,7 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Search, Plus, Minus, Trash2, ShoppingBag, Pill, CheckCircle2, Loader2, Receipt } from "lucide-react";
+import {
+  Search, Plus, Minus, Trash2, ShoppingBag, Pill,
+  CheckCircle2, Loader2, Receipt, AlertTriangle, ShieldAlert, Lock,
+} from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { formatStockDisplay, priceForUnit } from "@/lib/stock-format";
 import { getErrorMessage } from "@/lib/errors";
@@ -17,10 +20,25 @@ import type { Medicine, MedicineUnit } from "@workspace/api-client-react";
 
 interface SaleItem {
   medicine: Medicine;
-  quantity: number;           // user-facing quantity (e.g. 2 strips)
-  unitId?: number;            // selected unit id (undefined = base unit)
-  unitName?: string;          // selected unit name for display
-  conversionFactor: number;   // base units per selected unit
+  quantity: number;
+  unitId?: number;
+  unitName?: string;
+  conversionFactor: number;
+}
+
+interface DrugInteraction {
+  id: number;
+  medicine1Id: number; medicine1Name: string;
+  medicine2Id: number; medicine2Name: string;
+  severity: "minor" | "moderate" | "major" | "contraindicated";
+  description: string;
+}
+
+interface PatientAllergy {
+  id: number;
+  allergen: string;
+  severity: "mild" | "moderate" | "severe";
+  reaction?: string | null;
 }
 
 const PAYMENT_METHODS = [
@@ -29,6 +47,29 @@ const PAYMENT_METHODS = [
   { value: "insurance", label: "Insurance" },
 ] as const;
 
+const SEVERITY_COLOR: Record<string, string> = {
+  minor: "text-blue-600 bg-blue-50 border-blue-200",
+  moderate: "text-amber-700 bg-amber-50 border-amber-200",
+  major: "text-orange-700 bg-orange-50 border-orange-200",
+  contraindicated: "text-red-700 bg-red-50 border-red-200",
+  mild: "text-blue-600 bg-blue-50 border-blue-200",
+  severe: "text-red-700 bg-red-50 border-red-200",
+};
+
+function getAuthHeaders(): HeadersInit {
+  const token = localStorage.getItem("pharma_token");
+  return token ? { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } : { "Content-Type": "application/json" };
+}
+
+async function apiFetch<T>(url: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(url, { ...init, headers: { ...getAuthHeaders(), ...init?.headers } });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.error || body?.detail || `Request failed (${res.status})`);
+  }
+  return res.json() as Promise<T>;
+}
+
 function getUnits(medicine: Medicine): MedicineUnit[] {
   return ((medicine as any).units as MedicineUnit[]) ?? [];
 }
@@ -36,11 +77,7 @@ function getUnits(medicine: Medicine): MedicineUnit[] {
 function defaultUnit(medicine: Medicine): { unitId?: number; unitName?: string; conversionFactor: number } {
   const units = getUnits(medicine);
   if (units.length === 0) return { conversionFactor: 1 };
-  // Sort ascending so the smallest unit wins all tie-breaks.
   const sorted = [...units].sort((a, b) => a.conversionFactorToBase - b.conversionFactorToBase);
-  // Priority: (1) isBaseUnit flag AND factor=1, (2) factor=1 regardless of flag,
-  // (3) smallest unit overall.  We intentionally ignore isBaseUnit alone because
-  // users sometimes mistakenly tick the flag on a box/strip — the factor is ground truth.
   const base =
     sorted.find((u) => u.isBaseUnit && u.conversionFactorToBase === 1) ??
     sorted.find((u) => u.conversionFactorToBase === 1) ??
@@ -52,11 +89,18 @@ export default function NewSale() {
   const [search, setSearch] = useState("");
   const [saleItems, setSaleItems] = useState<SaleItem[]>([]);
   const [patientName, setPatientName] = useState("");
+  const [patientId, setPatientId] = useState<number | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "card" | "insurance">("cash");
   const [notes, setNotes] = useState("");
   const [discountAmount, setDiscountAmount] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [completedSale, setCompletedSale] = useState<any>(null);
+
+  // Safety state
+  const [interactions, setInteractions] = useState<DrugInteraction[]>([]);
+  const [allergies, setAllergies] = useState<PatientAllergy[]>([]);
+  const [allergyHits, setAllergyHits] = useState<string[]>([]);
+  const [overrideAllergy, setOverrideAllergy] = useState(false);
 
   const { toast } = useToast();
   const [, setLocation] = useLocation();
@@ -77,6 +121,41 @@ export default function NewSale() {
       )
     : [];
 
+  // ── Drug interaction check ─────────────────────────────────────────────────
+  const checkInteractions = useCallback(async (items: SaleItem[]) => {
+    const ids = items.map(i => i.medicine.id);
+    if (ids.length < 2) { setInteractions([]); return; }
+    try {
+      const result = await apiFetch<{ interactions: DrugInteraction[] }>("/api/medicines/check-interactions", {
+        method: "POST",
+        body: JSON.stringify({ medicineIds: ids }),
+      });
+      setInteractions(result.interactions);
+    } catch { setInteractions([]); }
+  }, []);
+
+  // ── Allergy check ─────────────────────────────────────────────────────────
+  const checkAllergies = useCallback(async (pid: number | null, items: SaleItem[]) => {
+    if (!pid) { setAllergies([]); setAllergyHits([]); return; }
+    try {
+      const rows = await apiFetch<PatientAllergy[]>(`/api/patients/${pid}/allergies`);
+      setAllergies(rows);
+      if (rows.length > 0) {
+        const allergenNames = rows.map(a => a.allergen.toLowerCase());
+        const hits = items.filter(i =>
+          allergenNames.some(a =>
+            i.medicine.name.toLowerCase().includes(a) ||
+            ((i.medicine as any).genericName ?? "").toLowerCase().includes(a) ||
+            ((i.medicine as any).drugClass ?? "").toLowerCase().includes(a)
+          )
+        ).map(i => i.medicine.name);
+        setAllergyHits(hits);
+      } else {
+        setAllergyHits([]);
+      }
+    } catch { setAllergies([]); setAllergyHits([]); }
+  }, []);
+
   useEffect(() => {
     if (initialMedicineHandled.current) return;
     const medicineId = Number(searchParams.get("medicineId"));
@@ -87,6 +166,13 @@ export default function NewSale() {
       addItem(selected);
     }
   }, [medicines]);
+
+  // Re-check interactions whenever cart changes
+  useEffect(() => {
+    checkInteractions(saleItems);
+    checkAllergies(patientId, saleItems);
+    setOverrideAllergy(false);
+  }, [saleItems, patientId]);
 
   const addItem = (medicine: Medicine) => {
     const defUnit = defaultUnit(medicine);
@@ -136,22 +222,26 @@ export default function NewSale() {
     setSaleItems(prev => prev.filter(i => i.medicine.id !== id));
   };
 
-  // Total using base unit price × base units sold
-  const subtotal = saleItems.reduce((sum, i) => {
-    return sum + priceForUnit(i.medicine.price, i.conversionFactor) * i.quantity;
-  }, 0);
+  const subtotal = saleItems.reduce((sum, i) => sum + priceForUnit(i.medicine.price, i.conversionFactor) * i.quantity, 0);
   const discountClamped = Math.min(discountAmount, subtotal);
   const afterDiscount = subtotal - discountClamped;
   const taxAmount = (afterDiscount * taxRatePct) / 100;
   const grandTotal = afterDiscount + taxAmount;
+
+  // Controlled substances in cart
+  const controlledItems = saleItems.filter(i => (i.medicine as any).controlledSchedule);
+
+  // Hard block conditions
+  const contraindicatedPairs = interactions.filter(i => i.severity === "contraindicated");
+  const hasSevereAllergy = allergyHits.length > 0 &&
+    allergies.some(a => a.severity === "severe" && allergyHits.some(h => h.toLowerCase().includes(a.allergen.toLowerCase())));
+  const isSafetyBlocked = contraindicatedPairs.length > 0 || (hasSevereAllergy && !overrideAllergy);
 
   const handleProcessSale = async () => {
     if (saleItems.length === 0) {
       toast({ title: "Cart is empty", description: "Add at least one medicine to process a sale.", variant: "destructive" });
       return;
     }
-
-    // Validate stock (in base units)
     for (const item of saleItems) {
       const baseUnitsNeeded = item.quantity * item.conversionFactor;
       if (item.medicine.quantity < baseUnitsNeeded) {
@@ -159,6 +249,10 @@ export default function NewSale() {
         toast({ title: "Insufficient stock", description: `${item.medicine.name}: only ${available} available.`, variant: "destructive" });
         return;
       }
+    }
+    if (isSafetyBlocked) {
+      toast({ title: "Safety check failed", description: "Resolve safety warnings before proceeding.", variant: "destructive" });
+      return;
     }
 
     setIsSubmitting(true);
@@ -180,11 +274,7 @@ export default function NewSale() {
       queryClient.invalidateQueries({ queryKey: ["/api/medicines"] });
       setCompletedSale(result);
     } catch (err) {
-      toast({
-        title: "Sale failed",
-        description: getErrorMessage(err),
-        variant: "destructive",
-      });
+      toast({ title: "Sale failed", description: getErrorMessage(err), variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
@@ -193,10 +283,15 @@ export default function NewSale() {
   const handleNewSale = () => {
     setSaleItems([]);
     setPatientName("");
+    setPatientId(null);
     setPaymentMethod("cash");
     setNotes("");
     setDiscountAmount(0);
     setCompletedSale(null);
+    setInteractions([]);
+    setAllergies([]);
+    setAllergyHits([]);
+    setOverrideAllergy(false);
     searchRef.current?.focus();
   };
 
@@ -210,12 +305,9 @@ export default function NewSale() {
           <h1 className="text-2xl font-bold text-foreground">Sale Complete</h1>
           <p className="text-muted-foreground mt-1">Receipt #{completedSale.id?.toString().padStart(4, '0')}</p>
         </div>
-
         <Card>
           <CardHeader className="border-b border-border pb-4">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Receipt size={18} /> Sale Summary
-            </CardTitle>
+            <CardTitle className="flex items-center gap-2 text-base"><Receipt size={18} /> Sale Summary</CardTitle>
           </CardHeader>
           <CardContent className="pt-4 space-y-3">
             {completedSale.patientName && (
@@ -245,14 +337,9 @@ export default function NewSale() {
             </div>
           </CardContent>
         </Card>
-
         <div className="flex gap-3">
-          <Button className="flex-1" onClick={handleNewSale}>
-            <Plus size={16} className="mr-2" /> New Sale
-          </Button>
-          <Button variant="outline" className="flex-1" onClick={() => setLocation(`/sales/${completedSale.id}`)}>
-            View Details
-          </Button>
+          <Button className="flex-1" onClick={handleNewSale}><Plus size={16} className="mr-2" /> New Sale</Button>
+          <Button variant="outline" className="flex-1" onClick={() => setLocation(`/sales/${completedSale.id}`)}>View Details</Button>
         </div>
       </div>
     );
@@ -267,6 +354,7 @@ export default function NewSale() {
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
         <div className="lg:col-span-3 space-y-4">
+          {/* Medicine search */}
           <Card>
             <CardContent className="pt-4 pb-4">
               <div className="relative">
@@ -280,7 +368,6 @@ export default function NewSale() {
                   onChange={(e) => setSearch(e.target.value)}
                 />
               </div>
-
               {search.trim() && (
                 <div className="mt-3 border border-border rounded-lg overflow-hidden divide-y divide-border max-h-72 overflow-y-auto">
                   {filteredMedicines.length === 0 ? (
@@ -288,11 +375,8 @@ export default function NewSale() {
                   ) : (
                     filteredMedicines.map(med => {
                       const units = getUnits(med);
-                      const stockLabel = med.quantity === 0
-                        ? "Out of stock"
-                        : units.length > 0
-                          ? formatStockDisplay(med.quantity, units)
-                          : `${med.quantity} in stock`;
+                      const stockLabel = med.quantity === 0 ? "Out of stock" : units.length > 0 ? formatStockDisplay(med.quantity, units) : `${med.quantity} in stock`;
+                      const cs = (med as any).controlledSchedule as string | null;
                       return (
                         <button
                           key={med.id}
@@ -304,15 +388,16 @@ export default function NewSale() {
                               <Pill size={16} />
                             </div>
                             <div>
-                              <p className="font-medium text-sm">{med.name}</p>
+                              <div className="flex items-center gap-1.5">
+                                <p className="font-medium text-sm">{med.name}</p>
+                                {cs && <Badge variant="destructive" className="text-[9px] py-0 px-1">Sch {cs}</Badge>}
+                              </div>
                               {med.genericName && <p className="text-xs text-muted-foreground">{med.genericName}</p>}
                             </div>
                           </div>
                           <div className="text-right shrink-0 ml-4">
                             <p className="font-semibold text-sm">{formatCurrency(parseFloat(med.price))}<span className="text-xs font-normal text-muted-foreground">/base unit</span></p>
-                            <p className={`text-xs ${med.quantity === 0 ? 'text-destructive' : 'text-muted-foreground'}`}>
-                              {stockLabel}
-                            </p>
+                            <p className={`text-xs ${med.quantity === 0 ? 'text-destructive' : 'text-muted-foreground'}`}>{stockLabel}</p>
                           </div>
                         </button>
                       );
@@ -323,6 +408,67 @@ export default function NewSale() {
             </CardContent>
           </Card>
 
+          {/* Safety warnings panel */}
+          {saleItems.length > 0 && (interactions.length > 0 || allergyHits.length > 0 || controlledItems.length > 0) && (
+            <div className="space-y-2">
+              {/* Drug interactions */}
+              {interactions.map((ix, i) => (
+                <div key={i} className={`flex items-start gap-3 rounded-lg border p-3 text-sm ${SEVERITY_COLOR[ix.severity] ?? "text-amber-700 bg-amber-50 border-amber-200"}`}>
+                  {ix.severity === "contraindicated" ? <Lock size={16} className="shrink-0 mt-0.5" /> : <AlertTriangle size={16} className="shrink-0 mt-0.5" />}
+                  <div>
+                    <p className="font-semibold capitalize">{ix.severity} interaction — {ix.medicine1Name} + {ix.medicine2Name}</p>
+                    <p className="mt-0.5 opacity-90">{ix.description}</p>
+                    {ix.severity === "contraindicated" && <p className="mt-1 font-bold">Cannot dispense — remove one of these medicines.</p>}
+                  </div>
+                </div>
+              ))}
+
+              {/* Allergy hits */}
+              {allergyHits.length > 0 && (
+                <div className={`rounded-lg border p-3 text-sm ${hasSevereAllergy ? "text-red-700 bg-red-50 border-red-200" : "text-amber-700 bg-amber-50 border-amber-200"}`}>
+                  <div className="flex items-start gap-3">
+                    <ShieldAlert size={16} className="shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="font-semibold">
+                        {hasSevereAllergy ? "Severe allergy alert" : "Allergy warning"} — {allergyHits.join(", ")}
+                      </p>
+                      <p className="mt-0.5 opacity-90">
+                        Patient has a recorded allergy that may affect {allergyHits.length === 1 ? "this medicine" : "these medicines"}.
+                      </p>
+                      {hasSevereAllergy && !overrideAllergy && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="mt-2 border-red-300 text-red-700 hover:bg-red-100"
+                          onClick={() => setOverrideAllergy(true)}
+                        >
+                          Override — I confirm this is intentional
+                        </Button>
+                      )}
+                      {overrideAllergy && (
+                        <p className="mt-1 text-xs font-semibold text-red-800">⚠ Override active — proceeding at pharmacist discretion</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Controlled substances notice */}
+              {controlledItems.length > 0 && (
+                <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">
+                  <Lock size={16} className="shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-semibold">Controlled substance{controlledItems.length > 1 ? "s" : ""} — prescription required</p>
+                    <p className="mt-0.5 opacity-90">
+                      {controlledItems.map(i => `${i.medicine.name} (Schedule ${(i.medicine as any).controlledSchedule})`).join(", ")} — a verified prescription must be attached and will be auto-logged.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Cart */}
           <Card>
             <CardHeader className="border-b border-border pb-4">
               <CardTitle className="text-base flex items-center gap-2">
@@ -340,35 +486,34 @@ export default function NewSale() {
               ) : (
                 <div className="space-y-3">
                   {saleItems.map(item => {
-                    // Use live medicine data from the query so that units added
-                    // after the medicine was put in the cart are reflected immediately.
                     const liveMedicine = medicines?.find(m => m.id === item.medicine.id) ?? item.medicine;
                     const units = getUnits(liveMedicine);
                     const unitPrice = priceForUnit(item.medicine.price, item.conversionFactor);
                     const lineTotal = unitPrice * item.quantity;
                     const baseUnitsUsed = item.quantity * item.conversionFactor;
                     const maxQty = Math.floor(liveMedicine.quantity / item.conversionFactor);
+                    const cs = (item.medicine as any).controlledSchedule as string | null;
+                    const isContraindicated = contraindicatedPairs.some(p =>
+                      p.medicine1Id === item.medicine.id || p.medicine2Id === item.medicine.id
+                    );
                     return (
-                      <div key={item.medicine.id} className="rounded-lg border border-border bg-muted/20 p-3 space-y-2">
+                      <div key={item.medicine.id} className={`rounded-lg border bg-muted/20 p-3 space-y-2 ${isContraindicated ? "border-red-300 bg-red-50/30" : "border-border"}`}>
                         <div className="flex items-start gap-3">
                           <div className="flex-1 min-w-0">
-                            <p className="font-medium text-sm truncate">{item.medicine.name}</p>
+                            <div className="flex items-center gap-1.5">
+                              <p className="font-medium text-sm truncate">{item.medicine.name}</p>
+                              {cs && <Badge variant="destructive" className="text-[9px] py-0 px-1 shrink-0">Sch {cs}</Badge>}
+                            </div>
                             <p className="text-xs text-muted-foreground">
                               {formatCurrency(unitPrice)}{item.unitName ? ` / ${item.unitName}` : " / unit"}
-                              {item.conversionFactor > 1 && (
-                                <span className="ml-1 text-muted-foreground/70">
-                                  (= {item.conversionFactor} base units)
-                                </span>
-                              )}
+                              {item.conversionFactor > 1 && <span className="ml-1 text-muted-foreground/70">(= {item.conversionFactor} base units)</span>}
                             </p>
                           </div>
                           <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0" onClick={() => removeItem(item.medicine.id)}>
                             <Trash2 size={14} />
                           </Button>
                         </div>
-
                         <div className="flex items-center gap-3 flex-wrap">
-                          {/* Unit selector */}
                           {units.length > 0 && (
                             <div className="flex items-center gap-1.5">
                               <span className="text-xs text-muted-foreground">Unit:</span>
@@ -377,50 +522,31 @@ export default function NewSale() {
                                 value={item.unitId ?? ""}
                                 onChange={(e) => updateUnit(item.medicine.id, e.target.value ? Number(e.target.value) : undefined, units)}
                               >
-                                {/* Always offer an individual-unit option.
-                                    If no unit with factor=1 / isBaseUnit is defined,
-                                    inject a synthetic "1 unit" entry so pharmacists
-                                    can sell individual tablets even when only strips/boxes
-                                    are configured. */}
-                                {!units.some(u => u.isBaseUnit || u.conversionFactorToBase === 1) && (
-                                  <option value="">Individual unit (×1)</option>
-                                )}
+                                {!units.some(u => u.isBaseUnit || u.conversionFactorToBase === 1) && <option value="">Individual unit (×1)</option>}
                                 {[...units].sort((a, b) => a.conversionFactorToBase - b.conversionFactorToBase).map((u) => (
                                   <option key={u.id} value={u.id}>{u.unitName}</option>
                                 ))}
                               </select>
                             </div>
                           )}
-
-                          {/* Quantity controls */}
                           <div className="flex items-center gap-1.5 ml-auto">
                             <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => updateQty(item.medicine.id, item.quantity - 1)}>
                               <Minus size={12} />
                             </Button>
-                            <Input
-                              type="number"
-                              value={item.quantity}
-                              min={1}
-                              max={maxQty}
-                              className="h-7 w-14 text-center text-sm p-0"
-                              onChange={(e) => updateQty(item.medicine.id, parseInt(e.target.value) || 0)}
-                            />
+                            <Input type="number" value={item.quantity} min={1} max={maxQty} className="h-7 w-14 text-center text-sm p-0"
+                              onChange={(e) => updateQty(item.medicine.id, parseInt(e.target.value) || 0)} />
                             <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => updateQty(item.medicine.id, item.quantity + 1)} disabled={item.quantity >= maxQty}>
                               <Plus size={12} />
                             </Button>
                           </div>
-
                           <div className="w-20 text-right shrink-0">
                             <p className="font-semibold text-sm">{formatCurrency(lineTotal)}</p>
-                            {item.conversionFactor > 1 && (
-                              <p className="text-[10px] text-muted-foreground">{baseUnitsUsed} base units</p>
-                            )}
+                            {item.conversionFactor > 1 && <p className="text-[10px] text-muted-foreground">{baseUnitsUsed} base units</p>}
                           </div>
                         </div>
                       </div>
                     );
                   })}
-
                   <div className="pt-3 border-t border-border flex justify-between font-bold text-lg">
                     <span>Total</span>
                     <span>{formatCurrency(subtotal)}</span>
@@ -431,6 +557,7 @@ export default function NewSale() {
           </Card>
         </div>
 
+        {/* Right column */}
         <div className="lg:col-span-2 space-y-4">
           <Card>
             <CardHeader className="border-b border-border pb-4">
@@ -445,6 +572,24 @@ export default function NewSale() {
                   value={patientName}
                   onChange={(e) => setPatientName(e.target.value)}
                 />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="patientId">Patient ID <span className="text-muted-foreground font-normal">(for allergy check)</span></Label>
+                <Input
+                  id="patientId"
+                  type="number"
+                  placeholder="Enter patient ID to check allergies"
+                  value={patientId ?? ""}
+                  onChange={(e) => setPatientId(e.target.value ? Number(e.target.value) : null)}
+                />
+                {patientId && allergies.length > 0 && (
+                  <p className="text-xs text-amber-700">
+                    ⚠ {allergies.length} allergy record{allergies.length !== 1 ? "s" : ""} — {allergies.map(a => a.allergen).join(", ")}
+                  </p>
+                )}
+                {patientId && allergies.length === 0 && (
+                  <p className="text-xs text-emerald-700">✓ No recorded allergies</p>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -471,54 +616,46 @@ export default function NewSale() {
               </div>
               <div className="space-y-1">
                 <Label htmlFor="notes">Notes <span className="text-muted-foreground font-normal">(optional)</span></Label>
-                <Input
-                  id="notes"
-                  placeholder="e.g. prescription #, allergies…"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                />
+                <Input id="notes" placeholder="e.g. prescription #…" value={notes} onChange={(e) => setNotes(e.target.value)} />
               </div>
             </CardContent>
           </Card>
 
           <div className="bg-muted/30 border border-border rounded-xl p-4 space-y-2">
             <div className="flex justify-between text-sm text-muted-foreground">
-              <span>Subtotal</span>
-              <span>{formatCurrency(subtotal)}</span>
+              <span>Subtotal</span><span>{formatCurrency(subtotal)}</span>
             </div>
-            {/* Discount */}
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground shrink-0">Discount</span>
               <div className="flex items-center gap-1 ml-auto">
                 <span className="text-sm text-muted-foreground">$</span>
-                <input
-                  type="number"
-                  min={0}
-                  max={subtotal}
-                  step={0.01}
-                  value={discountAmount || ""}
-                  placeholder="0.00"
+                <input type="number" min={0} max={subtotal} step={0.01} value={discountAmount || ""} placeholder="0.00"
                   onChange={(e) => setDiscountAmount(Math.max(0, parseFloat(e.target.value) || 0))}
-                  className="w-24 text-right h-7 rounded border border-input bg-background px-2 py-1 text-sm"
-                />
+                  className="w-24 text-right h-7 rounded border border-input bg-background px-2 py-1 text-sm" />
               </div>
             </div>
             {taxRatePct > 0 && (
               <div className="flex justify-between text-sm text-muted-foreground">
-                <span>Tax ({taxRatePct}%)</span>
-                <span>{formatCurrency(taxAmount)}</span>
+                <span>Tax ({taxRatePct}%)</span><span>{formatCurrency(taxAmount)}</span>
               </div>
             )}
             <div className="flex justify-between font-bold text-xl border-t border-border pt-2">
-              <span>Total</span>
-              <span>{formatCurrency(grandTotal)}</span>
+              <span>Total</span><span>{formatCurrency(grandTotal)}</span>
             </div>
           </div>
+
+          {isSafetyBlocked && (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 text-center font-medium">
+              {contraindicatedPairs.length > 0
+                ? "Remove the contraindicated medicine before proceeding"
+                : "Override the severe allergy alert to proceed"}
+            </div>
+          )}
 
           <Button
             className="w-full h-12 text-base font-semibold"
             onClick={handleProcessSale}
-            disabled={saleItems.length === 0 || isSubmitting}
+            disabled={saleItems.length === 0 || isSubmitting || isSafetyBlocked}
           >
             {isSubmitting ? <Loader2 className="animate-spin mr-2" size={18} /> : null}
             Process Sale · {formatCurrency(grandTotal)}

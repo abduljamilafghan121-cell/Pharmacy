@@ -16,3 +16,7 @@ export * from "./pharmacy-settings";
 export * from "./audit-logs";
 export * from "./cash-shifts";
 export * from "./insurance-claims";
+export * from "./patient-allergies";
+export * from "./patient-conditions";
+export * from "./drug-interactions";
+export * from "./controlled-substance-logs";
