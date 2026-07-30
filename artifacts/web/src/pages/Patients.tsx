@@ -646,3 +646,43 @@ function PatientSafetyDialog({ patient, onClose }: { patient: Patient; onClose: 
     </Dialog>
   );
 }
+
+function PrintablePatientHistory({ patient, items }: { patient: Patient; items: DispensingHistoryItem[] }) {
+  return (
+    <div className="hidden print:block mt-6">
+      <h2 className="text-lg font-bold mb-1">{patient.name} — Dispensing History</h2>
+      <p className="text-xs text-muted-foreground mb-4">
+        {patient.phone && <>Phone: {patient.phone} · </>}
+        {patient.dateOfBirth && <>DOB: {new Date(`${patient.dateOfBirth}T00:00:00`).toLocaleDateString()} · </>}
+        Printed: {new Date().toLocaleDateString()}
+      </p>
+      <table className="w-full text-sm border-collapse">
+        <thead>
+          <tr className="border-b border-gray-300">
+            <th className="text-left py-1 pr-3 font-semibold">Date</th>
+            <th className="text-left py-1 pr-3 font-semibold">Order #</th>
+            <th className="text-left py-1 pr-3 font-semibold">Medicine</th>
+            <th className="text-left py-1 pr-3 font-semibold">Qty</th>
+            <th className="text-left py-1 font-semibold">Pharmacist</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((row) => (
+            <tr key={row.itemId} className="border-b border-gray-100">
+              <td className="py-1 pr-3 whitespace-nowrap">{new Date(row.orderDate).toLocaleDateString()}</td>
+              <td className="py-1 pr-3">#{row.orderId}{row.orderStatus === "cancelled" ? " (void)" : ""}</td>
+              <td className="py-1 pr-3">
+                {row.medicineName ?? "—"}{row.medicineStrength ? ` ${row.medicineStrength}` : ""}
+              </td>
+              <td className="py-1 pr-3 whitespace-nowrap">
+                {row.quantity}{row.unitName ? ` ${row.unitName}` : ""}
+                {(row.returnedQuantity ?? 0) > 0 ? ` (${row.returnedQuantity} returned)` : ""}
+              </td>
+              <td className="py-1">{row.servedByName ?? "—"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
