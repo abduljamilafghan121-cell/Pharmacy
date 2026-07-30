@@ -57,6 +57,16 @@ function getMedicineUnits(medicine: Medicine): MedicineUnit[] {
   return ((medicine as any).units as MedicineUnit[]) ?? [];
 }
 
+interface PriceHistoryRow {
+  supplierId: number | null;
+  supplierName: string | null;
+  unitPrice: string;
+  unitName: string | null;
+  quantity: number;
+  orderedAt: string;
+  status: string;
+}
+
 type DraftItem = {
   key: number;
   medicineId: number;
@@ -79,6 +89,9 @@ export default function PurchaseOrders() {
     { key: 1, medicineId: 0, quantity: 1, unitId: undefined, unitPrice: "" },
   ]);
   const [nextKey, setNextKey] = useState(2);
+
+  // Price history per medicine (cached for the session)
+  const [priceHistoryMap, setPriceHistoryMap] = useState<Record<number, PriceHistoryRow[]>>({});
 
   // Scan-to-receive state (per-dialog session)
   const [poScanMode, setPoScanMode] = useState(false);
@@ -161,6 +174,21 @@ export default function PurchaseOrders() {
     setNextKey(2);
   }
 
+  async function fetchPriceHistory(medicineId: number) {
+    if (priceHistoryMap[medicineId]) return; // already cached
+    try {
+      const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
+      const token = localStorage.getItem("pharma_token") ?? "";
+      const res = await fetch(`${BASE}/api/purchase-orders/price-history?medicineId=${medicineId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data: PriceHistoryRow[] = await res.json();
+        setPriceHistoryMap((prev) => ({ ...prev, [medicineId]: data }));
+      }
+    } catch { /* silent */ }
+  }
+
   function updateDraftItem(key: number, patch: Partial<DraftItem>) {
     setDraftItems((current) =>
       current.map((item) => (item.key === key ? { ...item, ...patch } : item)),
@@ -177,6 +205,7 @@ export default function PurchaseOrders() {
       unitId: baseUnit?.id,
       unitPrice: medicine?.price ?? "",
     });
+    if (medicineId) fetchPriceHistory(medicineId);
   }
 
   function selectUnit(key: number, unitId: number | undefined, medicine: Medicine | undefined) {
@@ -523,6 +552,19 @@ export default function PurchaseOrders() {
                             }
                             required
                           />
+                          {item.medicineId > 0 && (priceHistoryMap[item.medicineId] ?? []).length > 0 && (
+                            <div className="rounded-md border border-border bg-muted/30 p-2 text-xs space-y-1">
+                              <p className="font-medium text-muted-foreground">Recent purchase prices</p>
+                              {(priceHistoryMap[item.medicineId] ?? []).slice(0, 3).map((h, i) => (
+                                <div key={i} className="flex justify-between gap-2">
+                                  <span className="text-muted-foreground truncate">{h.supplierName ?? "Unknown"}</span>
+                                  <span className="font-semibold shrink-0">
+                                    ${parseFloat(h.unitPrice).toFixed(2)}{h.unitName ? ` / ${h.unitName}` : ""}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>

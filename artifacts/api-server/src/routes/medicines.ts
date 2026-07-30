@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, ilike, or, and, sql } from "drizzle-orm";
-import { db, medicinesTable, categoriesTable, medicineUnitsTable } from "@workspace/db";
+import { eq, ilike, or, and, sql, gte } from "drizzle-orm";
+import { db, medicinesTable, categoriesTable, medicineUnitsTable, ordersTable, orderItemsTable } from "@workspace/db";
 import {
   CreateMedicineBody, UpdateMedicineBody,
   GetMedicineParams, UpdateMedicineParams, DeleteMedicineParams,
@@ -95,6 +95,74 @@ router.get("/medicines/expiring", requireAuth, async (_req, res): Promise<void> 
     res.json(withUnits);
   } catch (err) {
     res.status(500).json({ error: "Failed to load expiring medicines.", detail: getDbErrorMessage(err) });
+  }
+});
+
+// ── Smart Reorder Suggestions ─────────────────────────────────────────────
+// Returns medicines at or below 1.5× their reorder level with 30-day sales
+// velocity and a suggested quantity to order.
+router.get("/medicines/reorder-suggestions", requireAuth, async (_req, res): Promise<void> => {
+  try {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    // 30-day sales grouped by medicine
+    const salesData = await db
+      .select({
+        medicineId: orderItemsTable.medicineId,
+        sold30d: sql<number>`COALESCE(SUM(${orderItemsTable.quantity}), 0)::int`,
+      })
+      .from(orderItemsTable)
+      .leftJoin(ordersTable, eq(ordersTable.id, orderItemsTable.orderId))
+      .where(
+        and(
+          sql`${ordersTable.status} != 'cancelled'`,
+          gte(ordersTable.createdAt, thirtyDaysAgo),
+        ),
+      )
+      .groupBy(orderItemsTable.medicineId);
+
+    const salesMap = new Map(salesData.map((s) => [s.medicineId, s.sold30d]));
+
+    // Medicines at or below 1.5× reorder level
+    const meds = await db
+      .select({
+        id: medicinesTable.id,
+        name: medicinesTable.name,
+        genericName: medicinesTable.genericName,
+        quantity: medicinesTable.quantity,
+        reorderLevel: medicinesTable.reorderLevel,
+        price: medicinesTable.price,
+      })
+      .from(medicinesTable)
+      .where(sql`${medicinesTable.quantity} <= GREATEST(CAST(${medicinesTable.reorderLevel} * 1.5 AS int), ${medicinesTable.reorderLevel} + 5)`)
+      .orderBy(medicinesTable.quantity);
+
+    const suggestions = meds.map((med) => {
+      const sold30d = salesMap.get(med.id) ?? 0;
+      const dailyRate = Math.round((sold30d / 30) * 10) / 10;
+      const deficit = Math.max(0, med.reorderLevel - med.quantity);
+      const demandFor30Days = Math.ceil((sold30d / 30) * 30);
+      const suggestedReorderQty = Math.max(demandFor30Days + deficit, med.reorderLevel, 5);
+      const urgency =
+        med.quantity === 0 ? "critical" : med.quantity <= med.reorderLevel ? "high" : "medium";
+
+      return {
+        medicineId: med.id,
+        medicineName: med.name,
+        genericName: med.genericName,
+        currentStock: med.quantity,
+        reorderLevel: med.reorderLevel,
+        sold30Days: sold30d,
+        dailyRate,
+        suggestedReorderQty,
+        urgency,
+      };
+    });
+
+    res.json(suggestions);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to compute reorder suggestions.", detail: getDbErrorMessage(err) });
   }
 });
 
@@ -263,6 +331,42 @@ router.post("/medicines/:id/write-off", requireAuth, requireRole("admin", "pharm
     res.json({ id: updated.id, name: updated.name, quantity: updated.quantity, written_off: body.data.quantity, reason: body.data.reason });
   } catch (err) {
     res.status(500).json({ error: "Failed to write off stock.", detail: getDbErrorMessage(err) });
+  }
+});
+
+// ── Generic Substitution Suggestions ─────────────────────────────────────────
+// Returns in-stock alternatives with the same generic name at a lower price.
+router.get("/medicines/:id/generics", requireAuth, async (req, res): Promise<void> => {
+  const params = GetMedicineParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: formatZodError(params.error) }); return; }
+  try {
+    const [med] = await db
+      .select({ id: medicinesTable.id, genericName: medicinesTable.genericName, price: medicinesTable.price })
+      .from(medicinesTable)
+      .where(eq(medicinesTable.id, params.data.id));
+    if (!med) { res.status(404).json({ error: "Medicine not found." }); return; }
+    if (!med.genericName) { res.json([]); return; }
+
+    const alts = await db
+      .select(MEDICINE_SELECT)
+      .from(medicinesTable)
+      .leftJoin(categoriesTable, eq(medicinesTable.categoryId, categoriesTable.id))
+      .where(
+        and(
+          sql`LOWER(${medicinesTable.genericName}) = LOWER(${med.genericName})`,
+          sql`${medicinesTable.id} != ${med.id}`,
+          sql`${medicinesTable.quantity} > 0`,
+          sql`${medicinesTable.price}::numeric < ${med.price}::numeric`,
+        ),
+      )
+      .orderBy(medicinesTable.price);
+
+    const withUnits = await Promise.all(alts.map(async (r) => ({
+      ...r, units: await fetchUnitsForMedicine(r.id),
+    })));
+    res.json(withUnits);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to load generic alternatives.", detail: getDbErrorMessage(err) });
   }
 });
 

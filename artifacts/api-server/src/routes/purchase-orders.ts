@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db, purchaseOrdersTable, purchaseOrderItemsTable, medicinesTable, suppliersTable, medicineUnitsTable } from "@workspace/db";
 import { z } from "zod";
 import {
@@ -121,6 +121,37 @@ router.post("/purchase-orders", requireAuth, requireRole("admin", "pharmacist"),
 
   const full = await fetchPurchaseOrder(poId);
   res.status(201).json(full);
+});
+
+// ── Supplier Price History ────────────────────────────────────────────────────
+// Returns the last 20 purchase prices for a medicine across all suppliers.
+router.get("/purchase-orders/price-history", requireAuth, requireRole("admin", "pharmacist"), async (req, res): Promise<void> => {
+  const medicineId = Number(req.query["medicineId"]);
+  if (!medicineId || isNaN(medicineId)) {
+    res.status(400).json({ error: "medicineId query parameter is required." });
+    return;
+  }
+  try {
+    const rows = await db
+      .select({
+        supplierId: purchaseOrdersTable.supplierId,
+        supplierName: suppliersTable.name,
+        unitPrice: purchaseOrderItemsTable.unitPrice,
+        unitName: purchaseOrderItemsTable.unitName,
+        quantity: purchaseOrderItemsTable.quantity,
+        orderedAt: purchaseOrdersTable.createdAt,
+        status: purchaseOrdersTable.status,
+      })
+      .from(purchaseOrderItemsTable)
+      .leftJoin(purchaseOrdersTable, eq(purchaseOrderItemsTable.purchaseOrderId, purchaseOrdersTable.id))
+      .leftJoin(suppliersTable, eq(purchaseOrdersTable.supplierId, suppliersTable.id))
+      .where(eq(purchaseOrderItemsTable.medicineId, medicineId))
+      .orderBy(sql`${purchaseOrdersTable.createdAt} DESC`)
+      .limit(20);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to load price history.", detail: String(err) });
+  }
 });
 
 router.get("/purchase-orders/:id", requireAuth, requireRole("admin", "pharmacist"), async (req, res): Promise<void> => {

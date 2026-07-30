@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { sql, gte, lte, and } from "drizzle-orm";
-import { db, ordersTable, orderItemsTable, medicinesTable, orderItemBatchAllocationsTable, medicineBatchesTable } from "@workspace/db";
+import { sql, gte, lte, and, eq } from "drizzle-orm";
+import { db, ordersTable, orderItemsTable, medicinesTable, orderItemBatchAllocationsTable, medicineBatchesTable, usersTable } from "@workspace/db";
 import { requireAuth, requireRole } from "../middlewares/auth";
 
 const router: IRouter = Router();
@@ -137,6 +137,32 @@ router.get("/reports/profit", requireAuth, requireRole("admin", "pharmacist", "v
     marginPct: Math.round(marginPct * 10) / 10,
     note: "Cost is only known for stock received after batch tracking was added — older/undated batches show as $0 cost, understating true cost for that portion.",
   });
+});
+
+// Staff productivity — sales count, items dispensed, and revenue per staff member
+router.get("/reports/staff-productivity", requireAuth, requireRole("admin", "pharmacist", "viewer"), async (req, res): Promise<void> => {
+  const from = req.query["from"] as string | undefined;
+  const to = req.query["to"] as string | undefined;
+  const conditions = [sql`${ordersTable.status} != 'cancelled'`];
+  if (from) conditions.push(gte(sql`DATE(${ordersTable.createdAt})`, from));
+  if (to) conditions.push(lte(sql`DATE(${ordersTable.createdAt})`, to));
+
+  const rows = await db
+    .select({
+      userId: ordersTable.servedBy,
+      userName: usersTable.name,
+      totalOrders: sql<number>`COUNT(DISTINCT ${ordersTable.id})::int`,
+      totalRevenue: sql<string>`COALESCE(SUM(${ordersTable.total}), 0)::text`,
+      totalItems: sql<number>`COALESCE(SUM(${orderItemsTable.quantity}), 0)::int`,
+    })
+    .from(ordersTable)
+    .leftJoin(usersTable, eq(ordersTable.servedBy, usersTable.id))
+    .leftJoin(orderItemsTable, eq(orderItemsTable.orderId, ordersTable.id))
+    .where(and(...conditions))
+    .groupBy(ordersTable.servedBy, usersTable.name)
+    .orderBy(sql`SUM(${ordersTable.total}) DESC`);
+
+  res.json(rows);
 });
 
 export default router;

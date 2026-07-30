@@ -193,3 +193,78 @@ export function useUpdateInsuranceClaim() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["insurance-claims"] }),
   });
 }
+
+// ── Insurance Pre-Authorizations ─────────────────────────────────────────────
+
+export interface InsurancePreAuth {
+  id: number;
+  patientId: number | null;
+  patientName: string | null;
+  medicineId: number;
+  medicineName: string | null;
+  prescriptionId: number | null;
+  insurerName: string;
+  policyNumber: string | null;
+  diagnosisCode: string | null;
+  requestedBy: number | null;
+  requestedByName: string | null;
+  status: "pending" | "approved" | "denied" | "expired";
+  referenceNumber: string | null;
+  notes: string | null;
+  submittedAt: string;
+  resolvedAt: string | null;
+}
+
+export function useListPreAuths(status?: string) {
+  return useQuery<InsurancePreAuth[]>({
+    queryKey: ["pre-authorizations", status],
+    queryFn: async () => {
+      const url = status ? `${apiUrl("pre-authorizations")}?status=${status}` : apiUrl("pre-authorizations");
+      const res = await fetch(url, { headers: authHeaders() });
+      return jsonOrThrow(res, "Failed to load pre-authorizations");
+    },
+  });
+}
+
+export function useCreatePreAuth() {
+  const queryClient = useQueryClient();
+  return useMutation<InsurancePreAuth, Error, {
+    medicineId: number;
+    patientId?: number;
+    prescriptionId?: number;
+    insurerName: string;
+    policyNumber?: string;
+    diagnosisCode?: string;
+    notes?: string;
+  }>({
+    mutationFn: async (data) => {
+      const res = await fetch(apiUrl("pre-authorizations"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify(data),
+      });
+      return jsonOrThrow(res, "Failed to submit pre-authorization");
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["pre-authorizations"] }),
+  });
+}
+
+export function useUpdatePreAuth() {
+  const queryClient = useQueryClient();
+  return useMutation<InsurancePreAuth, Error, {
+    id: number;
+    status?: string;
+    referenceNumber?: string | null;
+    notes?: string | null;
+  }>({
+    mutationFn: async ({ id, ...data }) => {
+      const res = await fetch(apiUrl(`pre-authorizations/${id}`), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify(data),
+      });
+      return jsonOrThrow(res, "Failed to update pre-authorization");
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["pre-authorizations"] }),
+  });
+}

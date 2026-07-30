@@ -20,6 +20,7 @@ import {
   Landmark,
   CreditCard,
   Lock,
+  FileCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -55,6 +56,7 @@ const navItems: NavItem[] = [
   { label: "Supplier Returns", href: "/supplier-returns", icon: RotateCcw, roles: ["admin", "pharmacist"] },
   { label: "Cash Register", href: "/cash-register", icon: CreditCard, roles: ["admin", "pharmacist", "cashier"] },
   { label: "Insurance Claims", href: "/insurance-claims", icon: Landmark, roles: ["admin", "pharmacist"] },
+  { label: "Pre-Authorizations", href: "/pre-authorizations", icon: FileCheck, roles: ["admin", "pharmacist"] },
   { label: "Reports", href: "/reports", icon: BarChart3, roles: ["admin", "pharmacist", "viewer"] },
   { label: "Controlled Substances", href: "/controlled-substance-logs", icon: Lock, roles: ["admin", "pharmacist"] },
   { label: "Stocktake", href: "/stocktake", icon: ClipboardList, roles: ["admin", "pharmacist"] },

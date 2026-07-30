@@ -20,6 +20,7 @@ import cashShiftsRouter from "./cash-shifts";
 import insuranceClaimsRouter from "./insurance-claims";
 import patientSafetyRouter from "./patient-safety";
 import stocktakesRouter from "./stocktakes";
+import preAuthorizationsRouter from "./pre-authorizations";
 
 const router: IRouter = Router();
 
@@ -44,5 +45,6 @@ router.use(cashShiftsRouter);
 router.use(insuranceClaimsRouter);
 router.use(patientSafetyRouter);
 router.use(stocktakesRouter);
+router.use(preAuthorizationsRouter);
 
 export default router;

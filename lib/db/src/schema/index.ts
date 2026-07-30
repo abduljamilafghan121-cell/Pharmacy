@@ -22,3 +22,4 @@ export * from "./drug-interactions";
 export * from "./controlled-substance-logs";
 export * from "./drug-contraindications";
 export * from "./stocktakes";
+export * from "./insurance-pre-authorizations";

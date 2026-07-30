@@ -30,6 +30,7 @@ import ResetPassword from '@/pages/ResetPassword';
 import AuditLog from '@/pages/AuditLog';
 import CashRegister from '@/pages/CashRegister';
 import InsuranceClaims from '@/pages/InsuranceClaims';
+import PreAuthorizations from '@/pages/PreAuthorizations';
 import SupplierReturns from '@/pages/SupplierReturns';
 import ControlledSubstanceLogs from '@/pages/ControlledSubstanceLogs';
 import Stocktake from '@/pages/Stocktake';
@@ -154,6 +155,9 @@ function Router() {
         </Route>
         <Route path="/insurance-claims">
           <ProtectedRoute component={InsuranceClaims} roles={['admin', 'pharmacist']} />
+        </Route>
+        <Route path="/pre-authorizations">
+          <ProtectedRoute component={PreAuthorizations} roles={['admin', 'pharmacist']} />
         </Route>
         <Route path="/supplier-returns">
           <ProtectedRoute component={SupplierReturns} roles={['admin', 'pharmacist']} />

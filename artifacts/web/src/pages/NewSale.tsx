@@ -63,6 +63,16 @@ interface PrescriptionInfo {
   refillsUsed: number;
 }
 
+interface GenericAlternative {
+  id: number;
+  name: string;
+  genericName: string | null;
+  price: string;
+  quantity: number;
+  manufacturer: string | null;
+  units?: any[];
+}
+
 const PAYMENT_METHODS = [
   { value: "cash", label: "Cash" },
   { value: "card", label: "Card / PoS" },
@@ -132,6 +142,13 @@ export default function NewSale() {
   const [prescriptionInfo, setPrescriptionInfo] = useState<PrescriptionInfo | null>(null);
   const [prescriptionLoading, setPrescriptionLoading] = useState(false);
 
+  // Generic substitution suggestions
+  const [genericSuggestion, setGenericSuggestion] = useState<{
+    brandId: number;
+    brandName: string;
+    alternatives: GenericAlternative[];
+  } | null>(null);
+
   // Barcode scan mode
   const [scanMode, setScanMode] = useState(false);
   const [scanFlash, setScanFlash] = useState<string | null>(null);
@@ -199,6 +216,17 @@ export default function NewSale() {
       setPrescriptionLoading(false);
     }
   }, [toast]);
+
+  // ── Generic substitution check ────────────────────────────────────────────
+  const checkGenericAlternatives = useCallback(async (medicineId: number, medicineName: string) => {
+    try {
+      const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
+      const alts = await apiFetch<GenericAlternative[]>(`${BASE}/api/medicines/${medicineId}/generics`);
+      if (alts.length > 0) {
+        setGenericSuggestion({ brandId: medicineId, brandName: medicineName, alternatives: alts });
+      }
+    } catch { /* silent */ }
+  }, []);
 
   // ── Barcode scan handler ──────────────────────────────────────────────────
   const handleBarcodeScan = useCallback(async (barcode: string) => {
@@ -287,6 +315,9 @@ export default function NewSale() {
     });
     setSearch("");
     searchRef.current?.focus();
+    if ((medicine as any).genericName) {
+      checkGenericAlternatives(medicine.id, medicine.name);
+    }
   };
 
   const updateQty = (id: number, qty: number) => {
@@ -309,6 +340,7 @@ export default function NewSale() {
 
   const removeItem = (id: number) => {
     setSaleItems(prev => prev.filter(i => i.medicine.id !== id));
+    setGenericSuggestion(prev => (prev?.brandId === id ? null : prev));
   };
 
   const updateSig = (id: number, sig: string) => {
@@ -556,6 +588,55 @@ export default function NewSale() {
               )}
             </CardContent>
           </Card>
+
+          {/* Generic substitution suggestion */}
+          {genericSuggestion && (
+            <div className="rounded-lg border border-teal-300/60 bg-teal-500/5 p-3 text-sm flex items-start gap-3">
+              <div className="shrink-0 mt-0.5 w-7 h-7 rounded-full bg-teal-500/15 text-teal-600 flex items-center justify-center">
+                <Pill size={14} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-teal-700">Cheaper generic available for {genericSuggestion.brandName}</p>
+                <div className="mt-1.5 space-y-1">
+                  {genericSuggestion.alternatives.slice(0, 2).map((alt) => {
+                    const saving = parseFloat(saleItems.find(i => i.medicine.id === genericSuggestion.brandId)?.medicine.price ?? "0") - parseFloat(alt.price);
+                    return (
+                      <div key={alt.id} className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <span className="font-medium truncate">{alt.name}</span>
+                          {alt.manufacturer && <span className="text-teal-600/70 text-xs ml-1">· {alt.manufacturer}</span>}
+                          <span className="text-teal-700 font-semibold ml-2">{formatCurrency(parseFloat(alt.price))}</span>
+                          {saving > 0 && <span className="text-xs text-teal-600 ml-1">(save {formatCurrency(saving)}/unit)</span>}
+                        </div>
+                        <button
+                          type="button"
+                          className="shrink-0 text-xs font-semibold text-teal-700 hover:text-teal-900 border border-teal-400/50 rounded px-2 py-0.5 hover:bg-teal-500/10 transition-colors"
+                          onClick={() => {
+                            const found = (medicines ?? []).find(m => m.id === alt.id);
+                            if (found) {
+                              removeItem(genericSuggestion.brandId);
+                              addItem(found);
+                            }
+                            setGenericSuggestion(null);
+                          }}
+                        >
+                          Switch
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              <button
+                type="button"
+                className="shrink-0 text-teal-500 hover:text-teal-700"
+                onClick={() => setGenericSuggestion(null)}
+                aria-label="Dismiss"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          )}
 
           {/* Safety warnings panel */}
           {saleItems.length > 0 && (interactions.length > 0 || allergyHits.length > 0 || controlledItems.length > 0) && (

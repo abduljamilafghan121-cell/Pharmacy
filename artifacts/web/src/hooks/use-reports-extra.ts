@@ -52,3 +52,46 @@ export function useTopMedicinesRanged(from?: string, to?: string) {
     },
   });
 }
+
+export interface StaffProductivityRow {
+  userId: number | null;
+  userName: string | null;
+  totalOrders: number;
+  totalRevenue: string;
+  totalItems: number;
+}
+
+export function useStaffProductivity(from?: string, to?: string) {
+  return useQuery<StaffProductivityRow[]>({
+    queryKey: ["reports-staff-productivity", from, to],
+    queryFn: async () => {
+      const res = await fetch(buildUrl("reports/staff-productivity", { from, to }), { headers: authHeaders() });
+      if (!res.ok) throw new Error("Failed to load staff productivity");
+      return res.json();
+    },
+  });
+}
+
+export interface ReorderSuggestion {
+  medicineId: number;
+  medicineName: string;
+  genericName: string | null;
+  currentStock: number;
+  reorderLevel: number;
+  sold30Days: number;
+  dailyRate: number;
+  suggestedReorderQty: number;
+  urgency: "critical" | "high" | "medium";
+}
+
+export function useReorderSuggestions() {
+  return useQuery<ReorderSuggestion[]>({
+    queryKey: ["medicines-reorder-suggestions"],
+    queryFn: async () => {
+      const res = await fetch(buildUrl("medicines/reorder-suggestions", {}), { headers: authHeaders() });
+      if (!res.ok) throw new Error("Failed to load reorder suggestions");
+      return res.json();
+    },
+    staleTime: 5 * 60 * 1000, // 5 min — reorder data doesn't change second-by-second
+  });
+}
