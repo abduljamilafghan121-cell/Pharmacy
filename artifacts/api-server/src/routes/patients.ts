@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, ilike, sql } from "drizzle-orm";
-import { db, patientsTable } from "@workspace/db";
+import { db, patientsTable, patientAllergiesTable } from "@workspace/db";
 import { CreatePatientBody, GetPatientParams, UpdatePatientParams, UpdatePatientBody } from "@workspace/api-zod";
 import { requireAuth, requireRole } from "../middlewares/auth";
 import { formatZodError, getDbErrorMessage } from "../lib/api-errors";
@@ -18,14 +18,32 @@ router.get("/patients", requireAuth, async (req, res): Promise<void> => {
     const offset = (page - 1) * limit;
     const whereClause = search ? ilike(patientsTable.name, `%${search}%`) : undefined;
 
+    // Subquery for allergy count — included in every patient row so the list
+    // can show an allergy badge without a separate per-patient request.
+    const allergyCountSq = sql<number>`(
+      SELECT COUNT(*)::int FROM ${patientAllergiesTable}
+      WHERE ${patientAllergiesTable.patientId} = ${patientsTable.id}
+    )`.as("allergy_count");
+
+    const selectFields = {
+      id: patientsTable.id,
+      name: patientsTable.name,
+      phone: patientsTable.phone,
+      dateOfBirth: patientsTable.dateOfBirth,
+      gender: patientsTable.gender,
+      notes: patientsTable.notes,
+      createdAt: patientsTable.createdAt,
+      allergyCount: allergyCountSq,
+    };
+
     if (paginate) {
       const [rows, countResult] = await Promise.all([
-        db.select().from(patientsTable).where(whereClause).orderBy(patientsTable.name).limit(limit).offset(offset),
+        db.select(selectFields).from(patientsTable).where(whereClause).orderBy(patientsTable.name).limit(limit).offset(offset),
         db.select({ count: sql<number>`count(*)::int` }).from(patientsTable).where(whereClause),
       ]);
       res.json({ data: rows, total: countResult[0]?.count ?? 0, page, limit });
     } else {
-      const rows = await db.select().from(patientsTable).where(whereClause).orderBy(patientsTable.name);
+      const rows = await db.select(selectFields).from(patientsTable).where(whereClause).orderBy(patientsTable.name);
       res.json(rows);
     }
   } catch (err) {

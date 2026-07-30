@@ -47,6 +47,9 @@ After configuring the database URL, run migrations:
 pnpm --filter @workspace/db run push
 ```
 
+This will apply all schema changes including the latest addition:
+- `drug_contraindications` table (drug-patient contraindication rules per medicine)
+
 ## Key Features
 
 - Login / Register / Role-based access control

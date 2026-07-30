@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Search, Plus, Minus, Trash2, ShoppingBag, Pill,
   CheckCircle2, Loader2, Receipt, AlertTriangle, ShieldAlert, Lock,
+  FileText, AlertCircle, X,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { formatStockDisplay, priceForUnit } from "@/lib/stock-format";
@@ -39,6 +40,25 @@ interface PatientAllergy {
   allergen: string;
   severity: "mild" | "moderate" | "severe";
   reaction?: string | null;
+}
+
+interface ContraindicationWarning {
+  id: number;
+  medicineId: number;
+  medicineName: string;
+  contraindicationType: string;
+  value: string;
+  severity: "warn" | "block";
+  description: string;
+}
+
+interface PrescriptionInfo {
+  id: number;
+  patientName: string | null;
+  doctorName: string | null;
+  status: string;
+  maxRefills: number;
+  refillsUsed: number;
 }
 
 const PAYMENT_METHODS = [
@@ -101,6 +121,14 @@ export default function NewSale() {
   const [allergies, setAllergies] = useState<PatientAllergy[]>([]);
   const [allergyHits, setAllergyHits] = useState<string[]>([]);
   const [overrideAllergy, setOverrideAllergy] = useState(false);
+  const [contraindicationWarnings, setContraindicationWarnings] = useState<ContraindicationWarning[]>([]);
+  const [overrideContraindication, setOverrideContraindication] = useState(false);
+
+  // Prescription state
+  const [prescriptionId, setPrescriptionId] = useState<number | null>(null);
+  const [prescriptionInput, setPrescriptionInput] = useState("");
+  const [prescriptionInfo, setPrescriptionInfo] = useState<PrescriptionInfo | null>(null);
+  const [prescriptionLoading, setPrescriptionLoading] = useState(false);
 
   const { toast } = useToast();
   const [, setLocation] = useLocation();
@@ -133,6 +161,38 @@ export default function NewSale() {
       setInteractions(result.interactions);
     } catch { setInteractions([]); }
   }, []);
+
+  // ── Contraindication check ────────────────────────────────────────────────
+  const checkContraindications = useCallback(async (pid: number | null, items: SaleItem[]) => {
+    if (!pid || items.length === 0) { setContraindicationWarnings([]); return; }
+    try {
+      const result = await apiFetch<{ contraindications: ContraindicationWarning[] }>(
+        "/api/medicines/check-contraindications",
+        {
+          method: "POST",
+          body: JSON.stringify({ medicineIds: items.map(i => i.medicine.id), patientId: pid }),
+        }
+      );
+      setContraindicationWarnings(result.contraindications);
+    } catch { setContraindicationWarnings([]); }
+  }, []);
+
+  // ── Prescription lookup ───────────────────────────────────────────────────
+  const lookupPrescription = useCallback(async (id: number) => {
+    setPrescriptionLoading(true);
+    setPrescriptionInfo(null);
+    try {
+      const row = await apiFetch<PrescriptionInfo>(`/api/prescriptions/${id}`);
+      setPrescriptionInfo(row);
+      setPrescriptionId(id);
+    } catch {
+      setPrescriptionInfo(null);
+      setPrescriptionId(null);
+      toast({ title: "Prescription not found", description: `No prescription with ID #${id} exists.`, variant: "destructive" });
+    } finally {
+      setPrescriptionLoading(false);
+    }
+  }, [toast]);
 
   // ── Allergy check ─────────────────────────────────────────────────────────
   const checkAllergies = useCallback(async (pid: number | null, items: SaleItem[]) => {
@@ -167,11 +227,13 @@ export default function NewSale() {
     }
   }, [medicines]);
 
-  // Re-check interactions whenever cart changes
+  // Re-check all safety data whenever cart or patient changes
   useEffect(() => {
     checkInteractions(saleItems);
     checkAllergies(patientId, saleItems);
+    checkContraindications(patientId, saleItems);
     setOverrideAllergy(false);
+    setOverrideContraindication(false);
   }, [saleItems, patientId]);
 
   const addItem = (medicine: Medicine) => {
@@ -235,7 +297,19 @@ export default function NewSale() {
   const contraindicatedPairs = interactions.filter(i => i.severity === "contraindicated");
   const hasSevereAllergy = allergyHits.length > 0 &&
     allergies.some(a => a.severity === "severe" && allergyHits.some(h => h.toLowerCase().includes(a.allergen.toLowerCase())));
-  const isSafetyBlocked = contraindicatedPairs.length > 0 || (hasSevereAllergy && !overrideAllergy);
+  const hasBlockContraindication = contraindicationWarnings.some(c => c.severity === "block");
+  const isSafetyBlocked =
+    contraindicatedPairs.length > 0 ||
+    (hasSevereAllergy && !overrideAllergy) ||
+    (hasBlockContraindication && !overrideContraindication);
+
+  // Prescription refill status
+  const refillsRemaining = prescriptionInfo
+    ? Math.max(0, prescriptionInfo.maxRefills - prescriptionInfo.refillsUsed)
+    : null;
+  const refillsExhausted = prescriptionInfo
+    ? prescriptionInfo.refillsUsed > prescriptionInfo.maxRefills
+    : false;
 
   const handleProcessSale = async () => {
     if (saleItems.length === 0) {
@@ -268,6 +342,8 @@ export default function NewSale() {
             ...(i.unitId ? { unitId: i.unitId } : {}),
           })) as any,
           ...(discountClamped > 0 ? { discountAmount: discountClamped } as any : {}),
+          ...(patientId ? { patientId } as any : {}),
+          ...(prescriptionId ? { prescriptionId } as any : {}),
         },
       });
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
@@ -292,6 +368,11 @@ export default function NewSale() {
     setAllergies([]);
     setAllergyHits([]);
     setOverrideAllergy(false);
+    setContraindicationWarnings([]);
+    setOverrideContraindication(false);
+    setPrescriptionId(null);
+    setPrescriptionInput("");
+    setPrescriptionInfo(null);
     searchRef.current?.focus();
   };
 
@@ -465,6 +546,33 @@ export default function NewSale() {
                   </div>
                 </div>
               )}
+
+              {/* Drug-patient contraindications */}
+              {contraindicationWarnings.map((ci, i) => (
+                <div key={i} className={`flex items-start gap-3 rounded-lg border p-3 text-sm ${ci.severity === "block" ? "text-red-700 bg-red-50 border-red-200" : "text-amber-700 bg-amber-50 border-amber-200"}`}>
+                  <AlertCircle size={16} className="shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="font-semibold capitalize">
+                      {ci.severity === "block" ? "Contraindication — " : "Caution — "}
+                      {ci.medicineName}
+                    </p>
+                    <p className="mt-0.5 opacity-90">{ci.description}</p>
+                    {ci.severity === "block" && !overrideContraindication && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="mt-2 border-red-300 text-red-700 hover:bg-red-100"
+                        onClick={() => setOverrideContraindication(true)}
+                      >
+                        Override — I confirm this is intentional
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {overrideContraindication && contraindicationWarnings.some(c => c.severity === "block") && (
+                <p className="text-xs font-semibold text-red-800 px-3">⚠ Contraindication override active — proceeding at pharmacist discretion</p>
+              )}
             </div>
           )}
 
@@ -574,11 +682,11 @@ export default function NewSale() {
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="patientId">Patient ID <span className="text-muted-foreground font-normal">(for allergy check)</span></Label>
+                <Label htmlFor="patientId">Patient ID <span className="text-muted-foreground font-normal">(for safety checks)</span></Label>
                 <Input
                   id="patientId"
                   type="number"
-                  placeholder="Enter patient ID to check allergies"
+                  placeholder="Enter patient ID"
                   value={patientId ?? ""}
                   onChange={(e) => setPatientId(e.target.value ? Number(e.target.value) : null)}
                 />
@@ -587,10 +695,83 @@ export default function NewSale() {
                     ⚠ {allergies.length} allergy record{allergies.length !== 1 ? "s" : ""} — {allergies.map(a => a.allergen).join(", ")}
                   </p>
                 )}
-                {patientId && allergies.length === 0 && (
-                  <p className="text-xs text-emerald-700">✓ No recorded allergies</p>
+                {patientId && allergies.length === 0 && contraindicationWarnings.length === 0 && (
+                  <p className="text-xs text-emerald-700">✓ No recorded allergies or contraindications</p>
                 )}
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Prescription */}
+          <Card>
+            <CardHeader className="border-b border-border pb-4">
+              <CardTitle className="text-base flex items-center gap-2">
+                <FileText size={16} /> Prescription
+                <span className="text-xs font-normal text-muted-foreground ml-auto">Required for Rx &amp; controlled drugs</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-4 space-y-3">
+              <div className="space-y-1">
+                <Label htmlFor="prescriptionId">Prescription ID</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="prescriptionId"
+                    type="number"
+                    placeholder="Enter prescription ID"
+                    value={prescriptionInput}
+                    onChange={(e) => setPrescriptionInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && prescriptionInput) {
+                        lookupPrescription(Number(prescriptionInput));
+                      }
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0"
+                    disabled={!prescriptionInput || prescriptionLoading}
+                    onClick={() => prescriptionInput && lookupPrescription(Number(prescriptionInput))}
+                  >
+                    {prescriptionLoading ? <Loader2 size={14} className="animate-spin" /> : "Link"}
+                  </Button>
+                  {prescriptionId && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9 shrink-0 text-muted-foreground hover:text-destructive"
+                      onClick={() => { setPrescriptionId(null); setPrescriptionInput(""); setPrescriptionInfo(null); }}
+                    >
+                      <X size={14} />
+                    </Button>
+                  )}
+                </div>
+              </div>
+              {prescriptionInfo && (
+                <div className={`rounded-lg border p-3 text-sm space-y-1 ${prescriptionInfo.status !== "verified" ? "border-amber-200 bg-amber-50" : refillsExhausted ? "border-red-200 bg-red-50" : "border-emerald-200 bg-emerald-50"}`}>
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold">
+                      {prescriptionInfo.status !== "verified"
+                        ? "⚠ Prescription not verified"
+                        : refillsExhausted
+                          ? "✗ No refills remaining"
+                          : `✓ Rx #${prescriptionInfo.id} — verified`}
+                    </span>
+                  </div>
+                  {prescriptionInfo.doctorName && (
+                    <p className="text-muted-foreground text-xs">Doctor: {prescriptionInfo.doctorName}</p>
+                  )}
+                  <p className={`text-xs font-medium ${refillsExhausted ? "text-red-700" : "text-emerald-700"}`}>
+                    Refills: {prescriptionInfo.refillsUsed} used / {prescriptionInfo.maxRefills} allowed
+                    {!refillsExhausted && refillsRemaining !== null && ` — ${refillsRemaining} remaining`}
+                  </p>
+                  {refillsExhausted && (
+                    <p className="text-xs text-red-700 font-semibold">This prescription has no remaining refills. The server will block this sale.</p>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
 

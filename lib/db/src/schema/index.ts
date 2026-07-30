@@ -20,3 +20,4 @@ export * from "./patient-allergies";
 export * from "./patient-conditions";
 export * from "./drug-interactions";
 export * from "./controlled-substance-logs";
+export * from "./drug-contraindications";

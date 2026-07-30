@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Users, Plus, Search, Phone, ShieldAlert, Activity, Trash2, Loader2 } from "lucide-react";
+import { Users, Plus, Search, Phone, ShieldAlert, Activity, Trash2, Loader2, AlertTriangle } from "lucide-react";
 import { ErrorState } from "@/components/ui/error-state";
 import { useToast } from "@/components/ui/use-toast";
 import { formatDate } from "@/lib/utils";
@@ -34,6 +34,7 @@ interface Patient {
   gender?: string | null;
   notes?: string | null;
   createdAt: string;
+  allergyCount?: number;
 }
 
 interface PatientAllergy {
@@ -193,6 +194,7 @@ export default function Patients() {
                   <TableHead>Name</TableHead>
                   <TableHead>Phone</TableHead>
                   <TableHead>DOB / Gender</TableHead>
+                  <TableHead>Allergies</TableHead>
                   <TableHead>Notes</TableHead>
                   <TableHead>Registered</TableHead>
                   <TableHead></TableHead>
@@ -225,6 +227,16 @@ export default function Patients() {
                       <TableCell className="text-sm text-muted-foreground">
                         {p.dateOfBirth ? new Date(`${p.dateOfBirth}T00:00:00`).toLocaleDateString() : "—"}
                         {p.gender && <span className="ml-1 capitalize">({p.gender})</span>}
+                      </TableCell>
+                      <TableCell>
+                        {(p.allergyCount ?? 0) > 0 ? (
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200">
+                            <AlertTriangle size={11} />
+                            {p.allergyCount} allerg{p.allergyCount === 1 ? "y" : "ies"}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground/50 text-sm">—</span>
+                        )}
                       </TableCell>
                       <TableCell className="text-muted-foreground text-sm max-w-xs truncate">{p.notes ?? "—"}</TableCell>
                       <TableCell className="text-muted-foreground text-sm">{formatDate(p.createdAt)}</TableCell>

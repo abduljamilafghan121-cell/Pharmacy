@@ -2,11 +2,14 @@
  * Patient Safety Routes
  * ─────────────────────
  * Covers all five safety-critical features:
- *   1. Patient allergy flags   — GET/POST/DELETE /patients/:id/allergies
- *   2. Patient conditions      — GET/POST/DELETE /patients/:id/conditions
- *   3. Drug interaction check  — POST /medicines/check-interactions
- *   4. Controlled substance log— GET /controlled-substance-logs
- *   5. (Refill tracking lives in prescriptions.ts)
+ *   1. Patient allergy flags        — GET/POST/DELETE /patients/:id/allergies
+ *   2. Patient conditions           — GET/POST/DELETE /patients/:id/conditions
+ *   3. Drug interaction check       — POST /medicines/check-interactions
+ *   4. Drug interaction CRUD        — GET/POST/DELETE /drug-interactions
+ *   5. Controlled substance log     — GET /controlled-substance-logs
+ *   6. Drug contraindications CRUD  — GET/POST/DELETE /medicines/:id/contraindications
+ *   7. Drug contraindication check  — POST /medicines/check-contraindications
+ *   (Refill tracking lives in prescriptions.ts + enforced in orders.ts)
  */
 import { Router, type IRouter } from "express";
 import { eq, and, inArray, or } from "drizzle-orm";
@@ -17,6 +20,7 @@ import {
   patientAllergiesTable,
   patientConditionsTable,
   drugInteractionsTable,
+  drugContraindicationsTable,
   controlledSubstanceLogsTable,
   medicinesTable,
   usersTable,
@@ -28,9 +32,19 @@ const router: IRouter = Router();
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-function patientIdParam(raw: unknown): number | null {
+function positiveInt(raw: unknown): number | null {
   const n = Number(raw);
   return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+/** Compute age in whole years from a date-string (YYYY-MM-DD) as of today. */
+function ageFromDob(dob: string): number {
+  const birth = new Date(`${dob}T00:00:00`);
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const m = today.getMonth() - birth.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+  return age;
 }
 
 // ── Allergies ──────────────────────────────────────────────────────────────
@@ -42,7 +56,7 @@ const AllergyBody = z.object({
 });
 
 router.get("/patients/:id/allergies", requireAuth, async (req, res): Promise<void> => {
-  const id = patientIdParam(req.params["id"]);
+  const id = positiveInt(req.params["id"]);
   if (!id) { res.status(400).json({ error: "Invalid patient id" }); return; }
   try {
     const rows = await db.select().from(patientAllergiesTable)
@@ -55,7 +69,7 @@ router.get("/patients/:id/allergies", requireAuth, async (req, res): Promise<voi
 });
 
 router.post("/patients/:id/allergies", requireAuth, requireRole("admin", "pharmacist"), async (req, res): Promise<void> => {
-  const id = patientIdParam(req.params["id"]);
+  const id = positiveInt(req.params["id"]);
   if (!id) { res.status(400).json({ error: "Invalid patient id" }); return; }
   const parsed = AllergyBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" }); return; }
@@ -75,8 +89,8 @@ router.post("/patients/:id/allergies", requireAuth, requireRole("admin", "pharma
 });
 
 router.delete("/patients/:id/allergies/:allergyId", requireAuth, requireRole("admin", "pharmacist"), async (req, res): Promise<void> => {
-  const id = patientIdParam(req.params["id"]);
-  const allergyId = patientIdParam(req.params["allergyId"]);
+  const id = positiveInt(req.params["id"]);
+  const allergyId = positiveInt(req.params["allergyId"]);
   if (!id || !allergyId) { res.status(400).json({ error: "Invalid id" }); return; }
   try {
     const [row] = await db.delete(patientAllergiesTable)
@@ -97,7 +111,7 @@ const ConditionBody = z.object({
 });
 
 router.get("/patients/:id/conditions", requireAuth, async (req, res): Promise<void> => {
-  const id = patientIdParam(req.params["id"]);
+  const id = positiveInt(req.params["id"]);
   if (!id) { res.status(400).json({ error: "Invalid patient id" }); return; }
   try {
     const rows = await db.select().from(patientConditionsTable)
@@ -110,7 +124,7 @@ router.get("/patients/:id/conditions", requireAuth, async (req, res): Promise<vo
 });
 
 router.post("/patients/:id/conditions", requireAuth, requireRole("admin", "pharmacist"), async (req, res): Promise<void> => {
-  const id = patientIdParam(req.params["id"]);
+  const id = positiveInt(req.params["id"]);
   if (!id) { res.status(400).json({ error: "Invalid patient id" }); return; }
   const parsed = ConditionBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" }); return; }
@@ -129,8 +143,8 @@ router.post("/patients/:id/conditions", requireAuth, requireRole("admin", "pharm
 });
 
 router.delete("/patients/:id/conditions/:conditionId", requireAuth, requireRole("admin", "pharmacist"), async (req, res): Promise<void> => {
-  const id = patientIdParam(req.params["id"]);
-  const conditionId = patientIdParam(req.params["conditionId"]);
+  const id = positiveInt(req.params["id"]);
+  const conditionId = positiveInt(req.params["conditionId"]);
   if (!id || !conditionId) { res.status(400).json({ error: "Invalid id" }); return; }
   try {
     const [row] = await db.delete(patientConditionsTable)
@@ -154,7 +168,6 @@ const InteractionBody = z.object({
 
 router.get("/drug-interactions", requireAuth, async (_req, res): Promise<void> => {
   try {
-    const m1 = { ...medicinesTable, id: medicinesTable.id, name: medicinesTable.name };
     const rows = await db
       .select({
         id: drugInteractionsTable.id,
@@ -188,7 +201,7 @@ router.post("/drug-interactions", requireAuth, requireRole("admin", "pharmacist"
 });
 
 router.delete("/drug-interactions/:id", requireAuth, requireRole("admin"), async (req, res): Promise<void> => {
-  const id = patientIdParam(req.params["id"]);
+  const id = positiveInt(req.params["id"]);
   if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
   try {
     const [row] = await db.delete(drugInteractionsTable).where(eq(drugInteractionsTable.id, id)).returning();
@@ -239,6 +252,152 @@ router.post("/medicines/check-interactions", requireAuth, async (req, res): Prom
     }));
 
     res.json({ interactions: enriched });
+  } catch (err) {
+    res.status(500).json({ error: getDbErrorMessage(err) });
+  }
+});
+
+// ── Drug Contraindications CRUD ────────────────────────────────────────────
+
+const ContraindicationBody = z.object({
+  contraindicationType: z.enum(["condition", "min_age", "max_age", "gender"]),
+  value: z.string().min(1, "Value is required"),
+  severity: z.enum(["warn", "block"]).default("warn"),
+  description: z.string().min(1, "Description is required"),
+});
+
+router.get("/medicines/:id/contraindications", requireAuth, async (req, res): Promise<void> => {
+  const id = positiveInt(req.params["id"]);
+  if (!id) { res.status(400).json({ error: "Invalid medicine id" }); return; }
+  try {
+    const rows = await db.select().from(drugContraindicationsTable)
+      .where(eq(drugContraindicationsTable.medicineId, id))
+      .orderBy(drugContraindicationsTable.createdAt);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: getDbErrorMessage(err) });
+  }
+});
+
+router.post("/medicines/:id/contraindications", requireAuth, requireRole("admin", "pharmacist"), async (req, res): Promise<void> => {
+  const id = positiveInt(req.params["id"]);
+  if (!id) { res.status(400).json({ error: "Invalid medicine id" }); return; }
+  const parsed = ContraindicationBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Validation error" }); return; }
+  try {
+    const [med] = await db.select({ id: medicinesTable.id }).from(medicinesTable).where(eq(medicinesTable.id, id));
+    if (!med) { res.status(404).json({ error: "Medicine not found" }); return; }
+    const [row] = await db.insert(drugContraindicationsTable).values({
+      medicineId: id,
+      contraindicationType: parsed.data.contraindicationType,
+      value: parsed.data.value,
+      severity: parsed.data.severity,
+      description: parsed.data.description,
+    }).returning();
+    res.status(201).json(row);
+  } catch (err) {
+    res.status(500).json({ error: getDbErrorMessage(err) });
+  }
+});
+
+router.delete("/medicines/:id/contraindications/:cid", requireAuth, requireRole("admin", "pharmacist"), async (req, res): Promise<void> => {
+  const id = positiveInt(req.params["id"]);
+  const cid = positiveInt(req.params["cid"]);
+  if (!id || !cid) { res.status(400).json({ error: "Invalid id" }); return; }
+  try {
+    const [row] = await db.delete(drugContraindicationsTable)
+      .where(and(eq(drugContraindicationsTable.id, cid), eq(drugContraindicationsTable.medicineId, id)))
+      .returning();
+    if (!row) { res.status(404).json({ error: "Contraindication not found" }); return; }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: getDbErrorMessage(err) });
+  }
+});
+
+// ── Drug Contraindication CHECK (called at point of sale) ──────────────────
+
+/**
+ * POST /medicines/check-contraindications
+ * Body: { medicineIds: number[], patientId: number }
+ * Returns any contraindications that apply to the patient for the given medicines.
+ */
+router.post("/medicines/check-contraindications", requireAuth, async (req, res): Promise<void> => {
+  const parsed = z.object({
+    medicineIds: z.array(z.number().int().positive()).min(1),
+    patientId: z.number().int().positive(),
+  }).safeParse(req.body);
+
+  if (!parsed.success) { res.json({ contraindications: [] }); return; }
+
+  const { medicineIds, patientId } = parsed.data;
+
+  try {
+    // Fetch patient demographics and conditions in parallel
+    const [patientRows, conditions, contraindicationRows, meds] = await Promise.all([
+      db.select({ dateOfBirth: patientsTable.dateOfBirth, gender: patientsTable.gender })
+        .from(patientsTable).where(eq(patientsTable.id, patientId)),
+      db.select({ condition: patientConditionsTable.condition })
+        .from(patientConditionsTable).where(eq(patientConditionsTable.patientId, patientId)),
+      db.select().from(drugContraindicationsTable)
+        .where(inArray(drugContraindicationsTable.medicineId, medicineIds)),
+      db.select({ id: medicinesTable.id, name: medicinesTable.name })
+        .from(medicinesTable).where(inArray(medicinesTable.id, medicineIds)),
+    ]);
+
+    if (contraindicationRows.length === 0) { res.json({ contraindications: [] }); return; }
+
+    const patient = patientRows[0];
+    const patientAge = patient?.dateOfBirth ? ageFromDob(patient.dateOfBirth) : null;
+    const patientGender = patient?.gender?.toLowerCase() ?? null;
+    const patientConditionNames = conditions.map(c => c.condition.toLowerCase());
+    const medNameMap = Object.fromEntries(meds.map(m => [m.id, m.name]));
+
+    const hits: Array<{
+      id: number;
+      medicineId: number;
+      medicineName: string;
+      contraindicationType: string;
+      value: string;
+      severity: string;
+      description: string;
+    }> = [];
+
+    for (const ci of contraindicationRows) {
+      let matched = false;
+
+      switch (ci.contraindicationType) {
+        case "condition":
+          // Match if any patient condition contains the contraindication value (or vice versa)
+          matched = patientConditionNames.some(
+            pc => pc.includes(ci.value.toLowerCase()) || ci.value.toLowerCase().includes(pc)
+          );
+          break;
+        case "min_age":
+          if (patientAge !== null) matched = patientAge < parseInt(ci.value, 10);
+          break;
+        case "max_age":
+          if (patientAge !== null) matched = patientAge > parseInt(ci.value, 10);
+          break;
+        case "gender":
+          if (patientGender) matched = patientGender === ci.value.toLowerCase();
+          break;
+      }
+
+      if (matched) {
+        hits.push({
+          id: ci.id,
+          medicineId: ci.medicineId,
+          medicineName: medNameMap[ci.medicineId] ?? `Medicine #${ci.medicineId}`,
+          contraindicationType: ci.contraindicationType,
+          value: ci.value,
+          severity: ci.severity,
+          description: ci.description,
+        });
+      }
+    }
+
+    res.json({ contraindications: hits });
   } catch (err) {
     res.status(500).json({ error: getDbErrorMessage(err) });
   }
