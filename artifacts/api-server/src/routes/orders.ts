@@ -53,6 +53,7 @@ const OrderItemInputExtended = z.object({
   medicineId: z.number().int().positive(),
   quantity: z.number().int().min(1),
   unitId: z.number().int().positive().optional(),
+  sig: z.string().max(500).optional(),
 });
 
 router.post("/orders", requireAuth, async (req, res): Promise<void> => {
@@ -259,6 +260,7 @@ router.post("/orders", requireAuth, async (req, res): Promise<void> => {
         unitName: ri.unitName,
         conversionFactorToBase: ri.conversionFactor,
         price: lineTotal.toFixed(2),
+        sig: ri.sig ?? null,
       }).returning();
       orderItems.push({ ...oi, medicineName: ri.med.name });
       // Atomic stock deduction — avoids read-modify-write race under concurrent sales
@@ -339,6 +341,8 @@ router.get("/orders/:id", requireAuth, async (req, res): Promise<void> => {
       unitName: orderItemsTable.unitName,
       conversionFactorToBase: orderItemsTable.conversionFactorToBase,
       price: orderItemsTable.price,
+      sig: orderItemsTable.sig,
+      returnedQuantity: orderItemsTable.returnedQuantity,
     })
     .from(orderItemsTable)
     .leftJoin(medicinesTable, eq(orderItemsTable.medicineId, medicinesTable.id))

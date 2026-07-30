@@ -36,6 +36,8 @@ export const orderItemsTable = pgTable("order_items", {
   conversionFactorToBase: integer("conversion_factor_to_base").notNull().default(1),
   price: numeric("price", { precision: 10, scale: 2 }).notNull(),
   returnedQuantity: integer("returned_quantity").notNull().default(0),
+  /** Structured dosing instructions, e.g. "Take 1 tablet twice daily after food" */
+  sig: text("sig"),
 });
 
 export const orderItemReturnsTable = pgTable("order_item_returns", {

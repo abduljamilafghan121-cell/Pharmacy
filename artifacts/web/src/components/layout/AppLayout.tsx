@@ -56,6 +56,7 @@ const navItems: NavItem[] = [
   { label: "Insurance Claims", href: "/insurance-claims", icon: Landmark, roles: ["admin", "pharmacist"] },
   { label: "Reports", href: "/reports", icon: BarChart3, roles: ["admin", "pharmacist", "viewer"] },
   { label: "Controlled Substances", href: "/controlled-substance-logs", icon: Lock, roles: ["admin", "pharmacist"] },
+  { label: "Stocktake", href: "/stocktake", icon: ClipboardList, roles: ["admin", "pharmacist"] },
   { label: "Audit Log", href: "/audit-log", icon: ShieldCheck, roles: ["admin"] },
   { label: "User Management", href: "/users", icon: Users, roles: ["admin"] },
 ];

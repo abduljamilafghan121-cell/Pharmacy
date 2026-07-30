@@ -16,11 +16,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ArrowLeft, CheckCircle2, RotateCcw, User, Stethoscope, Printer, Package, BadgeCheck } from "lucide-react";
+import { ArrowLeft, CheckCircle2, RotateCcw, User, Stethoscope, Printer, Package, BadgeCheck, Tag } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useToast } from "@/components/ui/use-toast";
 import { SaleStatusBadge, PaymentStatusBadge } from "./Orders";
 import { PrintableReceipt } from "@/components/PrintableReceipt";
+import { printDispensingLabel } from "@/components/PrintableLabel";
+import { usePharmacySettings } from "@/hooks/use-pharmacy-settings";
 
 export default function SaleDetail() {
   const [, params] = useRoute("/sales/:id");
@@ -31,6 +33,7 @@ export default function SaleDetail() {
   const { data: order, isLoading } = useGetOrder(id, {
     query: { enabled: !!id } as any,
   });
+  const { data: pharmacy } = usePharmacySettings();
 
   const updateStatusMutation = useUpdateOrderStatus();
 
@@ -115,15 +118,44 @@ export default function SaleDetail() {
                 {(order as any).items?.map((item: any) => (
                   <div
                     key={item.id}
-                    className="flex justify-between items-center py-2 border-b border-border last:border-0 last:pb-0"
+                    className="py-3 border-b border-border last:border-0 last:pb-0"
                   >
-                    <div>
-                      <p className="font-medium text-foreground">{item.medicineName}</p>
-                      <p className="text-sm text-muted-foreground">
-                        Qty: {item.quantity} × {formatCurrency(parseFloat(item.price) / item.quantity)}
-                      </p>
+                    <div className="flex justify-between items-start gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-foreground">{item.medicineName}</p>
+                        <p className="text-sm text-muted-foreground">
+                          Qty: {item.quantity}{item.unitName ? ` ${item.unitName}` : ""} × {formatCurrency(parseFloat(item.price) / item.quantity)}
+                        </p>
+                        {item.sig && (
+                          <p className="text-xs text-primary/80 mt-1 italic">
+                            ↳ {item.sig}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                          title="Print dispensing label"
+                          onClick={() => printDispensingLabel(
+                            {
+                              patientName: (order as any).patientName,
+                              medicineName: item.medicineName,
+                              sig: item.sig,
+                              qty: item.quantity,
+                              unitName: item.unitName,
+                              dispensedDate: (order as any).createdAt,
+                            },
+                            pharmacy?.name ?? "Pharmacy",
+                            pharmacy?.address
+                          )}
+                        >
+                          <Tag size={13} className="mr-1" /> Label
+                        </Button>
+                        <p className="font-semibold text-foreground">{formatCurrency(parseFloat(item.price))}</p>
+                      </div>
                     </div>
-                    <p className="font-semibold text-foreground">{formatCurrency(parseFloat(item.price))}</p>
                   </div>
                 ))}
               </div>

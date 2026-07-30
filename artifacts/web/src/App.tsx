@@ -32,6 +32,7 @@ import CashRegister from '@/pages/CashRegister';
 import InsuranceClaims from '@/pages/InsuranceClaims';
 import SupplierReturns from '@/pages/SupplierReturns';
 import ControlledSubstanceLogs from '@/pages/ControlledSubstanceLogs';
+import Stocktake from '@/pages/Stocktake';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -159,6 +160,9 @@ function Router() {
         </Route>
         <Route path="/controlled-substance-logs">
           <ProtectedRoute component={ControlledSubstanceLogs} roles={['admin', 'pharmacist']} />
+        </Route>
+        <Route path="/stocktake">
+          <ProtectedRoute component={Stocktake} roles={['admin', 'pharmacist']} />
         </Route>
         <Route path="/forgot-password" component={ForgotPassword} />
         <Route path="/reset-password" component={ResetPassword} />

@@ -26,6 +26,7 @@ interface SaleItem {
   unitId?: number;
   unitName?: string;
   conversionFactor: number;
+  sig?: string;
 }
 
 interface DrugInteraction {
@@ -310,6 +311,10 @@ export default function NewSale() {
     setSaleItems(prev => prev.filter(i => i.medicine.id !== id));
   };
 
+  const updateSig = (id: number, sig: string) => {
+    setSaleItems(prev => prev.map(i => i.medicine.id === id ? { ...i, sig: sig || undefined } : i));
+  };
+
   const subtotal = saleItems.reduce((sum, i) => sum + priceForUnit(i.medicine.price, i.conversionFactor) * i.quantity, 0);
   const discountClamped = Math.min(discountAmount, subtotal);
   const afterDiscount = subtotal - discountClamped;
@@ -366,6 +371,7 @@ export default function NewSale() {
             medicineId: i.medicine.id,
             quantity: i.quantity,
             ...(i.unitId ? { unitId: i.unitId } : {}),
+            ...(i.sig ? { sig: i.sig } : {}),
           })) as any,
           ...(discountClamped > 0 ? { discountAmount: discountClamped } as any : {}),
           ...(patientId ? { patientId } as any : {}),
@@ -713,6 +719,16 @@ export default function NewSale() {
                             <p className="font-semibold text-sm">{formatCurrency(lineTotal)}</p>
                             {item.conversionFactor > 1 && <p className="text-[10px] text-muted-foreground">{baseUnitsUsed} base units</p>}
                           </div>
+                        </div>
+                        {/* SIG — dosing instructions */}
+                        <div className="pt-1">
+                          <Input
+                            placeholder="Dosing instructions (e.g. Take 1 tablet twice daily after food)"
+                            value={item.sig ?? ""}
+                            onChange={(e) => updateSig(item.medicine.id, e.target.value)}
+                            className="h-7 text-xs text-muted-foreground placeholder:text-muted-foreground/50"
+                            aria-label={`Dosing instructions for ${item.medicine.name}`}
+                          />
                         </div>
                       </div>
                     );
