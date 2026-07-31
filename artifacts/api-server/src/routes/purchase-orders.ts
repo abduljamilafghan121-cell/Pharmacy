@@ -208,16 +208,51 @@ router.patch("/purchase-orders/:id/receive", requireAuth, requireRole("admin", "
         ? (parseFloat(item.unitPrice) / conversionFactor).toFixed(4)
         : null;
 
-      // Create a batch record for this received lot — this is what FEFO draws from.
-      await tx.insert(medicineBatchesTable).values({
-        medicineId: item.medicineId,
-        batchNumber: override?.batchNumber ?? null,
-        expiryDate: override?.expiryDate ?? null,
-        quantity: baseUnitsToAdd,
-        costPrice: costPerBaseUnit,
-        supplierId: po.supplierId,
-        purchaseOrderId: po.id,
-      });
+      const batchNumber = override?.batchNumber ?? null;
+      const expiryDate = override?.expiryDate ?? null;
+
+      // If a batchNumber was supplied, check whether that lot already exists for
+      // this medicine (e.g. partial / back-order delivery of the same shipment).
+      // If so, add to its quantity rather than creating a duplicate row.
+      let merged = false;
+      if (batchNumber) {
+        const [existing] = await tx
+          .select({ id: medicineBatchesTable.id })
+          .from(medicineBatchesTable)
+          .where(
+            and(
+              eq(medicineBatchesTable.medicineId, item.medicineId),
+              eq(medicineBatchesTable.batchNumber, batchNumber),
+            ),
+          )
+          .limit(1);
+
+        if (existing) {
+          await tx
+            .update(medicineBatchesTable)
+            .set({
+              quantity: sql`${medicineBatchesTable.quantity} + ${baseUnitsToAdd}`,
+              // Refresh cost and expiry with the latest delivery's values when provided
+              ...(costPerBaseUnit ? { costPrice: costPerBaseUnit } : {}),
+              ...(expiryDate ? { expiryDate } : {}),
+            })
+            .where(eq(medicineBatchesTable.id, existing.id));
+          merged = true;
+        }
+      }
+
+      if (!merged) {
+        // New lot — insert a fresh batch row.
+        await tx.insert(medicineBatchesTable).values({
+          medicineId: item.medicineId,
+          batchNumber,
+          expiryDate,
+          quantity: baseUnitsToAdd,
+          costPrice: costPerBaseUnit,
+          supplierId: po.supplierId,
+          purchaseOrderId: po.id,
+        });
+      }
 
       // Recompute the medicine aggregate from all batch rows.
       await refreshMedicineAggregate(tx, item.medicineId);
