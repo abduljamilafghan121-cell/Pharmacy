@@ -144,6 +144,33 @@ export async function restoreAllocations(
   await refreshMedicineAggregate(tx, medicineId);
 }
 
+/**
+ * Adds `quantity` base units back to the first available sellable batch for a
+ * medicine (FEFO order). If no sellable batch exists (all empty/expired or
+ * pre-batch legacy stock), inserts a new anonymous batch so the aggregate
+ * stays consistent. Use for partial customer returns where the exact source
+ * batch is not tracked at return time.
+ */
+export async function restoreToAnyBatch(tx: DbOrTx, medicineId: number, quantity: number): Promise<void> {
+  const batches = await tx
+    .select()
+    .from(medicineBatchesTable)
+    .where(sellableBatchCondition(medicineId))
+    .orderBy(sql`${medicineBatchesTable.expiryDate} ASC NULLS LAST`, asc(medicineBatchesTable.id))
+    .limit(1);
+
+  if (batches.length > 0) {
+    await tx
+      .update(medicineBatchesTable)
+      .set({ quantity: sql`${medicineBatchesTable.quantity} + ${quantity}` })
+      .where(eq(medicineBatchesTable.id, batches[0].id));
+  } else {
+    // No sellable batches — create a catch-all batch so the aggregate is correct.
+    await tx.insert(medicineBatchesTable).values({ medicineId, quantity });
+  }
+  await refreshMedicineAggregate(tx, medicineId);
+}
+
 /** True if a medicine has any batch rows at all with expired stock still sitting unsold. */
 export async function hasExpiredUnsoldStock(tx: DbOrTx, medicineId: number): Promise<boolean> {
   const [row] = await tx

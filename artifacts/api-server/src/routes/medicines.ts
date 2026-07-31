@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, ilike, or, and, sql, gte } from "drizzle-orm";
-import { db, medicinesTable, categoriesTable, medicineUnitsTable, ordersTable, orderItemsTable } from "@workspace/db";
+import { eq, ilike, or, and, sql, gte, asc } from "drizzle-orm";
+import { db, medicinesTable, categoriesTable, medicineUnitsTable, ordersTable, orderItemsTable, medicineBatchesTable } from "@workspace/db";
 import {
   CreateMedicineBody, UpdateMedicineBody,
   GetMedicineParams, UpdateMedicineParams, DeleteMedicineParams,
@@ -21,6 +21,7 @@ const UpdateMedicineBodyExt = UpdateMedicineBody.extend({
 import { requireAuth, requireRole } from "../middlewares/auth";
 import { formatZodError, getDbErrorMessage } from "../lib/api-errors";
 import { logAudit } from "../lib/audit";
+import { refreshMedicineAggregate } from "../lib/batch-helpers";
 
 const router: IRouter = Router();
 
@@ -331,6 +332,102 @@ router.post("/medicines/:id/write-off", requireAuth, requireRole("admin", "pharm
     res.json({ id: updated.id, name: updated.name, quantity: updated.quantity, written_off: body.data.quantity, reason: body.data.reason });
   } catch (err) {
     res.status(500).json({ error: "Failed to write off stock.", detail: getDbErrorMessage(err) });
+  }
+});
+
+// ── Batch Routes ─────────────────────────────────────────────────────────────
+
+const BatchParams = z.object({ id: z.coerce.number().int().positive() });
+const BatchIdParams = z.object({
+  id: z.coerce.number().int().positive(),
+  batchId: z.coerce.number().int().positive(),
+});
+
+// GET /medicines/:id/batches — list all batch lots for a medicine
+router.get("/medicines/:id/batches", requireAuth, async (req, res): Promise<void> => {
+  const params = BatchParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  try {
+    const [med] = await db.select({ id: medicinesTable.id }).from(medicinesTable).where(eq(medicinesTable.id, params.data.id));
+    if (!med) { res.status(404).json({ error: "Medicine not found." }); return; }
+    const batches = await db
+      .select()
+      .from(medicineBatchesTable)
+      .where(eq(medicineBatchesTable.medicineId, params.data.id))
+      .orderBy(sql`${medicineBatchesTable.expiry_date} ASC NULLS LAST`, asc(medicineBatchesTable.id));
+    res.json(batches);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to load batches.", detail: getDbErrorMessage(err) });
+  }
+});
+
+// POST /medicines/:id/batches — manually add a stock lot
+const CreateBatchBody = z.object({
+  batchNumber: z.string().max(100).optional().nullable(),
+  expiryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+  quantity: z.number().int().min(1),
+  costPrice: z.string().optional().nullable(),
+  supplierId: z.number().int().positive().optional().nullable(),
+});
+
+router.post("/medicines/:id/batches", requireAuth, requireRole("admin", "pharmacist"), async (req, res): Promise<void> => {
+  const params = BatchParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  const body = CreateBatchBody.safeParse(req.body);
+  if (!body.success) { res.status(400).json({ error: formatZodError(body.error) }); return; }
+  try {
+    const [med] = await db.select({ id: medicinesTable.id, name: medicinesTable.name }).from(medicinesTable).where(eq(medicinesTable.id, params.data.id));
+    if (!med) { res.status(404).json({ error: "Medicine not found." }); return; }
+    const batch = await db.transaction(async (tx) => {
+      const [row] = await tx.insert(medicineBatchesTable).values({
+        medicineId: params.data.id,
+        batchNumber: body.data.batchNumber ?? null,
+        expiryDate: body.data.expiryDate ?? null,
+        quantity: body.data.quantity,
+        costPrice: body.data.costPrice ?? null,
+        supplierId: body.data.supplierId ?? null,
+      }).returning();
+      await refreshMedicineAggregate(tx, params.data.id);
+      return row;
+    });
+    await logAudit(req.auth!.userId, "CREATE", "medicine_batch", batch.id,
+      `Manually added batch to "${med.name}" — qty ${batch.quantity}`);
+    res.status(201).json(batch);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to create batch.", detail: getDbErrorMessage(err) });
+  }
+});
+
+// POST /medicines/:id/batches/:batchId/write-off — write off a specific lot
+const BatchWriteOffBody = z.object({
+  reason: z.string().min(1).max(500),
+});
+
+router.post("/medicines/:id/batches/:batchId/write-off", requireAuth, requireRole("admin", "pharmacist"), async (req, res): Promise<void> => {
+  const params = BatchIdParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  const body = BatchWriteOffBody.safeParse(req.body);
+  if (!body.success) { res.status(400).json({ error: formatZodError(body.error) }); return; }
+  try {
+    const result = await db.transaction(async (tx) => {
+      const [batch] = await tx.select().from(medicineBatchesTable).where(
+        and(eq(medicineBatchesTable.id, params.data.batchId), eq(medicineBatchesTable.medicineId, params.data.id))
+      );
+      if (!batch) return { error: "Batch not found." } as const;
+      if (batch.quantity <= 0) return { error: "Batch is already empty — nothing to write off." } as const;
+      const quantityWrittenOff = batch.quantity;
+      await tx.update(medicineBatchesTable)
+        .set({ quantity: 0, writeOffReason: body.data.reason, writeOffAt: new Date(), writeOffBy: req.auth!.userId })
+        .where(eq(medicineBatchesTable.id, batch.id));
+      await refreshMedicineAggregate(tx, params.data.id);
+      return { quantityWrittenOff };
+    });
+    if ("error" in result) { res.status(400).json({ error: result.error }); return; }
+    await logAudit(req.auth!.userId, "WRITE_OFF", "medicine_batch", params.data.batchId,
+      `Wrote off ${result.quantityWrittenOff} unit(s) from batch #${params.data.batchId} of medicine #${params.data.id}: ${body.data.reason}`);
+    res.json({ message: "Batch written off successfully.", quantityWrittenOff: result.quantityWrittenOff });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to write off batch.", detail: getDbErrorMessage(err) });
   }
 });
 

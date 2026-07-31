@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Pill, ArrowLeft, Trash2, Info, AlertTriangle, CalendarClock, PackageX, Loader2, AlertCircle, Plus } from "lucide-react";
+import BatchList from "@/components/BatchList";
 import { useToast } from "@/components/ui/use-toast";
 import { formatCurrency } from "@/lib/utils";
 import { Link } from "wouter";
@@ -316,6 +317,9 @@ export default function MedicineDetail() {
           </CardContent></Card>
         )}
       </div>
+
+      {/* Batch / Lot list — always visible for staff */}
+      <BatchList medicineId={id} medicineName={medicine.name} />
 
       {/* Contraindications — admin/pharmacist only */}
       {(user?.role === "admin" || user?.role === "pharmacist") && (

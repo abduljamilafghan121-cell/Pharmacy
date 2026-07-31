@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { db, purchaseOrdersTable, purchaseOrderItemsTable, medicinesTable, suppliersTable, medicineUnitsTable } from "@workspace/db";
+import { db, purchaseOrdersTable, purchaseOrderItemsTable, medicinesTable, suppliersTable, medicineUnitsTable, medicineBatchesTable } from "@workspace/db";
+import { refreshMedicineAggregate } from "../lib/batch-helpers";
 import { z } from "zod";
 import {
   CreatePurchaseOrderBody, GetPurchaseOrderParams, ReceivePurchaseOrderParams,
@@ -165,18 +166,32 @@ router.get("/purchase-orders/:id", requireAuth, requireRole("admin", "pharmacist
   res.json(po);
 });
 
+// Optional body: per-item batch number and expiry date supplied at receiving time
+const ReceiveBody = z.object({
+  items: z.array(z.object({
+    medicineId: z.number().int().positive(),
+    batchNumber: z.string().max(100).optional().nullable(),
+    expiryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+  })).optional(),
+});
+
 router.patch("/purchase-orders/:id/receive", requireAuth, requireRole("admin", "pharmacist"), async (req, res): Promise<void> => {
   const params = ReceivePurchaseOrderParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
     return;
   }
+  const bodyParsed = ReceiveBody.safeParse(req.body ?? {});
+  const batchOverrides = new Map(
+    (bodyParsed.success ? bodyParsed.data.items ?? [] : []).map((i) => [i.medicineId, i])
+  );
+
   const receivedId = await db.transaction(async (tx) => {
     const [po] = await tx
       .update(purchaseOrdersTable)
       .set({ status: "received" })
       .where(and(eq(purchaseOrdersTable.id, params.data.id), eq(purchaseOrdersTable.status, "pending")))
-      .returning({ id: purchaseOrdersTable.id });
+      .returning({ id: purchaseOrdersTable.id, supplierId: purchaseOrdersTable.supplierId });
     if (!po) return null;
 
     const items = await tx
@@ -187,13 +202,25 @@ router.patch("/purchase-orders/:id/receive", requireAuth, requireRole("admin", "
     for (const item of items) {
       const conversionFactor = item.conversionFactorToBase ?? 1;
       const baseUnitsToAdd = item.quantity * conversionFactor;
-      const [med] = await tx.select().from(medicinesTable).where(eq(medicinesTable.id, item.medicineId));
-      if (med) {
-        await tx
-          .update(medicinesTable)
-          .set({ quantity: med.quantity + baseUnitsToAdd })
-          .where(eq(medicinesTable.id, med.id));
-      }
+      const override = batchOverrides.get(item.medicineId);
+      // Cost per base unit: item unit price / conversion factor
+      const costPerBaseUnit = item.unitPrice
+        ? (parseFloat(item.unitPrice) / conversionFactor).toFixed(4)
+        : null;
+
+      // Create a batch record for this received lot — this is what FEFO draws from.
+      await tx.insert(medicineBatchesTable).values({
+        medicineId: item.medicineId,
+        batchNumber: override?.batchNumber ?? null,
+        expiryDate: override?.expiryDate ?? null,
+        quantity: baseUnitsToAdd,
+        costPrice: costPerBaseUnit,
+        supplierId: po.supplierId,
+        purchaseOrderId: po.id,
+      });
+
+      // Recompute the medicine aggregate from all batch rows.
+      await refreshMedicineAggregate(tx, item.medicineId);
     }
     return po.id;
   });

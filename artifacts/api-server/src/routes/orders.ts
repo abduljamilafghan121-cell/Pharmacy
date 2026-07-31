@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, sql, inArray, and, or } from "drizzle-orm";
-import { db, ordersTable, orderItemsTable, orderItemReturnsTable, medicinesTable, usersTable, paymentsTable, medicineUnitsTable, pharmacySettingsTable, prescriptionsTable, patientAllergiesTable, controlledSubstanceLogsTable, drugInteractionsTable } from "@workspace/db";
+import { db, ordersTable, orderItemsTable, orderItemReturnsTable, medicinesTable, usersTable, paymentsTable, medicineUnitsTable, pharmacySettingsTable, prescriptionsTable, patientAllergiesTable, controlledSubstanceLogsTable, drugInteractionsTable, orderItemBatchAllocationsTable } from "@workspace/db";
+import { allocateFefo, restoreAllocations, restoreToAnyBatch } from "../lib/batch-helpers";
 import { z } from "zod";
 import {
   CreateOrderBody, UpdateOrderStatusBody,
@@ -263,10 +264,16 @@ router.post("/orders", requireAuth, async (req, res): Promise<void> => {
         sig: ri.sig ?? null,
       }).returning();
       orderItems.push({ ...oi, medicineName: ri.med.name });
-      // Atomic stock deduction — avoids read-modify-write race under concurrent sales
-      await tx.update(medicinesTable)
-        .set({ quantity: sql`${medicinesTable.quantity} - ${ri.baseUnitsNeeded}` })
-        .where(eq(medicinesTable.id, ri.med.id));
+      // FEFO batch deduction — draws from the earliest-expiry lots first and
+      // records exactly which batches were used so cancellation can restore correctly.
+      const batchAllocations = await allocateFefo(tx, ri.med.id, ri.med.name, ri.baseUnitsNeeded);
+      for (const alloc of batchAllocations) {
+        await tx.insert(orderItemBatchAllocationsTable).values({
+          orderItemId: oi.id,
+          medicineBatchId: alloc.batchId,
+          quantity: alloc.quantity,
+        });
+      }
 
       // ── Controlled substance log — one immutable row per dispensing event ──
       if (ri.med.controlledSchedule) {
@@ -375,19 +382,29 @@ router.patch("/orders/:id/status", requireAuth, async (req, res): Promise<void> 
 
     const isCancelling = parsed.data.status === "cancelled" && existing.status === "dispensed";
 
-    // Restore stock when cancelling a dispensed order — atomic increments
+    // Restore stock when cancelling a dispensed order — reverse FEFO allocations
+    // back to the exact batches they came from. Falls back to aggregate increment
+    // for any item that pre-dates the batch system (no allocation rows).
     if (isCancelling) {
       const items = await tx
         .select()
         .from(orderItemsTable)
         .where(eq(orderItemsTable.orderId, existing.id));
       for (const item of items) {
-        const conversionFactor = item.conversionFactorToBase ?? 1;
-        const baseUnitsToRestore = item.quantity * conversionFactor;
-        await tx
-          .update(medicinesTable)
-          .set({ quantity: sql`${medicinesTable.quantity} + ${baseUnitsToRestore}` })
-          .where(eq(medicinesTable.id, item.medicineId));
+        const allocations = await tx
+          .select()
+          .from(orderItemBatchAllocationsTable)
+          .where(eq(orderItemBatchAllocationsTable.orderItemId, item.id));
+        if (allocations.length > 0) {
+          await restoreAllocations(tx, item.medicineId, allocations.map((a) => ({
+            medicineBatchId: a.medicineBatchId,
+            quantity: a.quantity,
+          })));
+        } else {
+          // Legacy order (no batch allocation rows) — restore to any available batch.
+          const baseUnitsToRestore = item.quantity * (item.conversionFactorToBase ?? 1);
+          await restoreToAnyBatch(tx, item.medicineId, baseUnitsToRestore);
+        }
       }
     }
 
@@ -479,11 +496,9 @@ router.post("/orders/:id/items/:itemId/return", requireAuth, async (req, res): P
         .set({ returnedQuantity: alreadyReturned + quantity })
         .where(eq(orderItemsTable.id, itemId));
 
-      // Atomic stock restoration (base units)
+      // Stock restoration — add back to the first available sellable batch (FEFO order).
       const baseUnitsToRestore = quantity * (item.conversionFactorToBase ?? 1);
-      await tx.update(medicinesTable)
-        .set({ quantity: sql`${medicinesTable.quantity} + ${baseUnitsToRestore}` })
-        .where(eq(medicinesTable.id, item.medicineId));
+      await restoreToAnyBatch(tx, item.medicineId, baseUnitsToRestore);
 
       // Adjust order total
       const newTotal = Math.max(0, parseFloat(order.total) - refundAmount);
