@@ -62,8 +62,13 @@ function MedicineSearch({
   const search = useCallback(async (q: string) => {
     if (!q.trim()) { setResults([]); return; }
     try {
-      const data = await apiFetch<MedicineOption[]>(`/api/medicines?search=${encodeURIComponent(q)}&limit=10`);
-      setResults(data);
+      // No `limit` param — with limit present the backend returns { data, total }
+      // (paginated envelope); without it, we get a plain array (up to 50).
+      const raw = await apiFetch<MedicineOption[] | { data: MedicineOption[] }>(
+        `/api/medicines?search=${encodeURIComponent(q)}`
+      );
+      const data = Array.isArray(raw) ? raw : raw.data;
+      setResults(data.slice(0, 10));
       setOpen(data.length > 0);
     } catch {
       setResults([]);

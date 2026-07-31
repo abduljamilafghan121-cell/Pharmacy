@@ -271,7 +271,8 @@ export default function Patients() {
       )}
 
       {selectedPatient && (
-        <PatientSafetyDialog patient={selectedPatient} onClose={() => setSelectedPatient(null)} />
+        // key forces a full remount when patient changes — prevents stale allergies/history
+        <PatientSafetyDialog key={selectedPatient.id} patient={selectedPatient} onClose={() => setSelectedPatient(null)} />
       )}
     </div>
   );
@@ -303,12 +304,17 @@ function PatientSafetyDialog({ patient, onClose }: { patient: Patient; onClose: 
   const [printLoading, setPrintLoading] = useState(false);
   const HISTORY_LIMIT = 20;
 
+  // Load all three data sets immediately on mount. Since PatientSafetyDialog
+  // is always rendered with key={patient.id}, this effect only ever runs once
+  // per patient — no stale data risk.
   useEffect(() => {
     apiFetch<PatientAllergy[]>(`/api/patients/${patient.id}/allergies`)
       .then(setAllergies).catch(() => {}).finally(() => setLoadingA(false));
     apiFetch<PatientCondition[]>(`/api/patients/${patient.id}/conditions`)
       .then(setConditions).catch(() => {}).finally(() => setLoadingC(false));
-  }, [patient.id]);
+    loadHistory(1);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // intentionally empty — component remounts via key when patient changes
 
   const addAllergy = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -426,7 +432,6 @@ function PatientSafetyDialog({ patient, onClose }: { patient: Patient; onClose: 
             <TabsTrigger
               value="history"
               className="flex-1 gap-1.5"
-              onClick={() => { if (!historyLoaded) loadHistory(1); }}
             >
               <ClipboardList size={14} /> History
               {historyTotal > 0 && <Badge variant="secondary" className="ml-1 text-[10px] py-0">{historyTotal}</Badge>}
