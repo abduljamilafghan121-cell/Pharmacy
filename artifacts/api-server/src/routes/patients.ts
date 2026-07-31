@@ -120,7 +120,7 @@ router.get("/patients/:id/dispensing-history", requireAuth, async (req, res): Pr
         itemId:           orderItemsTable.id,
         medicineId:       orderItemsTable.medicineId,
         medicineName:     medicinesTable.name,
-        medicineStrength: medicinesTable.strength,
+        medicineGenericName: medicinesTable.genericName,
         quantity:         orderItemsTable.quantity,
         unitName:         orderItemsTable.unitName,
         price:            orderItemsTable.price,

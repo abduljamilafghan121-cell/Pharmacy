@@ -354,7 +354,7 @@ router.get("/medicines/:id/batches", requireAuth, async (req, res): Promise<void
       .select()
       .from(medicineBatchesTable)
       .where(eq(medicineBatchesTable.medicineId, params.data.id))
-      .orderBy(sql`${medicineBatchesTable.expiry_date} ASC NULLS LAST`, asc(medicineBatchesTable.id));
+      .orderBy(sql`${medicineBatchesTable.expiryDate} ASC NULLS LAST`, asc(medicineBatchesTable.id));
     res.json(batches);
   } catch (err) {
     res.status(500).json({ error: "Failed to load batches.", detail: getDbErrorMessage(err) });

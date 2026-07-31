@@ -4,7 +4,7 @@ import { z } from "zod/v4";
 import { suppliersTable } from "./suppliers";
 import { purchaseOrdersTable } from "./purchase-orders";
 
-export const supplierPaymentMethodEnum = pgEnum("supplier_payment_method", ["cash", "bank", "cheque", "transfer"]);
+export const supplierPaymentMethodEnum = pgEnum("supplier_payment_method", ["cash", "bank", "cheque", "transfer", "credit"]);
 
 export const supplierPaymentsTable = pgTable("supplier_payments", {
   id: serial("id").primaryKey(),
