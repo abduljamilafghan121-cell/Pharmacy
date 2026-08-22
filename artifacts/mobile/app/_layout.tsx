@@ -23,16 +23,16 @@ import { ActivityIndicator, View } from 'react-native';
 SplashScreen.preventAutoHideAsync();
 
 // Where the app points its API calls, resolved in order:
-// 1. EXPO_PUBLIC_DOMAIN — set automatically by `pnpm dev` on Replit, so the
-//    in-editor dev workflow keeps working unchanged.
+// 1. EXPO_PUBLIC_DOMAIN — set this env var during local dev if your API
+//    server runs on a different host than the Metro bundler's default.
 // 2. expo.extra.apiUrl in app.json — set this to your real deployed API
 //    domain before running `eas build`. This is the only thing you need to
 //    edit for a production build.
-const replitDevDomain = process.env.EXPO_PUBLIC_DOMAIN;
+const devDomain = process.env.EXPO_PUBLIC_DOMAIN;
 const configuredApiUrl = Constants.expoConfig?.extra?.apiUrl as string | undefined;
 
-if (replitDevDomain) {
-  setBaseUrl(`https://${replitDevDomain}`);
+if (devDomain) {
+  setBaseUrl(`https://${devDomain}`);
 } else if (configuredApiUrl && !configuredApiUrl.includes('REPLACE-WITH-YOUR-API-DOMAIN')) {
   setBaseUrl(configuredApiUrl);
 } else {

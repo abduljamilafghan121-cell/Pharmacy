@@ -18,7 +18,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try { return localStorage.getItem("pharma_token"); } catch { return null; }
   });
   // Keep a ref so the auth getter always has the latest token, even if
-  // localStorage is blocked (e.g. Replit preview iframe sandbox).
+  // localStorage is blocked (e.g. an embedded/sandboxed preview iframe).
   const tokenRef = useRef<string | null>(token);
   const [, setLocation] = useLocation();
 
