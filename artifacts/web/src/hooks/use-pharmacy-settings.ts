@@ -9,11 +9,13 @@ export interface PharmacySettings {
   licenseNumber: string | null;
   logoUrl: string | null;
   taxRatePercent: string;
+  currencySymbol: string;
+  currencyPosition: 'prefix' | 'suffix';
   updatedAt: string;
 }
 
 export type PharmacySettingsInput = Partial<
-  Pick<PharmacySettings, "name" | "address" | "phone" | "email" | "licenseNumber" | "logoUrl" | "taxRatePercent">
+  Pick<PharmacySettings, "name" | "address" | "phone" | "email" | "licenseNumber" | "logoUrl" | "taxRatePercent" | "currencySymbol" | "currencyPosition">
 >;
 
 const SETTINGS_URL = `${import.meta.env.BASE_URL}api/settings`.replace(/\/+/g, "/").replace(":/", "://");

@@ -1,5 +1,6 @@
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import { useBarcodeScanner } from "@/hooks/use-barcode-scanner";
+import type { MedicineBatch } from "@/hooks/use-medicine-batches";
 import { Link } from "wouter";
 import {
   getGetPurchaseOrderQueryKey,
@@ -75,15 +76,10 @@ type DraftItem = {
   unitPrice: string;
 };
 
-type BatchInfo = {
-  id: number;
-  batchNumber: string | null;
-  expiryDate: string | null;
-  quantity: number;
-};
-
-type ReceiveItemState = {
-  selectedBatchId: "new" | number;
+// Per-medicine choice made while receiving a PO: either top up an existing,
+// non-expired batch ("choice" = its batch id) or create a new one ("new").
+type ReceiveLineState = {
+  choice: "new" | number;
   batchNumber: string;
   expiryDate: string;
 };
@@ -106,17 +102,17 @@ export default function PurchaseOrders() {
   // Price history per medicine (cached for the session)
   const [priceHistoryMap, setPriceHistoryMap] = useState<Record<number, PriceHistoryRow[]>>({});
 
-  // Receive dialog state
-  const [receiveDialogOpen, setReceiveDialogOpen] = useState(false);
-  const [receivingPo, setReceivingPo] = useState<{ id: number; items: Array<{ id: number; medicineId: number; medicineName: string | null; quantity: number; unitName: string | null; conversionFactorToBase: number | null; unitPrice: string }> } | null>(null);
-  const [medicineBatchesCache, setMedicineBatchesCache] = useState<Record<number, BatchInfo[]>>({});
-  const [receiveItemStates, setReceiveItemStates] = useState<Record<number, ReceiveItemState>>({});
-  const [receiveSubmitting, setReceiveSubmitting] = useState(false);
-
   // Scan-to-receive state (per-dialog session)
   const [poScanMode, setPoScanMode] = useState(false);
   const [scannedCounts, setScannedCounts] = useState<Record<number, number>>({});
   const [poScanFlash, setPoScanFlash] = useState<string | null>(null);
+
+  // Batch picker state (per-dialog session): existing sellable batches per
+  // medicine, and what the receiver chose to do for each line — top up one
+  // of those batches, or create a new one.
+  const [medicineBatchOptions, setMedicineBatchOptions] = useState<Record<number, MedicineBatch[]>>({});
+  const [batchOptionsLoading, setBatchOptionsLoading] = useState(false);
+  const [receiveLines, setReceiveLines] = useState<Record<number, ReceiveLineState>>({});
 
   const createMutation = useCreatePurchaseOrder({
     mutation: {
@@ -148,6 +144,18 @@ export default function PurchaseOrders() {
         if (selectedId === received.id) {
           queryClient.invalidateQueries({ queryKey: getGetPurchaseOrderQueryKey(received.id) });
         }
+        // Batch quantities/lots for these medicines just changed — drop the
+        // cached dropdown options so the next PO opened for them re-fetches
+        // fresh data instead of showing stale stock counts.
+        const affectedMedicineIds = (received.items ?? []).map((i: any) => i.medicineId as number);
+        if (affectedMedicineIds.length > 0) {
+          setMedicineBatchOptions((prev) => {
+            const next = { ...prev };
+            for (const id of affectedMedicineIds) delete next[id];
+            return next;
+          });
+        }
+        setReceiveLines({});
       },
       onError: (mutationError) => {
         toast({
@@ -209,134 +217,72 @@ export default function PurchaseOrders() {
     } catch { /* silent */ }
   }
 
-  async function fetchMedicineBatches(medicineId: number): Promise<BatchInfo[]> {
-    if (medicineBatchesCache[medicineId]) return medicineBatchesCache[medicineId];
+  async function loadBatchOptions(medicineIds: number[]) {
+    const missing = medicineIds.filter((id) => !medicineBatchOptions[id]);
+    if (missing.length === 0) return;
+    setBatchOptionsLoading(true);
     try {
       const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
       const token = localStorage.getItem("pharma_token") ?? "";
-      const res = await fetch(`${BASE}/api/medicines/${medicineId}/batches`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const all: BatchInfo[] = await res.json();
-        const today = new Date().toISOString().slice(0, 10);
-        const active = all.filter(
-          (b) => b.quantity > 0 && (!b.expiryDate || b.expiryDate >= today),
-        );
-        setMedicineBatchesCache((prev) => ({ ...prev, [medicineId]: active }));
-        return active;
-      }
-    } catch { /* silent */ }
-    return [];
-  }
-
-  async function handleOpenReceiveDialog(poId: number) {
-    // Get items — from already-loaded view data or fetch fresh
-    const existing = selectedOrder.data?.id === poId ? selectedOrder.data : null;
-    type PoItem = { id: number; medicineId: number; medicineName: string | null; quantity: number; unitName: string | null; conversionFactorToBase: number | null; unitPrice: string };
-    let items: PoItem[] = (existing?.items ?? []) as PoItem[];
-
-    if (!items.length) {
-      try {
-        const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
-        const token = localStorage.getItem("pharma_token") ?? "";
-        const res = await fetch(`${BASE}/api/purchase-orders/${poId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          items = data.items ?? [];
+      const today = new Date().toISOString().slice(0, 10);
+      const entries = await Promise.all(missing.map(async (id) => {
+        try {
+          const res = await fetch(`${BASE}/api/medicines/${id}/batches`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (!res.ok) return [id, []] as const;
+          const data: MedicineBatch[] = await res.json();
+          // Only non-written-off, non-expired batches are valid top-up targets.
+          const sellable = data.filter((b) => !b.writeOffAt && (!b.expiryDate || b.expiryDate >= today));
+          return [id, sellable] as const;
+        } catch {
+          return [id, []] as const;
         }
-      } catch { /* silent */ }
-    }
-
-    // Init per-item state
-    const initStates: Record<number, ReceiveItemState> = {};
-    for (const item of items) {
-      initStates[item.medicineId] = { selectedBatchId: "new", batchNumber: "", expiryDate: "" };
-    }
-    setReceiveItemStates(initStates);
-    setReceivingPo({ id: poId, items });
-    setReceiveDialogOpen(true);
-
-    // Pre-fetch batches for every medicine in the PO
-    for (const item of items) {
-      fetchMedicineBatches(item.medicineId);
+      }));
+      setMedicineBatchOptions((prev) => ({ ...prev, ...Object.fromEntries(entries) }));
+    } finally {
+      setBatchOptionsLoading(false);
     }
   }
 
-  function handleReceiveItemBatchSelect(medicineId: number, value: string) {
-    if (value === "new") {
-      setReceiveItemStates((prev) => ({
-        ...prev,
-        [medicineId]: { selectedBatchId: "new", batchNumber: "", expiryDate: "" },
-      }));
-    } else {
-      const batchId = Number(value);
-      const batch = (medicineBatchesCache[medicineId] ?? []).find((b) => b.id === batchId);
-      setReceiveItemStates((prev) => ({
-        ...prev,
-        [medicineId]: {
-          selectedBatchId: batchId,
-          batchNumber: batch?.batchNumber ?? "",
-          expiryDate: batch?.expiryDate ?? "",
-        },
-      }));
-    }
-  }
+  // When a pending order is opened, fetch each line's existing batches and
+  // default every line to "create new batch".
+  useEffect(() => {
+    if (selectedOrder.data?.status !== "pending" || !selectedOrder.data.items?.length) return;
+    const ids = Array.from(new Set(selectedOrder.data.items.map((i: any) => i.medicineId as number)));
+    loadBatchOptions(ids);
+    setReceiveLines((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const id of ids) {
+        if (!next[id]) {
+          next[id] = { choice: "new", batchNumber: "", expiryDate: "" };
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedOrder.data?.id, selectedOrder.data?.status]);
 
-  function handleReceiveItemFieldChange(
-    medicineId: number,
-    field: "batchNumber" | "expiryDate",
-    value: string,
-  ) {
-    setReceiveItemStates((prev) => ({
+  function handleBatchChoiceChange(medicineId: number, value: string) {
+    setReceiveLines((prev) => ({
       ...prev,
-      [medicineId]: { ...prev[medicineId], [field]: value },
+      [medicineId]: {
+        ...(prev[medicineId] ?? { batchNumber: "", expiryDate: "" }),
+        choice: value === "new" ? "new" : Number(value),
+      },
     }));
   }
 
-  async function handleSubmitReceive() {
-    if (!receivingPo) return;
-    setReceiveSubmitting(true);
-    try {
-      const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
-      const token = localStorage.getItem("pharma_token") ?? "";
-      const items = Object.entries(receiveItemStates).map(([medId, state]) => ({
-        medicineId: Number(medId),
-        batchNumber: state.batchNumber.trim() || null,
-        expiryDate: state.expiryDate || null,
-      }));
-      const res = await fetch(`${BASE}/api/purchase-orders/${receivingPo.id}/receive`, {
-        method: "PATCH",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ items }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error((err as any).error ?? "Failed to receive order");
-      }
-      const received = await res.json();
-      toast({
-        title: `Purchase order #${received.id} received.`,
-        description: "Inventory quantities were updated.",
-      });
-      queryClient.invalidateQueries({ queryKey: getListPurchaseOrdersQueryKey() });
-      queryClient.invalidateQueries({ queryKey: getListMedicinesQueryKey() });
-      queryClient.invalidateQueries({ queryKey: getGetPurchaseOrderQueryKey(received.id) });
-      setReceiveDialogOpen(false);
-      setReceivingPo(null);
-      setSelectedId(null);
-      setMedicineBatchesCache({});
-    } catch (err: any) {
-      toast({
-        title: "Could not receive purchase order",
-        description: err.message,
-        variant: "destructive",
-      });
-    } finally {
-      setReceiveSubmitting(false);
-    }
+  function updateReceiveLine(medicineId: number, patch: Partial<ReceiveLineState>) {
+    setReceiveLines((prev) => ({
+      ...prev,
+      [medicineId]: {
+        ...(prev[medicineId] ?? { choice: "new", batchNumber: "", expiryDate: "" }),
+        ...patch,
+      },
+    }));
   }
 
   function updateDraftItem(key: number, patch: Partial<DraftItem>) {
@@ -407,6 +353,30 @@ export default function PurchaseOrders() {
         items: items as any,
       },
     });
+  }
+
+  function handleReceive() {
+    const order = selectedOrder.data;
+    if (!order) return;
+    if (!window.confirm("Receive this purchase and add its quantities to inventory?")) return;
+
+    const items = (order.items ?? []).map((item: any) => {
+      const line = receiveLines[item.medicineId as number];
+      // Chose an existing batch from the dropdown — top it up directly.
+      if (line && typeof line.choice === "number") {
+        return { medicineId: item.medicineId, batchId: line.choice };
+      }
+      // Otherwise create a new batch, optionally named/dated by hand.
+      const batchNumber = line?.batchNumber?.trim();
+      const expiryDate = line?.expiryDate;
+      return {
+        medicineId: item.medicineId,
+        ...(batchNumber ? { batchNumber } : {}),
+        ...(expiryDate ? { expiryDate } : {}),
+      };
+    });
+
+    receiveMutation.mutate({ id: order.id, data: { items } });
   }
 
   const noSuppliers = !suppliers?.length;
@@ -532,7 +502,7 @@ export default function PurchaseOrders() {
                           {purchaseOrder.status === "pending" && (
                             <Button
                               size="sm"
-                              onClick={() => handleOpenReceiveDialog(purchaseOrder.id)}
+                              onClick={() => setSelectedId(purchaseOrder.id)}
                             >
                               <PackageCheck className="mr-1.5 h-4 w-4" />
                               Receive
@@ -732,6 +702,7 @@ export default function PurchaseOrders() {
           setPoScanMode(false);
           setScannedCounts({});
           setPoScanFlash(null);
+          setReceiveLines({});
         }
       }}>
         <DialogContent>
@@ -793,30 +764,95 @@ export default function PurchaseOrders() {
                     ? `${item.quantity} ${(item as any).unitName}${item.quantity !== 1 ? "s" : ""}`
                     : `${item.quantity} units`;
                   const factor = (item as any).conversionFactorToBase ?? 1;
-                  const scanned = scannedCounts[(item as any).medicineId] ?? 0;
+                  const medicineId = (item as any).medicineId as number;
+                  const scanned = scannedCounts[medicineId] ?? 0;
+                  const isPending = selectedOrder.data!.status === "pending";
+                  const batchOptions = medicineBatchOptions[medicineId] ?? [];
+                  const line = receiveLines[medicineId] ?? { choice: "new" as const, batchNumber: "", expiryDate: "" };
+                  const selectedExisting = typeof line.choice === "number"
+                    ? batchOptions.find((b) => b.id === line.choice)
+                    : undefined;
+
                   return (
-                    <div key={item.id} className="flex items-center justify-between border-b pb-2 text-sm last:border-0">
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium">{item.medicineName ?? "Medicine"}</p>
-                        <p className="text-muted-foreground">
-                          {unitLabel} × {formatCurrency(item.unitPrice)}
-                          {factor > 1 && (
-                            <span className="ml-1 text-muted-foreground/60">
-                              ({item.quantity * factor} base units)
+                    <div key={item.id} className="space-y-2 border-b pb-2 text-sm last:border-0">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium">{item.medicineName ?? "Medicine"}</p>
+                          <p className="text-muted-foreground">
+                            {unitLabel} × {formatCurrency(item.unitPrice)}
+                            {factor > 1 && (
+                              <span className="ml-1 text-muted-foreground/60">
+                                ({item.quantity * factor} base units)
+                              </span>
+                            )}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0 ml-3">
+                          {scanned > 0 && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold px-2 py-0.5">
+                              ✓ {scanned} scanned
                             </span>
                           )}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-3 shrink-0 ml-3">
-                        {scanned > 0 && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold px-2 py-0.5">
-                            ✓ {scanned} scanned
+                          <span className="font-semibold">
+                            {formatCurrency(Number(item.unitPrice) * item.quantity)}
                           </span>
-                        )}
-                        <span className="font-semibold">
-                          {formatCurrency(Number(item.unitPrice) * item.quantity)}
-                        </span>
+                        </div>
                       </div>
+
+                      {isPending && (
+                        <div className="space-y-2 rounded-md border border-dashed border-border bg-muted/20 p-2">
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">Batch for this receipt</Label>
+                            <select
+                              className="flex h-9 w-full rounded-md border border-input bg-background px-2 text-xs"
+                              value={String(line.choice)}
+                              onChange={(e) => handleBatchChoiceChange(medicineId, e.target.value)}
+                            >
+                              <option value="new">+ Create new batch</option>
+                              {batchOptions.map((b) => (
+                                <option key={b.id} value={b.id}>
+                                  {b.batchNumber ? `Lot ${b.batchNumber}` : `Batch #${b.id}`}
+                                  {b.expiryDate ? ` — exp ${formatDate(b.expiryDate)}` : " — no expiry"}
+                                  {` — ${b.quantity} in stock`}
+                                </option>
+                              ))}
+                            </select>
+                            {batchOptionsLoading && batchOptions.length === 0 && (
+                              <p className="text-[11px] text-muted-foreground">Loading existing batches…</p>
+                            )}
+                          </div>
+
+                          {typeof line.choice === "number" ? (
+                            <p className="rounded bg-background/60 px-2 py-1.5 text-[11px] text-muted-foreground">
+                              This receipt will be added to lot {selectedExisting?.batchNumber ?? `#${line.choice}`}
+                              {" "}(currently {selectedExisting?.quantity ?? 0} in stock, expiry{" "}
+                              {selectedExisting?.expiryDate ? formatDate(selectedExisting.expiryDate) : "none set"}).
+                              Cost per unit will be recalculated as a weighted average of the old and new stock.
+                            </p>
+                          ) : (
+                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                              <div className="space-y-1">
+                                <Label className="text-xs text-muted-foreground">Batch number (optional)</Label>
+                                <Input
+                                  className="h-9 text-xs"
+                                  placeholder="e.g. LOT-2026-001"
+                                  value={line.batchNumber}
+                                  onChange={(e) => updateReceiveLine(medicineId, { batchNumber: e.target.value })}
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs text-muted-foreground">Expiry date (optional)</Label>
+                                <Input
+                                  type="date"
+                                  className="h-9 text-xs"
+                                  value={line.expiryDate}
+                                  onChange={(e) => updateReceiveLine(medicineId, { expiryDate: e.target.value })}
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -828,8 +864,10 @@ export default function PurchaseOrders() {
               {selectedOrder.data.status === "pending" && (
                 <Button
                   className="w-full"
-                  onClick={() => handleOpenReceiveDialog(selectedOrder.data!.id)}
+                  onClick={handleReceive}
+                  disabled={receiveMutation.isPending}
                 >
+                  {receiveMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   <PackageCheck className="mr-2 h-4 w-4" />
                   Receive and update inventory
                 </Button>
@@ -837,165 +875,6 @@ export default function PurchaseOrders() {
             </div>
           ) : (
             <p className="py-6 text-center text-muted-foreground">Purchase order details unavailable.</p>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Receive PO dialog — batch selection per item */}
-      <Dialog
-        open={receiveDialogOpen}
-        onOpenChange={(open) => {
-          if (!open) {
-            setReceiveDialogOpen(false);
-            setReceivingPo(null);
-            setReceiveItemStates({});
-          }
-        }}
-      >
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Receive purchase order #{receivingPo?.id}</DialogTitle>
-            <DialogDescription>
-              For each medicine, select an existing batch to top up or enter a new batch number.
-              The system will merge into an existing batch if you pick one.
-            </DialogDescription>
-          </DialogHeader>
-
-          {receivingPo && (
-            <div className="space-y-4">
-              {receivingPo.items.map((item) => {
-                const convFactor = item.conversionFactorToBase ?? 1;
-                const baseUnits = item.quantity * convFactor;
-                const unitLabel = item.unitName
-                  ? `${item.quantity} ${item.unitName}${item.quantity !== 1 ? "s" : ""}`
-                  : `${item.quantity} units`;
-                const itemState = receiveItemStates[item.medicineId] ?? {
-                  selectedBatchId: "new",
-                  batchNumber: "",
-                  expiryDate: "",
-                };
-                const batches = medicineBatchesCache[item.medicineId] ?? [];
-                const isExisting = itemState.selectedBatchId !== "new";
-
-                return (
-                  <div key={item.id} className="rounded-lg border bg-muted/20 p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-semibold">{item.medicineName ?? "Medicine"}</p>
-                        <p className="text-xs text-muted-foreground">
-                          Receiving: {unitLabel}
-                          {convFactor > 1 && ` (${baseUnits} base units)`}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Batch dropdown */}
-                    <div className="space-y-1.5">
-                      <Label htmlFor={`recv-batch-select-${item.medicineId}`}>
-                        Batch / lot
-                      </Label>
-                      <select
-                        id={`recv-batch-select-${item.medicineId}`}
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                        value={String(itemState.selectedBatchId)}
-                        onChange={(e) =>
-                          handleReceiveItemBatchSelect(item.medicineId, e.target.value)
-                        }
-                      >
-                        <option value="new">➕ New batch</option>
-                        {batches.length > 0 && (
-                          <optgroup label="Existing non-expired batches">
-                            {batches.map((b) => (
-                              <option key={b.id} value={String(b.id)}>
-                                {b.batchNumber ?? `Batch #${b.id}`}
-                                {b.expiryDate ? ` — expires ${b.expiryDate}` : ""}
-                                {` (${b.quantity} in stock)`}
-                              </option>
-                            ))}
-                          </optgroup>
-                        )}
-                      </select>
-                    </div>
-
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      {/* Batch number */}
-                      <div className="space-y-1.5">
-                        <Label htmlFor={`recv-batchnum-${item.medicineId}`}>
-                          Batch number
-                        </Label>
-                        <Input
-                          id={`recv-batchnum-${item.medicineId}`}
-                          placeholder="e.g. LOT-2025-001"
-                          value={itemState.batchNumber}
-                          readOnly={isExisting}
-                          className={isExisting ? "bg-muted/50 text-muted-foreground" : ""}
-                          onChange={(e) =>
-                            handleReceiveItemFieldChange(
-                              item.medicineId,
-                              "batchNumber",
-                              e.target.value,
-                            )
-                          }
-                        />
-                      </div>
-
-                      {/* Expiry date */}
-                      <div className="space-y-1.5">
-                        <Label htmlFor={`recv-expiry-${item.medicineId}`}>
-                          Expiry date
-                        </Label>
-                        <Input
-                          id={`recv-expiry-${item.medicineId}`}
-                          type="date"
-                          value={itemState.expiryDate}
-                          readOnly={isExisting}
-                          className={isExisting ? "bg-muted/50 text-muted-foreground" : ""}
-                          onChange={(e) =>
-                            handleReceiveItemFieldChange(
-                              item.medicineId,
-                              "expiryDate",
-                              e.target.value,
-                            )
-                          }
-                        />
-                      </div>
-                    </div>
-
-                    {isExisting && (
-                      <p className="text-xs text-emerald-700 bg-emerald-50 rounded px-2 py-1">
-                        ✓ Quantity will be added to existing batch — no duplicate row created.
-                      </p>
-                    )}
-                  </div>
-                );
-              })}
-
-              <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end pt-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setReceiveDialogOpen(false);
-                    setReceivingPo(null);
-                    setReceiveItemStates({});
-                  }}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="button"
-                  disabled={receiveSubmitting}
-                  onClick={handleSubmitReceive}
-                >
-                  {receiveSubmitting ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <PackageCheck className="mr-2 h-4 w-4" />
-                  )}
-                  Confirm receipt
-                </Button>
-              </div>
-            </div>
           )}
         </DialogContent>
       </Dialog>

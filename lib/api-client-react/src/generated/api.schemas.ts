@@ -477,6 +477,26 @@ export interface PurchaseOrderInput {
   items: PurchaseOrderItemInput[];
 }
 
+export interface ReceivePurchaseOrderItemInput {
+  medicineId: number;
+  /**
+   * ID of an existing, non-expired batch for this medicine to add the received quantity into. Takes precedence over batchNumber.
+   * @nullable
+   */
+  batchId?: number | null;
+  /**
+   * Lot number for a new batch, or to match/merge into an existing batch with the same number.
+   * @nullable
+   */
+  batchNumber?: string | null;
+  /** @nullable */
+  expiryDate?: string | null;
+}
+
+export interface ReceivePurchaseOrderInput {
+  items?: ReceivePurchaseOrderItemInput[];
+}
+
 export interface SupplierLedgerSummary {
   supplierId: number;
   supplierName: string;

@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -8,6 +9,8 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { useSetupCheck } from '@/hooks/use-setup-check';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Loader2 } from 'lucide-react';
+import { usePharmacySettings } from '@/hooks/use-pharmacy-settings';
+import { setCurrencyDisplay } from '@/lib/utils';
 
 import Login from '@/pages/Login';
 import Register from '@/pages/Register';
@@ -44,6 +47,17 @@ const queryClient = new QueryClient({
     }
   }
 });
+
+// Pharmacy settings are public (needed on the pre-login Login page too),
+// so this can run unconditionally at the app root — it keeps formatCurrency
+// in sync with whatever currency label is configured, everywhere in the app.
+function CurrencySync() {
+  const { data } = usePharmacySettings();
+  useEffect(() => {
+    if (data) setCurrencyDisplay(data.currencySymbol, data.currencyPosition);
+  }, [data?.currencySymbol, data?.currencyPosition]);
+  return null;
+}
 
 function ProtectedRoute({ component: Component, roles }: { component: React.ElementType, roles?: string[] }) {
   const { user, isLoading } = useAuth();
@@ -186,6 +200,7 @@ function App() {
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
           <AuthProvider>
+            <CurrencySync />
             <Router />
             <Toaster />
           </AuthProvider>

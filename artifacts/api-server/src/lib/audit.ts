@@ -1,5 +1,6 @@
 import { db, auditLogsTable } from "@workspace/db";
 import { logger } from "./logger";
+import type { DbOrTx } from "./batch-helpers";
 
 /**
  * Records an audit entry. Deliberately swallows its own errors — a failure
@@ -17,7 +18,7 @@ export async function logAudit(
   entityType: string,
   entityId: number | null,
   description: string,
-  tx: typeof db = db
+  tx: DbOrTx = db
 ): Promise<void> {
   try {
     await tx.insert(auditLogsTable).values({

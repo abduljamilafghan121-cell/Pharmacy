@@ -1,11 +1,12 @@
 import { eq, and, gt, or, isNull, gte, lt, sql, asc } from "drizzle-orm";
-import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import type { PgTransaction } from "drizzle-orm/pg-core";
 import { db, medicinesTable, medicineBatchesTable } from "@workspace/db";
 
-// Covers both the main db connection (NodePgDatabase) and a transaction
-// object (PgTransaction) — both share the same Drizzle query interface.
-type DbOrTx = NodePgDatabase<any> | PgTransaction<any, any, any>;
+// Drizzle's transaction callback param type is awkward to name directly, so
+// it's derived from `db.transaction` itself rather than hand-written — this
+// covers both `db` and a `tx` from db.transaction(...), and stays correct if
+// the drizzle-orm version changes.
+export type Tx = Parameters<typeof db.transaction>[0] extends (tx: infer T, ...args: any[]) => any ? T : never;
+export type DbOrTx = typeof db | Tx;
 
 export class InsufficientStockError extends Error {
   constructor(public medicineName: string) {

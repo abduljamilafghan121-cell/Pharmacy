@@ -20,6 +20,14 @@ export const pharmacySettingsTable = pgTable("pharmacy_settings", {
   // rules vary a lot by region/product category — this covers the common
   // single-rate case; per-category tax would be a follow-up if needed.
   taxRatePercent: numeric("tax_rate_percent", { precision: 5, scale: 2 }).notNull().default("0"),
+  // Display-only currency label — NOT a live currency, no conversion is ever
+  // applied. Every amount already stored in the database keeps its existing
+  // numeric value; changing this only changes how that number is labeled
+  // everywhere it's shown (receipts, order history, reports, etc). "prefix"
+  // puts the symbol before the number ("$200.00"); "suffix" puts it after
+  // with a space ("200.00 afg") — the convention most currency codes use.
+  currencySymbol: text("currency_symbol").notNull().default("$"),
+  currencyPosition: text("currency_position", { enum: ["prefix", "suffix"] }).notNull().default("prefix"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
 

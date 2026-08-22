@@ -1048,6 +1048,15 @@ export const ReceivePurchaseOrderParams = zod.object({
   "id": zod.coerce.number()
 })
 
+export const ReceivePurchaseOrderBody = zod.object({
+  "items": zod.array(zod.object({
+  "medicineId": zod.number(),
+  "batchId": zod.number().nullish(),
+  "batchNumber": zod.string().nullish(),
+  "expiryDate": zod.string().nullish()
+})).optional()
+})
+
 export const ReceivePurchaseOrderResponse = zod.object({
   "id": zod.number(),
   "supplierId": zod.number(),

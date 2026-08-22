@@ -36,15 +36,15 @@ interface DrugInteraction {
   id: number;
   medicine1Id: number;
   medicine2Id: number;
-  severity: "mild" | "moderate" | "severe" | "contraindicated";
+  severity: "minor" | "moderate" | "major" | "contraindicated";
   description?: string | null;
   createdAt: string;
 }
 
 const SEVERITY_COLORS: Record<string, string> = {
-  mild: "bg-blue-100 text-blue-700 border-blue-200",
+  minor: "bg-blue-100 text-blue-700 border-blue-200",
   moderate: "bg-amber-100 text-amber-700 border-amber-200",
-  severe: "bg-red-100 text-red-700 border-red-200",
+  major: "bg-red-100 text-red-700 border-red-200",
   contraindicated: "bg-red-200 text-red-900 border-red-400",
 };
 
@@ -127,7 +127,7 @@ export default function DrugInteractions() {
   const [addOpen, setAddOpen] = useState(false);
   const [med1, setMed1] = useState<Medicine | null>(null);
   const [med2, setMed2] = useState<Medicine | null>(null);
-  const [severity, setSeverity] = useState<"mild" | "moderate" | "severe" | "contraindicated">("moderate");
+  const [severity, setSeverity] = useState<"minor" | "moderate" | "major" | "contraindicated">("moderate");
   const [description, setDescription] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -140,10 +140,15 @@ export default function DrugInteractions() {
       const data = await apiFetch<DrugInteraction[]>("/api/drug-interactions");
       setInteractions(data);
 
-      // Fetch all referenced medicines in one batch
+      // Fetch all referenced medicines in one batch. NOTE: passing `limit`
+      // makes the server return the paginated envelope { data, total } (see
+      // GET /api/medicines) rather than a plain array — unwrap it the same
+      // way MedicineSearch does above, or this throws "X is not iterable"
+      // and surfaces as a bogus "Failed to load interactions" error.
       const ids = Array.from(new Set(data.flatMap(i => [i.medicine1Id, i.medicine2Id])));
       if (ids.length > 0) {
-        const medData = await apiFetch<Medicine[]>(`/api/medicines?limit=200`);
+        const raw = await apiFetch<Medicine[] | { data: Medicine[] }>(`/api/medicines?limit=200`);
+        const medData = Array.isArray(raw) ? raw : raw.data;
         const map: Record<number, Medicine> = {};
         for (const m of medData) map[m.id] = m;
         setMedicines(map);
@@ -236,7 +241,7 @@ export default function DrugInteractions() {
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {(["mild", "moderate", "severe", "contraindicated"] as const).map(s => {
+        {(["minor", "moderate", "major", "contraindicated"] as const).map(s => {
           const count = interactions.filter(i => i.severity === s).length;
           return (
             <Card key={s} className="py-3">
@@ -287,7 +292,7 @@ export default function DrugInteractions() {
               <div key={interaction.id} className="flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors">
                 <div className="flex items-start gap-3 min-w-0">
                   <AlertTriangle size={16} className={`mt-0.5 shrink-0 ${
-                    interaction.severity === "contraindicated" || interaction.severity === "severe"
+                    interaction.severity === "contraindicated" || interaction.severity === "major"
                       ? "text-red-500"
                       : interaction.severity === "moderate"
                       ? "text-amber-500"
@@ -342,9 +347,9 @@ export default function DrugInteractions() {
                 onChange={e => setSeverity(e.target.value as typeof severity)}
                 className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               >
-                <option value="mild">Mild</option>
+                <option value="minor">Minor</option>
                 <option value="moderate">Moderate</option>
-                <option value="severe">Severe</option>
+                <option value="major">Major</option>
                 <option value="contraindicated">Contraindicated</option>
               </select>
             </div>

@@ -1062,6 +1062,12 @@ paths:
           required: true
           schema:
             type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReceivePurchaseOrderInput"
       responses:
         "200":
           description: Received
@@ -1833,6 +1839,37 @@ components:
           items:
             $ref: "#/components/schemas/PurchaseOrderItemInput"
           minItems: 1
+
+    # Per-item batch instructions supplied at receiving time. For each line,
+    # either pick an existing sellable batch (batchId) to top up, or leave it
+    # unset to create a new batch — optionally naming its lot/expiry, or
+    # merging into an existing batch that shares the same batchNumber.
+    ReceivePurchaseOrderItemInput:
+      type: object
+      required: [medicineId]
+      properties:
+        medicineId:
+          type: integer
+        batchId:
+          type: integer
+          nullable: true
+          description: ID of an existing, non-expired batch for this medicine to add the received quantity into. Takes precedence over batchNumber.
+        batchNumber:
+          type: string
+          nullable: true
+          description: Lot number for a new batch, or to match/merge into an existing batch with the same number.
+        expiryDate:
+          type: string
+          format: date
+          nullable: true
+
+    ReceivePurchaseOrderInput:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReceivePurchaseOrderItemInput"
 
     # ── Supplier Ledger ───────────────────────────────────────────────────
     SupplierLedgerSummary:

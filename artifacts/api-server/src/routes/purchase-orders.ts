@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db, purchaseOrdersTable, purchaseOrderItemsTable, medicinesTable, suppliersTable, medicineUnitsTable, medicineBatchesTable } from "@workspace/db";
 import { refreshMedicineAggregate } from "../lib/batch-helpers";
 import { z } from "zod";
@@ -166,10 +166,15 @@ router.get("/purchase-orders/:id", requireAuth, requireRole("admin", "pharmacist
   res.json(po);
 });
 
-// Optional body: per-item batch number and expiry date supplied at receiving time
+// Optional body: per-item batch instructions supplied at receiving time.
+// - batchId: an existing, non-expired batch (for this medicine) to top up —
+//   takes precedence over batchNumber when present.
+// - batchNumber/expiryDate: used for a new batch, or to merge into an
+//   existing batch that already carries the same lot number.
 const ReceiveBody = z.object({
   items: z.array(z.object({
     medicineId: z.number().int().positive(),
+    batchId: z.number().int().positive().optional().nullable(),
     batchNumber: z.string().max(100).optional().nullable(),
     expiryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
   })).optional(),
@@ -208,45 +213,66 @@ router.patch("/purchase-orders/:id/receive", requireAuth, requireRole("admin", "
         ? (parseFloat(item.unitPrice) / conversionFactor).toFixed(4)
         : null;
 
-      const batchNumber = override?.batchNumber ?? null;
-      const expiryDate = override?.expiryDate ?? null;
+      // Figure out whether this delivery belongs to a batch we already have.
+      // Preference order: an explicit batchId the receiver picked from the
+      // "existing batches" dropdown, then a matching batchNumber typed in by
+      // hand. Written-off batches are never merge targets — that lot was
+      // formally closed out, so a fresh arrival under the same number starts
+      // a new row instead of reviving it.
+      let targetBatch: { id: number; quantity: number; costPrice: string | null } | null = null;
 
-      // If a batchNumber was supplied, check whether that lot already exists for
-      // this medicine (e.g. partial / back-order delivery of the same shipment).
-      // If so, add to its quantity rather than creating a duplicate row.
-      let merged = false;
-      if (batchNumber) {
-        const [existing] = await tx
-          .select({ id: medicineBatchesTable.id })
+      if (override?.batchId) {
+        const [byId] = await tx
+          .select({ id: medicineBatchesTable.id, quantity: medicineBatchesTable.quantity, costPrice: medicineBatchesTable.costPrice })
           .from(medicineBatchesTable)
-          .where(
-            and(
-              eq(medicineBatchesTable.medicineId, item.medicineId),
-              eq(medicineBatchesTable.batchNumber, batchNumber),
-            ),
-          )
-          .limit(1);
-
-        if (existing) {
-          await tx
-            .update(medicineBatchesTable)
-            .set({
-              quantity: sql`${medicineBatchesTable.quantity} + ${baseUnitsToAdd}`,
-              // Refresh cost and expiry with the latest delivery's values when provided
-              ...(costPerBaseUnit ? { costPrice: costPerBaseUnit } : {}),
-              ...(expiryDate ? { expiryDate } : {}),
-            })
-            .where(eq(medicineBatchesTable.id, existing.id));
-          merged = true;
-        }
+          .where(and(
+            eq(medicineBatchesTable.id, override.batchId),
+            eq(medicineBatchesTable.medicineId, item.medicineId),
+            isNull(medicineBatchesTable.writeOffAt),
+          ));
+        targetBatch = byId ?? null;
+      } else if (override?.batchNumber) {
+        const [byNumber] = await tx
+          .select({ id: medicineBatchesTable.id, quantity: medicineBatchesTable.quantity, costPrice: medicineBatchesTable.costPrice })
+          .from(medicineBatchesTable)
+          .where(and(
+            eq(medicineBatchesTable.medicineId, item.medicineId),
+            eq(medicineBatchesTable.batchNumber, override.batchNumber),
+            isNull(medicineBatchesTable.writeOffAt),
+          ));
+        targetBatch = byNumber ?? null;
       }
 
-      if (!merged) {
-        // New lot — insert a fresh batch row.
+      if (targetBatch) {
+        // Merge into the existing lot: add to its remaining quantity and
+        // roll the cost into a quantity-weighted average so per-unit cost
+        // (and therefore margin/COGS reporting) stays accurate across
+        // multiple deliveries of the same batch. Its expiry date is left
+        // alone unless this receipt explicitly supplies a different one.
+        const existingQty = targetBatch.quantity;
+        const existingCost = targetBatch.costPrice ? parseFloat(targetBatch.costPrice) : null;
+        const newQty = existingQty + baseUnitsToAdd;
+        const blendedCost = existingCost !== null || costPerBaseUnit !== null
+          ? (
+              ((existingCost ?? 0) * existingQty + (costPerBaseUnit ? parseFloat(costPerBaseUnit) : 0) * baseUnitsToAdd)
+              / (newQty || 1)
+            ).toFixed(4)
+          : null;
+
+        await tx
+          .update(medicineBatchesTable)
+          .set({
+            quantity: newQty,
+            costPrice: blendedCost,
+            ...(override?.expiryDate ? { expiryDate: override.expiryDate } : {}),
+          })
+          .where(eq(medicineBatchesTable.id, targetBatch.id));
+      } else {
+        // No matching batch — this is a genuinely new lot.
         await tx.insert(medicineBatchesTable).values({
           medicineId: item.medicineId,
-          batchNumber,
-          expiryDate,
+          batchNumber: override?.batchNumber ?? null,
+          expiryDate: override?.expiryDate ?? null,
           quantity: baseUnitsToAdd,
           costPrice: costPerBaseUnit,
           supplierId: po.supplierId,

@@ -8,6 +8,13 @@ import { getDbErrorMessage } from "../lib/api-errors";
 
 const router: IRouter = Router();
 
+// Express 5's route params are typed `string | string[]` to account for
+// repeated path segments; these routes never define one, so this just
+// narrows back to the plain string every :param here actually is.
+function paramId(param: string | string[] | undefined): string {
+  return Array.isArray(param) ? (param[0] ?? "") : (param ?? "");
+}
+
 // List all stocktakes
 router.get("/stocktakes", requireAuth, async (req, res): Promise<void> => {
   try {
@@ -81,7 +88,7 @@ router.post("/stocktakes", requireAuth, async (req, res): Promise<void> => {
 
 // Get a single stocktake with its items
 router.get("/stocktakes/:id", requireAuth, async (req, res): Promise<void> => {
-  const id = parseInt(String(req.params.id), 10);
+  const id = parseInt(paramId(req.params.id), 10);
   if (!id) { res.status(400).json({ error: "Invalid ID." }); return; }
 
   try {
@@ -102,8 +109,8 @@ router.get("/stocktakes/:id", requireAuth, async (req, res): Promise<void> => {
 
 // Update counted quantity for a single item
 router.patch("/stocktakes/:id/items/:itemId", requireAuth, async (req, res): Promise<void> => {
-  const stocktakeId = parseInt(String(req.params.id), 10);
-  const itemId = parseInt(String(req.params.itemId), 10);
+  const stocktakeId = parseInt(paramId(req.params.id), 10);
+  const itemId = parseInt(paramId(req.params.itemId), 10);
   const bodySchema = z.object({
     countedQuantity: z.number().int().min(0).nullable(),
     notes: z.string().optional(),
@@ -134,7 +141,7 @@ router.patch("/stocktakes/:id/items/:itemId", requireAuth, async (req, res): Pro
 
 // Finalize — apply all counted quantities to medicine stock and lock the stocktake
 router.post("/stocktakes/:id/finalize", requireAuth, async (req, res): Promise<void> => {
-  const id = parseInt(String(req.params.id), 10);
+  const id = parseInt(paramId(req.params.id), 10);
   if (!id) { res.status(400).json({ error: "Invalid ID." }); return; }
 
   try {

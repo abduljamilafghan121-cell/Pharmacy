@@ -120,7 +120,9 @@ router.get("/patients/:id/dispensing-history", requireAuth, async (req, res): Pr
         itemId:           orderItemsTable.id,
         medicineId:       orderItemsTable.medicineId,
         medicineName:     medicinesTable.name,
-        medicineGenericName: medicinesTable.genericName,
+        // `strength` isn't a real column on medicines yet — the web UI
+        // treats it as optional, so surface a typed null until it lands.
+        medicineStrength: sql<string | null>`NULL`,
         quantity:         orderItemsTable.quantity,
         unitName:         orderItemsTable.unitName,
         price:            orderItemsTable.price,

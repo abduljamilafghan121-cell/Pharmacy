@@ -4,7 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { UserCircle, Plus, Trash2, Tag, Save, Lock, Building2, ImagePlus, X, Loader2, Pencil, Check } from "lucide-react";
+import { UserCircle, Plus, Trash2, Tag, Save, Lock, Building2, ImagePlus, X, Loader2, Pencil, Check, Coins } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   useListCategories,
   useCreateCategory,
@@ -18,6 +19,20 @@ import { useQueryClient } from "@tanstack/react-query";
 import { getListCategoriesQueryKey } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 import { usePharmacySettings, useUpdatePharmacySettings } from "@/hooks/use-pharmacy-settings";
+
+// Display-only presets — NOT live exchange rates. Picking one just changes
+// the label formatCurrency() uses everywhere; the underlying numbers never
+// change. "Custom" lets a pharmacy type any symbol/code (e.g. "afg").
+const CURRENCY_PRESETS: { label: string; symbol: string; position: "prefix" | "suffix" }[] = [
+  { label: "US Dollar ($)", symbol: "$", position: "prefix" },
+  { label: "Euro (€)", symbol: "€", position: "prefix" },
+  { label: "British Pound (£)", symbol: "£", position: "prefix" },
+  { label: "Afghani (AFN)", symbol: "AFN", position: "suffix" },
+  { label: "Pakistani Rupee (₨)", symbol: "₨", position: "prefix" },
+  { label: "Indian Rupee (₹)", symbol: "₹", position: "prefix" },
+  { label: "UAE Dirham (AED)", symbol: "AED", position: "prefix" },
+  { label: "Saudi Riyal (SAR)", symbol: "SAR", position: "suffix" },
+];
 
 export default function Settings() {
   const { user, updateUser } = useAuth();
@@ -36,6 +51,8 @@ export default function Settings() {
   const [pharmLicense, setPharmLicense] = useState("");
   const [pharmTax, setPharmTax] = useState("");
   const [pharmLogo, setPharmLogo] = useState<string | null>(null);
+  const [currencySymbol, setCurrencySymbol] = useState("$");
+  const [currencyPosition, setCurrencyPosition] = useState<"prefix" | "suffix">("prefix");
   const [settingsInitialised, setSettingsInitialised] = useState(false);
 
   // Populate form once data arrives
@@ -47,6 +64,8 @@ export default function Settings() {
     setPharmLicense(pharmacySettings.licenseNumber ?? "");
     setPharmTax(pharmacySettings.taxRatePercent ?? "0");
     setPharmLogo(pharmacySettings.logoUrl ?? null);
+    setCurrencySymbol(pharmacySettings.currencySymbol ?? "$");
+    setCurrencyPosition(pharmacySettings.currencyPosition ?? "prefix");
     setSettingsInitialised(true);
   }
 
@@ -78,6 +97,8 @@ export default function Settings() {
         licenseNumber: pharmLicense.trim() || null,
         taxRatePercent: taxVal.toFixed(2),
         logoUrl: pharmLogo || null,
+        currencySymbol: currencySymbol.trim() || "$",
+        currencyPosition,
       },
       {
         onSuccess: () => toast({ title: "Pharmacy settings saved" }),
@@ -298,6 +319,55 @@ export default function Settings() {
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">%</span>
                   </div>
                   <p className="text-xs text-muted-foreground">Applied automatically to every sale. Set to 0 to disable.</p>
+                </div>
+
+                {/* Currency */}
+                <div className="space-y-3 pt-2 border-t">
+                  <div className="flex items-center gap-2 pt-3">
+                    <Coins className="w-4 h-4 text-muted-foreground" />
+                    <Label className="text-sm font-medium">Currency</Label>
+                  </div>
+                  <p className="text-xs text-muted-foreground -mt-2">
+                    Display only — no exchange rate is applied. This just changes how amounts are labeled everywhere (e.g. "200 AFN" or "$200.00"); the numbers themselves never change.
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label>Preset</Label>
+                      <Select
+                        value={CURRENCY_PRESETS.find(p => p.symbol === currencySymbol && p.position === currencyPosition)?.symbol ?? "custom"}
+                        onValueChange={(val) => {
+                          if (val === "custom") return;
+                          const preset = CURRENCY_PRESETS.find(p => p.symbol === val);
+                          if (preset) { setCurrencySymbol(preset.symbol); setCurrencyPosition(preset.position); }
+                        }}
+                      >
+                        <SelectTrigger><SelectValue placeholder="Choose a currency" /></SelectTrigger>
+                        <SelectContent>
+                          {CURRENCY_PRESETS.map(p => (
+                            <SelectItem key={p.symbol} value={p.symbol}>{p.label}</SelectItem>
+                          ))}
+                          <SelectItem value="custom">Custom…</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="pharm-currency-symbol">Symbol / code</Label>
+                      <Input id="pharm-currency-symbol" value={currencySymbol} onChange={e => setCurrencySymbol(e.target.value)} placeholder="e.g. $ or afg" maxLength={10} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Position</Label>
+                      <Select value={currencyPosition} onValueChange={(v) => setCurrencyPosition(v as "prefix" | "suffix")}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="prefix">Before amount ($200.00)</SelectItem>
+                          <SelectItem value="suffix">After amount (200.00 afg)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <p className="text-sm font-medium">
+                    Preview: <span className="text-primary">{currencyPosition === "prefix" ? `${currencySymbol}1,234.56` : `1,234.56 ${currencySymbol}`}</span>
+                  </p>
                 </div>
 
                 <div className="flex justify-end pt-1">
