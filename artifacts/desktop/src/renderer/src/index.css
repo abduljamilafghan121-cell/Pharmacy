@@ -35,6 +35,59 @@ input[type='number']::-webkit-inner-spin-button {
   margin: 0;
 }
 
+/* Login form inputs — every field is ONE unified box. The visible border,
+   radius, background and focus ring live on the wrapping .input-shell;
+   the actual <input> is made visually inert so it can never render as a
+   nested box. This also neutralizes Chromium/Electron autofill's pale
+   background which otherwise paints a second rectangle inside the field. */
+.login-form input {
+  border: none;
+  outline: none;
+  background: transparent;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  box-shadow: none;
+  border-radius: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.login-form input:-webkit-autofill,
+.login-form input:-webkit-autofill:hover,
+.login-form input:-webkit-autofill:focus {
+  -webkit-text-fill-color: inherit;
+  -webkit-box-shadow: 0 0 0 1000px transparent inset;
+  transition: background-color 9999s ease-in-out 0s;
+}
+
+/* New Sale medicine search — same treatment as the login fields: the visible
+   box lives on the wrapper, the inner input is made visually inert so it can
+   never appear as a nested field. */
+.new-sale-search input {
+  border: none;
+  outline: none;
+  background: transparent;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  box-shadow: none;
+  border-radius: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.new-sale-search input:-webkit-autofill,
+.new-sale-search input:-webkit-autofill:hover,
+.new-sale-search input:-webkit-autofill:focus {
+  -webkit-text-fill-color: inherit;
+  -webkit-box-shadow: 0 0 0 1000px transparent inset;
+  transition: background-color 9999s ease-in-out 0s;
+}
+
+
 /* App-wide slim scrollbars — Chromium/Electron only */
 *::-webkit-scrollbar {
   width: 8px;
@@ -61,11 +114,14 @@ input[type='number']::-webkit-inner-spin-button {
   background: transparent;
 }
 .sidebar-scroll::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--scroll-thumb, rgba(255, 255, 255, 0.14));
   border-radius: 999px;
+  border: none;
+  background-clip: border-box;
 }
 .sidebar-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--scroll-thumb, rgba(255, 255, 255, 0.2));
+  filter: brightness(1.2);
 }
 
 :focus-visible {

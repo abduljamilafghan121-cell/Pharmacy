@@ -1,13 +1,21 @@
 import type { ReactElement } from 'react'
 import { useState } from 'react'
-import { CheckCircle2, RotateCcw, User, Stethoscope, Printer, Package, Loader2, Tag, AlertTriangle } from 'lucide-react'
+
 import { useQueryClient } from '@tanstack/react-query'
-import { useGetOrder, useUpdateOrderStatus, getGetOrderQueryKey, getListOrdersQueryKey } from '@workspace/api-client-react'
+import { useGetOrder, useUpdateOrderStatus, useCreatePayment, getGetOrderQueryKey, getListOrdersQueryKey } from '@workspace/api-client-react'
+import type { PaymentInputMethod } from '@workspace/api-client-react'
 import { useUiStore } from '../store/uiStore'
 import { getTheme, mono, serif } from '../theme'
 import { usePharmacySettings } from '../hooks/usePharmacySettings'
 import { printReceipt, printDispensingLabel } from '../lib/printing'
 import Modal from './Modal'
+import { Banknote, CreditCard, ShieldCheck, CheckCircle2, RotateCcw, User, Stethoscope, Printer, Package, Loader2, Tag, AlertTriangle } from 'lucide-react'
+
+const PAYMENT_METHODS: [PaymentInputMethod, string, typeof Banknote][] = [
+  ['cash', 'Cash', Banknote],
+  ['card', 'Card / PoS', CreditCard],
+  ['insurance', 'Insurance', ShieldCheck]
+]
 
 // Only pending/dispensed/cancelled are real order statuses (see
 // orderStatusEnum in lib/db/src/schema/orders.ts) — 'delivered' and
@@ -54,8 +62,12 @@ export default function SaleDetail({ orderId, onClose }: { orderId: number; onCl
   const queryClient = useQueryClient()
   const { data: order, isLoading } = useGetOrder(orderId, { query: { queryKey: getGetOrderQueryKey(orderId) } })
   const updateStatus = useUpdateOrderStatus()
+  const createPayment = useCreatePayment()
   const [refundOpen, setRefundOpen] = useState(false)
   const [refundNote, setRefundNote] = useState('')
+  const [collectOpen, setCollectOpen] = useState(false)
+  const [collectMethod, setCollectMethod] = useState<PaymentInputMethod>('cash')
+  const [collecting, setCollecting] = useState(false)
 
   const invalidate = (): void => {
     queryClient.invalidateQueries({ queryKey: getListOrdersQueryKey() })
@@ -72,7 +84,24 @@ export default function SaleDetail({ orderId, onClose }: { orderId: number; onCl
     }
   }
 
+  const confirmCollect = async (): Promise<void> => {
+    setCollecting(true)
+    try {
+      await createPayment.mutateAsync({
+        data: { orderId, amount: order!.total, method: collectMethod }
+      })
+      showToast('Payment collected — sale marked as paid')
+      setCollectOpen(false)
+      invalidate()
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to collect payment')
+    } finally {
+      setCollecting(false)
+    }
+  }
+
   const isPaid = order?.paymentStatus === 'paid'
+  const isUnpaid = order?.paymentStatus === 'unpaid'
 
   const confirmReturn = async (): Promise<void> => {
     try {
@@ -250,6 +279,20 @@ export default function SaleDetail({ orderId, onClose }: { orderId: number; onCl
               Payment has been refunded to the customer.
             </div>
           )}
+          {isUnpaid && (
+            <button
+              onClick={() => setCollectOpen(true)}
+              style={{
+                background: 'linear-gradient(135deg, #34D399, #0B6B4F)',
+                color: '#fff',
+                boxShadow: '0 1px 4px rgba(11,107,79,0.35)'
+              }}
+              className="mt-2.5 w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-opacity hover:opacity-90"
+            >
+              <Banknote size={13} />
+              Collect Payment · {order.total}
+            </button>
+          )}
         </div>
       </div>
 
@@ -319,6 +362,44 @@ export default function SaleDetail({ orderId, onClose }: { orderId: number; onCl
           >
             {updateStatus.isPending && <Loader2 size={14} className="animate-spin" />}
             {updateStatus.isPending ? 'Processing…' : isPaid ? 'Confirm return & refund' : 'Confirm cancellation'}
+          </button>
+        </Modal>
+      )}
+
+      {collectOpen && isUnpaid && (
+        <Modal title={`Collect payment — ${order.total}`} onClose={() => setCollectOpen(false)}>
+          <p style={{ color: theme.muted }} className="text-sm mb-4">
+            This sale was dispensed on credit and is marked unpaid. Record the payment to settle it:
+          </p>
+          <div className="grid grid-cols-3 gap-2 mb-4">
+            {PAYMENT_METHODS.map(([value, label, Icon]) => (
+              <button
+                key={value}
+                onClick={() => setCollectMethod(value)}
+                style={
+                  collectMethod === value
+                    ? {
+                        background: theme.primarySoft,
+                        border: `1px solid ${theme.primary}`,
+                        color: theme.primaryText,
+                        boxShadow: `0 0 0 3px ${theme.primary}14`
+                      }
+                    : { border: `1px solid ${theme.border}`, color: theme.muted, background: theme.cardAlt }
+                }
+                className="rounded-lg py-2.5 text-xs font-medium flex flex-col items-center gap-1 transition-all duration-150"
+              >
+                <Icon size={14} /> {label}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={confirmCollect}
+            disabled={collecting}
+            style={{ background: 'linear-gradient(135deg, #34D399, #0B6B4F)', color: '#fff' }}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold disabled:opacity-60"
+          >
+            {collecting && <Loader2 size={14} className="animate-spin" />}
+            {collecting ? 'Recording…' : `Confirm payment of ${order.total}`}
           </button>
         </Modal>
       )}

@@ -119,7 +119,10 @@ export default function Sidebar(): ReactElement {
       }}
       className="flex-shrink-0 flex flex-col h-full min-h-0"
     >
-      <div className="sidebar-scroll flex-1 min-h-0 overflow-y-auto px-2.5 pt-4">
+      <div
+        className="sidebar-scroll flex-1 min-h-0 overflow-y-auto px-2.5 pt-4 pb-2"
+        style={{ '--scroll-thumb': dark ? 'rgba(255,255,255,0.14)' : 'rgba(15,31,27,0.18)' } as React.CSSProperties}
+      >
         {visibleSections.map((section) => (
           <div key={section.label} className="mb-3.5">
             <div

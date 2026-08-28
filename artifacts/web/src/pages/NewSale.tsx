@@ -77,6 +77,7 @@ const PAYMENT_METHODS = [
   { value: "cash", label: "Cash" },
   { value: "card", label: "Card / PoS" },
   { value: "insurance", label: "Insurance" },
+  { value: "credit", label: "Pay Later" },
 ] as const;
 
 const SEVERITY_COLOR: Record<string, string> = {
@@ -122,7 +123,7 @@ export default function NewSale() {
   const [saleItems, setSaleItems] = useState<SaleItem[]>([]);
   const [patientName, setPatientName] = useState("");
   const [patientId, setPatientId] = useState<number | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<"cash" | "card" | "insurance">("cash");
+  const [paymentMethod, setPaymentMethod] = useState<"cash" | "card" | "insurance" | "credit">("cash");
   const [notes, setNotes] = useState("");
   const [discountAmount, setDiscountAmount] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -397,7 +398,7 @@ export default function NewSale() {
       const result = await createOrderMutation.mutateAsync({
         data: {
           patientName: patientName.trim() || undefined,
-          paymentMethod,
+          ...(paymentMethod === "credit" ? { paymentStatus: "unpaid" } : { paymentMethod }),
           notes: notes.trim() || undefined,
           items: saleItems.map(i => ({
             medicineId: i.medicine.id,
@@ -939,7 +940,7 @@ export default function NewSale() {
               <CardTitle className="text-base">Payment</CardTitle>
             </CardHeader>
             <CardContent className="pt-4 space-y-3">
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-4 gap-2">
                 {PAYMENT_METHODS.map(pm => (
                   <button
                     key={pm.value}
@@ -954,6 +955,11 @@ export default function NewSale() {
                   </button>
                 ))}
               </div>
+              {paymentMethod === "credit" && (
+                <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-md px-3 py-2">
+                  Pay later — items are dispensed now. Collect payment on the Sales screen.
+                </p>
+              )}
               <div className="space-y-1">
                 <Label htmlFor="notes">Notes <span className="text-muted-foreground font-normal">(optional)</span></Label>
                 <Input id="notes" placeholder="e.g. prescription #…" value={notes} onChange={(e) => setNotes(e.target.value)} />

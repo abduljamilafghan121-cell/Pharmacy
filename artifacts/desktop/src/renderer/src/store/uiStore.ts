@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 
 export type Screen =
   | 'dashboard'
@@ -75,22 +76,32 @@ export function canAccessScreen(screen: Screen, role?: string | null): boolean {
   return !!role && allowed.includes(role)
 }
 
-export const useUiStore = create<UiState>((set) => ({
-  screen: 'new-sale',
-  dark: true,
-  paletteOpen: false,
-  toast: null,
-  pendingSaleDetailId: null,
-  pendingMedicineDetailId: null,
-  pendingCheckoutMedicineId: null,
-  setScreen: (screen) => set({ screen }),
-  toggleDark: () => set((s) => ({ dark: !s.dark })),
-  setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
-  showToast: (toast) => {
-    set({ toast })
-    setTimeout(() => set({ toast: null }), 3000)
-  },
-  setPendingSaleDetailId: (pendingSaleDetailId) => set({ pendingSaleDetailId }),
-  setPendingMedicineDetailId: (pendingMedicineDetailId) => set({ pendingMedicineDetailId }),
-  setPendingCheckoutMedicineId: (pendingCheckoutMedicineId) => set({ pendingCheckoutMedicineId })
-}))
+export const useUiStore = create<UiState>()(
+  persist(
+    (set) => ({
+      screen: 'new-sale',
+      dark: true,
+      paletteOpen: false,
+      toast: null,
+      pendingSaleDetailId: null,
+      pendingMedicineDetailId: null,
+      pendingCheckoutMedicineId: null,
+      setScreen: (screen) => set({ screen }),
+      toggleDark: () => set((s) => ({ dark: !s.dark })),
+      setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
+      showToast: (toast) => {
+        set({ toast })
+        setTimeout(() => set({ toast: null }), 3000)
+      },
+      setPendingSaleDetailId: (pendingSaleDetailId) => set({ pendingSaleDetailId }),
+      setPendingMedicineDetailId: (pendingMedicineDetailId) => set({ pendingMedicineDetailId }),
+      setPendingCheckoutMedicineId: (pendingCheckoutMedicineId) => set({ pendingCheckoutMedicineId })
+    }),
+    {
+      name: 'pharmacore-theme',
+      // Persist only the user's theme choice — everything else is session
+      // state that should reset on a fresh launch.
+      partialize: (s) => ({ dark: s.dark })
+    }
+  )
+)

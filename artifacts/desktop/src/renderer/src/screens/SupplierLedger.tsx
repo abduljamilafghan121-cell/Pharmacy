@@ -95,7 +95,7 @@ function RecordPaymentModal({
         className="w-full mt-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium disabled:opacity-60"
       >
         {createPayment.isPending && <Loader2 size={14} className="animate-spin" />}
-        {createPayment.isPending ? 'Recordingâ€¦' : 'Record payment'}
+        {createPayment.isPending ? 'Recording…' : 'Record payment'}
       </button>
     </Modal>
   )
@@ -121,7 +121,7 @@ function LedgerDetailModal({
       {isLoading || !detail ? (
         <p style={{ color: theme.muted }} className="text-sm flex items-center gap-2">
           <Loader2 size={14} className="animate-spin" />
-          Loading ledgerâ€¦
+          Loading ledger…
         </p>
       ) : (
         <div>
@@ -207,10 +207,10 @@ function LedgerDetailModal({
                         </div>
                       </td>
                       <td className="px-3 py-2 text-right text-sm" style={{ ...mono, color: theme.red }}>
-                        {parseFloat(entry.debit) > 0 ? entry.debit : 'â€”'}
+                        {parseFloat(entry.debit) > 0 ? entry.debit : '—'}
                       </td>
                       <td className="px-3 py-2 text-right text-sm" style={{ ...mono, color: theme.green }}>
-                        {parseFloat(entry.credit) > 0 ? entry.credit : 'â€”'}
+                        {parseFloat(entry.credit) > 0 ? entry.credit : '—'}
                       </td>
                       <td
                         className="px-3 py-2 text-right text-sm font-medium"
@@ -304,7 +304,7 @@ export default function SupplierLedger(): ReactElement {
       <div style={{ background: theme.card, border: `1px solid ${theme.border}` }} className="rounded-xl overflow-hidden">
         {isLoading ? (
           <p style={{ color: theme.muted }} className="p-4 text-sm">
-            Loading ledgerâ€¦
+            Loading ledger…
           </p>
         ) : summaries.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-14 px-4 text-center">
@@ -353,7 +353,7 @@ export default function SupplierLedger(): ReactElement {
                     {s.balance}
                   </td>
                   <td className="py-2.5 px-4" style={{ ...mono, color: theme.muted }}>
-                    {s.lastActivity ? new Date(s.lastActivity).toLocaleDateString() : 'â€”'}
+                    {s.lastActivity ? new Date(s.lastActivity).toLocaleDateString() : '—'}
                   </td>
                   <td className="py-2.5 px-4">
                     <div className="flex justify-end gap-1.5">

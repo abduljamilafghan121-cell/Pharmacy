@@ -80,7 +80,7 @@ function SupplierModal({ supplier, onClose }: { supplier: Supplier | null; onClo
         className="w-full mt-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium disabled:opacity-60"
       >
         {saving && <Loader2 size={14} className="animate-spin" />}
-        {saving ? 'Savingâ€¦' : supplier ? 'Save changes' : 'Add supplier'}
+        {saving ? 'Saving…' : supplier ? 'Save changes' : 'Add supplier'}
       </button>
     </Modal>
   )
@@ -150,7 +150,7 @@ function DeleteSupplierModal({ supplier, onClose }: { supplier: Supplier; onClos
           className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium disabled:opacity-60"
         >
           {deleteSupplier.isPending && <Loader2 size={14} className="animate-spin" />}
-          {deleteSupplier.isPending ? 'Deletingâ€¦' : 'Delete'}
+          {deleteSupplier.isPending ? 'Deleting…' : 'Delete'}
         </button>
       </div>
     </Modal>
@@ -194,7 +194,7 @@ export default function Suppliers(): ReactElement {
       <div style={{ background: theme.card, border: `1px solid ${theme.border}` }} className="rounded-xl overflow-hidden">
         {isLoading ? (
           <p style={{ color: theme.muted }} className="p-4 text-sm">
-            Loading suppliersâ€¦
+            Loading suppliers…
           </p>
         ) : suppliers.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
@@ -245,16 +245,16 @@ export default function Suppliers(): ReactElement {
                     <span className="font-medium">{s.name}</span>
                   </td>
                   <td className="py-2.5 px-4" style={{ color: theme.muted }}>
-                    {s.contactName ?? 'â€”'}
+                    {s.contactName ?? '—'}
                   </td>
                   <td className="py-2.5 px-4" style={{ ...mono, color: theme.muted }}>
-                    {s.email ?? 'â€”'}
+                    {s.email ?? '—'}
                   </td>
                   <td className="py-2.5 px-4" style={{ ...mono, color: theme.muted }}>
-                    {s.phone ?? 'â€”'}
+                    {s.phone ?? '—'}
                   </td>
                   <td className="py-2.5 px-4" style={{ color: theme.muted }}>
-                    {s.address ?? 'â€”'}
+                    {s.address ?? '—'}
                   </td>
                   {(canEdit || canDelete) && (
                     <td className="py-2.5 px-4">

@@ -1,10 +1,11 @@
 import type { ReactElement } from 'react'
-import { useState } from 'react'
-import { Lock, Mail, LogIn, Loader2, Eye, EyeOff, ArrowLeft, MailCheck, CheckCircle2, KeyRound } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Lock, Mail, LogIn, Loader2, Eye, EyeOff, ArrowLeft, MailCheck, CheckCircle2, KeyRound, Clock } from 'lucide-react'
 import { useUiStore } from '../store/uiStore'
 import { getTheme, serif } from '../theme'
 import { useAuth } from '../hooks/useAuth'
 import { apiUrl, jsonOrThrow } from '../lib/apiClient'
+import { getRecallEmails, rememberEmail } from '../lib/emailRecall'
 import appIcon from '../assets/icon.png'
 
 type LoginView = 'login' | 'forgot' | 'reset'
@@ -25,6 +26,18 @@ export default function Login(): ReactElement {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [emailFocus, setEmailFocus] = useState(false)
+  const [activeSuggestion, setActiveSuggestion] = useState(-1)
+
+  // Email suggestions — previously signed-in accounts filtered as you type,
+  // like professional platforms' remembered logins.
+  const recallEmails = getRecallEmails()
+  const suggestions = email.trim()
+    ? recallEmails.filter((e) => e.includes(email.trim().toLowerCase()))
+    : recallEmails
+  const showSuggestions =
+    emailFocus && suggestions.length > 0 && !loginError && !submitting
+  const emailRef = useRef<HTMLInputElement>(null)
 
   // forgot
   const [forgotEmail, setForgotEmail] = useState('')
@@ -120,16 +133,57 @@ export default function Login(): ReactElement {
 
   const loginDisabled = submitting || !email || !password
 
+  const handleEmailKeyDown = (e: React.KeyboardEvent<HTMLInputElement>): void => {
+    if (!showSuggestions || suggestions.length === 0) return
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setActiveSuggestion((i) => (i + 1) % suggestions.length)
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setActiveSuggestion((i) => (i - 1 + suggestions.length) % suggestions.length)
+    } else if (e.key === 'Enter' && activeSuggestion >= 0) {
+      e.preventDefault()
+      const pick = suggestions[activeSuggestion]
+      if (pick) {
+        setEmail(pick)
+        setEmailFocus(false)
+        setActiveSuggestion(-1)
+        emailRef.current?.focus()
+      }
+    } else if (e.key === 'Escape') {
+      setEmailFocus(false)
+      setActiveSuggestion(-1)
+    }
+  }
+
   return (
     <div className="h-full flex items-center justify-center relative overflow-hidden">
-      {/* Ambient background — soft emerald glows on the canvas */}
+      {/* Modern ambient background — layered emerald glows + subtle grain/grid */}
       <div
         aria-hidden
         style={{
           background:
-            'radial-gradient(600px circle at 15% 20%, rgba(47,191,143,0.14), transparent 60%),' +
-            'radial-gradient(500px circle at 85% 80%, rgba(47,178,191,0.10), transparent 60%)'
+            'radial-gradient(800px circle at 12% 10%, rgba(47,191,143,0.16), transparent 55%),' +
+            'radial-gradient(650px circle at 88% 85%, rgba(47,178,191,0.12), transparent 55%),' +
+            'radial-gradient(500px circle at 80% 15%, rgba(47,191,143,0.08), transparent 60%)'
         }}
+        className="absolute inset-0 pointer-events-none"
+      />
+      <div
+        aria-hidden
+        style={{
+          backgroundImage:
+            'linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),' +
+            'linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px)',
+          backgroundSize: '42px 42px',
+          maskImage: 'radial-gradient(ellipse at center, black 20%, transparent 75%)',
+          WebkitMaskImage: 'radial-gradient(ellipse at center, black 20%, transparent 75%)'
+        }}
+        className="absolute inset-0 pointer-events-none"
+      />
+      <div
+        aria-hidden
+        style={{ background: dark ? theme.gradientAccent : 'transparent', opacity: 0.7 }}
         className="absolute inset-0 pointer-events-none"
       />
 
@@ -137,10 +191,10 @@ export default function Login(): ReactElement {
         onSubmit={view === 'login' ? handleLogin : view === 'forgot' ? handleForgot : handleReset}
         style={{
           background: theme.card,
-          border: `1px solid ${theme.border}`,
-          boxShadow: theme.shadowLg
+          border: `1px solid ${theme.borderStrong}`,
+          boxShadow: `0 2px 4px rgba(0,0,0,0.06), ${theme.shadowLg}`
         }}
-        className="w-full max-w-sm rounded-2xl p-8 flex flex-col gap-4 relative animate-fade-up"
+        className="w-full max-w-[22rem] rounded-2xl p-8 flex flex-col gap-4 relative animate-fade-up login-form"
       >
         <div
           aria-hidden
@@ -171,27 +225,83 @@ export default function Login(): ReactElement {
 
         {view === 'login' && (
           <>
-            <label className="flex flex-col gap-1.5">
-              <span style={{ color: theme.muted }} className="text-xs font-medium">
-                Email
-              </span>
-              <div
-                style={{ background: theme.cardAlt, border: `1px solid ${theme.border}` }}
-                className={inputShell}
-              >
-                <Mail size={14} color={theme.muted} />
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  autoFocus
-                  autoComplete="username"
-                  style={{ color: theme.text, background: 'transparent' }}
-                  className="flex-1 text-sm outline-none"
-                  placeholder="you@pharmacy.com"
-                />
-              </div>
-            </label>
+            <div className="relative">
+              <label className="flex flex-col gap-1.5">
+                <span style={{ color: theme.muted }} className="text-xs font-medium">
+                  Email
+                </span>
+                <div
+                  style={{ background: theme.cardAlt, border: `1px solid ${theme.border}` }}
+                  className={inputShell}
+                >
+                  <Mail size={14} color={theme.muted} />
+                  <input
+                    ref={emailRef}
+                    type="email"
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value)
+                      setActiveSuggestion(-1)
+                    }}
+                    onKeyDown={handleEmailKeyDown}
+                    onFocus={() => setEmailFocus(true)}
+                    onBlur={() => setTimeout(() => setEmailFocus(false), 150)}
+                    autoFocus
+                    autoComplete="off"
+                    style={{ color: theme.text }}
+                    className="flex-1 text-sm bg-transparent border-none outline-none"
+                    placeholder="you@pharmacy.com"
+                  />
+                </div>
+              </label>
+
+              {showSuggestions && (
+                <div
+                  style={{
+                    background: theme.card,
+                    border: `1px solid ${theme.borderStrong}`,
+                    boxShadow: theme.shadowLg
+                  }}
+                  className="absolute z-20 top-full mt-1 left-0 right-0 rounded-xl overflow-hidden animate-scale-in"
+                >
+                  <p
+                    style={{ color: theme.muted }}
+                    className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider px-3 pt-2 pb-1"
+                  >
+                    <Clock size={11} /> Previously used accounts
+                  </p>
+                  {suggestions.map((s, idx) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onMouseDown={(e) => {
+                        e.preventDefault()
+                        setEmail(s)
+                        setEmailFocus(false)
+                        setActiveSuggestion(-1)
+                        emailRef.current?.focus()
+                      }}
+                      onMouseEnter={() => setActiveSuggestion(idx)}
+                      style={{
+                        color: theme.text,
+                        borderTop: `1px solid ${theme.border}`,
+                        background: idx === activeSuggestion ? theme.hover : 'transparent',
+                        '--row-hover': theme.hover
+                      } as React.CSSProperties}
+                      className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left text-sm transition-colors hover:bg-[color:var(--row-hover)]"
+                    >
+                      <span
+                        style={{ background: theme.primarySoft, color: theme.primary }}
+                        className="w-6 h-6 rounded-md flex items-center justify-center font-semibold text-[11px] shrink-0"
+                      >
+                        {s.charAt(0).toUpperCase()}
+                      </span>
+                      <span className="truncate">{s}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
 
             <label className="flex flex-col gap-1.5">
               <span style={{ color: theme.muted }} className="text-xs font-medium">
@@ -207,8 +317,8 @@ export default function Login(): ReactElement {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   autoComplete="current-password"
-                  style={{ color: theme.text, background: 'transparent' }}
-                  className="flex-1 text-sm outline-none"
+                  style={{ color: theme.text }}
+                  className="flex-1 text-sm bg-transparent border-none outline-none"
                   placeholder="••••••••"
                 />
                 <button
@@ -323,8 +433,8 @@ export default function Login(): ReactElement {
                       onChange={(e) => setForgotEmail(e.target.value)}
                       autoFocus
                       required
-                      style={{ color: theme.text, background: 'transparent' }}
-                      className="flex-1 text-sm outline-none"
+                      style={{ color: theme.text }}
+                      className="flex-1 text-sm bg-transparent border-none outline-none"
                       placeholder="you@pharmacy.com"
                     />
                   </div>
@@ -404,8 +514,8 @@ export default function Login(): ReactElement {
                       onChange={(e) => setResetToken(e.target.value)}
                       autoFocus
                       required
-                      style={{ color: theme.text, background: 'transparent' }}
-                      className="flex-1 text-xs outline-none"
+                      style={{ color: theme.text }}
+                      className="flex-1 text-xs bg-transparent border-none outline-none"
                       placeholder="Paste the link or token from the email"
                     />
                   </div>
@@ -427,8 +537,8 @@ export default function Login(): ReactElement {
                       autoComplete="new-password"
                       minLength={6}
                       required
-                      style={{ color: theme.text, background: 'transparent' }}
-                      className="flex-1 text-sm outline-none"
+                      style={{ color: theme.text }}
+                      className="flex-1 text-sm bg-transparent border-none outline-none"
                       placeholder="Min. 6 characters"
                     />
                   </div>
@@ -450,8 +560,8 @@ export default function Login(): ReactElement {
                       autoComplete="new-password"
                       minLength={6}
                       required
-                      style={{ color: theme.text, background: 'transparent' }}
-                      className="flex-1 text-sm outline-none"
+                      style={{ color: theme.text }}
+                      className="flex-1 text-sm bg-transparent border-none outline-none"
                       placeholder="Repeat your password"
                     />
                     <button

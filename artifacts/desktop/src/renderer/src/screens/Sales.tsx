@@ -7,13 +7,13 @@ import { getTheme, mono, serif } from '../theme'
 import { usePharmacySettings, formatCurrency } from '../hooks/usePharmacySettings'
 import SaleDetail from '../components/SaleDetail'
 
-// The generated Order type hasn't caught up with the API yet â€” the server
+// The generated Order type hasn't caught up with the API yet — the server
 // does return patientName (see artifacts/api-server/src/routes/orders.ts).
 // Same gap as Prescription in Prescriptions.tsx.
 type OrderRow = Order & { patientName?: string | null }
 
 // Only pending/dispensed/cancelled are real order statuses (see
-// orderStatusEnum in lib/db/src/schema/orders.ts) â€” 'delivered' and
+// orderStatusEnum in lib/db/src/schema/orders.ts) — 'delivered' and
 // 'processing' don't exist in this schema and never match a real order.
 const STATUS_COLOR: Record<string, 'ok' | 'low' | 'expiring'> = {
   dispensed: 'ok',
@@ -118,7 +118,7 @@ export default function Sales(): ReactElement {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by sale #, patientâ€¦"
+            placeholder="Search by sale #, patient…"
             style={{ color: theme.text, background: 'transparent' }}
             className="w-full text-sm outline-none placeholder:opacity-50"
           />
@@ -185,7 +185,7 @@ export default function Sales(): ReactElement {
       <div style={{ background: theme.card, border: `1px solid ${theme.border}` }} className="rounded-xl overflow-hidden">
         {isLoading ? (
           <p style={{ color: theme.muted }} className="p-4 text-sm">
-            Loading ordersâ€¦
+            Loading orders…
           </p>
         ) : orders.length === 0 ? (
           <div className="py-12 flex flex-col items-center gap-2">

@@ -3,6 +3,7 @@ import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { useGetMe, useLoginUser } from '@workspace/api-client-react'
 import type { User } from '@workspace/api-client-react'
 import { getToken, setToken as persistToken } from '../lib/apiClient'
+import { rememberEmail } from '../lib/emailRecall'
 
 interface AuthContextType {
   user: User | null
@@ -46,6 +47,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
       tokenRef.current = newToken
       persistToken(newToken)
       setToken(newToken)
+      rememberEmail(email)
     } catch (err) {
       setLoginError(err instanceof Error ? err.message : 'Login failed')
       throw err

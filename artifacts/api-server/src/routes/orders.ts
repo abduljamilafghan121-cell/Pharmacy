@@ -80,6 +80,13 @@ router.post("/orders", requireAuth, async (req, res): Promise<void> => {
   const prescriptionIdRaw = (req.body as Record<string, unknown>).prescriptionId;
   const prescriptionId = typeof prescriptionIdRaw === "number" && prescriptionIdRaw > 0 ? prescriptionIdRaw : null;
 
+  // Optional credit ("pay later") flag — the generated schema doesn't expose
+  // paymentStatus on create, so read it defensively. When set to "unpaid" the
+  // goods are dispensed immediately but no payment is recorded yet (the sale
+  // is settled later via POST /payments).
+  const paymentStatusRaw = (req.body as Record<string, unknown>).paymentStatus;
+  const isCredit = paymentStatusRaw === "unpaid";
+
   // Fetch all medicines
   const medicineIds = items.map((i) => i.medicineId);
   const medicines = await db.select().from(medicinesTable).where(inArray(medicinesTable.id, medicineIds));
@@ -246,7 +253,7 @@ router.post("/orders", requireAuth, async (req, res): Promise<void> => {
       taxAmount: taxAmount.toFixed(2),
       total: total.toFixed(2),
       status: "dispensed",
-      paymentStatus: "paid",
+      paymentStatus: isCredit ? "unpaid" : "paid",
       notes: notes ?? null,
     }).returning();
 
@@ -290,12 +297,14 @@ router.post("/orders", requireAuth, async (req, res): Promise<void> => {
       }
     }
 
-    await tx.insert(paymentsTable).values({
-      orderId: order.id,
-      amount: total.toFixed(2),
-      method: paymentMethod,
-      status: "completed",
-    });
+    if (!isCredit) {
+      await tx.insert(paymentsTable).values({
+        orderId: order.id,
+        amount: total.toFixed(2),
+        method: paymentMethod,
+        status: "completed",
+      });
+    }
 
     // ── Refill counter increment ────────────────────────────────────────────
     if (prescriptionId) {
@@ -310,7 +319,7 @@ router.post("/orders", requireAuth, async (req, res): Promise<void> => {
   });
 
   await logAudit(req.auth!.userId, "CREATE", "order", order.id,
-    `New sale #${order.id} — total ${order.total} (${orderItems.length} item(s))`);
+    `New sale #${order.id} — total ${order.total} (${orderItems.length} item(s))${isCredit ? " — CREDIT (unpaid)" : ""}`);
   res.status(201).json({ ...order, servedByName: staffName, items: orderItems });
 });
 

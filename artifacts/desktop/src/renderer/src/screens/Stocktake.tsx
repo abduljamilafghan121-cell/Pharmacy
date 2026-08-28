@@ -62,7 +62,7 @@ function StocktakeDetailView({ id, onBack }: { id: number; onBack: () => void })
   if (isLoading || !detail) {
     return (
       <p style={{ color: theme.muted }} className="text-sm">
-        Loading stocktakeâ€¦
+        Loading stocktake…
       </p>
     )
   }
@@ -93,7 +93,7 @@ function StocktakeDetailView({ id, onBack }: { id: number; onBack: () => void })
   const doFinalize = async (): Promise<void> => {
     try {
       const result = await finalize.mutateAsync({ id })
-      showToast(`Finalized â€” ${result.adjustments} adjustment${result.adjustments !== 1 ? 's' : ''} applied`)
+      showToast(`Finalized — ${result.adjustments} adjustment${result.adjustments !== 1 ? 's' : ''} applied`)
       setConfirmFinalize(false)
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to finalize')
@@ -154,7 +154,7 @@ function StocktakeDetailView({ id, onBack }: { id: number; onBack: () => void })
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Filter medicinesâ€¦"
+          placeholder="Filter medicines…"
           style={{ color: theme.text, background: 'transparent' }}
           className="w-full text-sm outline-none placeholder:opacity-50"
         />
@@ -237,7 +237,7 @@ function StocktakeDetailView({ id, onBack }: { id: number; onBack: () => void })
             className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium disabled:opacity-60"
           >
             {finalize.isPending && <Loader2 size={14} className="animate-spin" />}
-            {finalize.isPending ? 'Finalizingâ€¦' : 'Confirm finalize'}
+            {finalize.isPending ? 'Finalizing…' : 'Confirm finalize'}
           </button>
         </Modal>
       )}
@@ -283,7 +283,7 @@ export default function Stocktake(): ReactElement {
 
       {isLoading ? (
         <p style={{ color: theme.muted }} className="text-sm">
-          Loading stocktakesâ€¦
+          Loading stocktakes…
         </p>
       ) : isError ? (
         <p style={{ color: theme.red }} className="text-sm">

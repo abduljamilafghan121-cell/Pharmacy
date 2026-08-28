@@ -57,7 +57,7 @@ function LineItemRow({
       </div>
       {isLoading ? (
         <p style={{ color: theme.muted }} className="text-xs">
-          Loading batchesâ€¦
+          Loading batches…
         </p>
       ) : availableBatches.length === 0 ? (
         <p style={{ color: theme.red }} className="text-xs">
@@ -80,12 +80,12 @@ function LineItemRow({
               className="w-full text-sm rounded-lg px-3 py-2 outline-none"
             >
               <option value="" disabled>
-                Select a batchâ€¦
+                Select a batch…
               </option>
               {availableBatches.map((b: MedicineBatch) => (
                 <option key={b.id} value={b.id}>
-                  {b.batchNumber ?? `Batch #${b.id}`} â€” {b.quantity} in stock
-                  {b.expiryDate ? ` â€” exp. ${b.expiryDate}` : ''}
+                  {b.batchNumber ?? `Batch #${b.id}`} — {b.quantity} in stock
+                  {b.expiryDate ? ` — exp. ${b.expiryDate}` : ''}
                 </option>
               ))}
             </select>
@@ -184,7 +184,7 @@ function NewReturnModal({ onClose }: { onClose: () => void }): ReactElement {
           ...(l.unitCost ? { unitCost: parseFloat(l.unitCost) } : {})
         }))
       })
-      showToast(`Return recorded â€” credit of ${result.totalAmount}`)
+      showToast(`Return recorded — credit of ${result.totalAmount}`)
       onClose()
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to record return')
@@ -204,7 +204,7 @@ function NewReturnModal({ onClose }: { onClose: () => void }): ReactElement {
           className="w-full text-sm rounded-lg px-3 py-2 outline-none transition-all duration-150 focus:border-transparent focus:ring-2 focus:ring-emerald-500/40"
         >
           <option value="" disabled>
-            Select a supplierâ€¦
+            Select a supplier…
           </option>
           {suppliers.map((s) => (
             <option key={s.id} value={s.id}>
@@ -231,7 +231,7 @@ function NewReturnModal({ onClose }: { onClose: () => void }): ReactElement {
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search medicine to addâ€¦"
+          placeholder="Search medicine to add…"
           style={{ background: theme.cardAlt, border: `1px solid ${theme.border}`, color: theme.text }}
           className="w-full text-sm rounded-lg px-3 py-2 outline-none placeholder:opacity-50"
         />
@@ -261,7 +261,7 @@ function NewReturnModal({ onClose }: { onClose: () => void }): ReactElement {
         className="w-full mt-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium disabled:opacity-60"
       >
         {createReturn.isPending && <Loader2 size={14} className="animate-spin" />}
-        {createReturn.isPending ? 'Recordingâ€¦' : 'Record return'}
+        {createReturn.isPending ? 'Recording…' : 'Record return'}
       </button>
     </Modal>
   )

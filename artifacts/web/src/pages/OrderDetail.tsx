@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useRoute } from "wouter";
-import { useGetOrder, useUpdateOrderStatus } from "@workspace/api-client-react";
+import { useGetOrder, useUpdateOrderStatus, useCreatePayment } from "@workspace/api-client-react";
+import type { PaymentInputMethod } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -16,13 +17,22 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ArrowLeft, CheckCircle2, RotateCcw, User, Stethoscope, Printer, Package, BadgeCheck, Tag } from "lucide-react";
+import { ArrowLeft, CheckCircle2, RotateCcw, User, Stethoscope, Printer, Package, BadgeCheck, Tag, AlertTriangle } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useToast } from "@/components/ui/use-toast";
 import { SaleStatusBadge, PaymentStatusBadge } from "./Orders";
 import { PrintableReceipt } from "@/components/PrintableReceipt";
 import { printDispensingLabel } from "@/components/PrintableLabel";
 import { usePharmacySettings } from "@/hooks/use-pharmacy-settings";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+
+const PAYMENT_METHODS: { value: PaymentInputMethod; label: string }[] = [
+  { value: "cash", label: "Cash" },
+  { value: "card", label: "Card / PoS" },
+  { value: "insurance", label: "Insurance" },
+];
 
 export default function SaleDetail() {
   const [, params] = useRoute("/sales/:id");
@@ -36,10 +46,33 @@ export default function SaleDetail() {
   const { data: pharmacy } = usePharmacySettings();
 
   const updateStatusMutation = useUpdateOrderStatus();
+  const createPaymentMutation = useCreatePayment();
 
   // Return & Refund dialog state
   const [refundOpen, setRefundOpen] = useState(false);
   const [refundNote, setRefundNote] = useState("");
+
+  // Collect payment (settle an unpaid/credit sale) dialog state
+  const [collectOpen, setCollectOpen] = useState(false);
+  const [collectMethod, setCollectMethod] = useState<PaymentInputMethod>("cash");
+
+  const handleCollect = () => {
+    createPaymentMutation.mutate(
+      { data: { orderId: id, amount: order!.total, method: collectMethod } },
+      {
+        onSuccess: () => {
+          toast({ title: "Payment collected — sale marked as paid" });
+          setCollectOpen(false);
+          queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+          queryClient.invalidateQueries({ queryKey: [`/api/orders/${id}`] });
+        },
+        onError: (err: any) => {
+          const msg = err?.response?.data?.error ?? "Failed to collect payment";
+          toast({ title: msg, variant: "destructive" });
+        },
+      }
+    );
+  };
 
   if (isLoading) return <div className="p-10 text-center text-muted-foreground">Loading sale…</div>;
   if (!order) return <div className="p-10 text-center text-muted-foreground">Sale not found.</div>;
@@ -48,6 +81,7 @@ export default function SaleDetail() {
   const isDispensed = order.status === "dispensed";
   const isPaid = order.paymentStatus === "paid";
   const isRefunded = order.paymentStatus === "refunded";
+  const isUnpaid = order.paymentStatus === "unpaid";
 
   const handleDispensed = () => {
     updateStatusMutation.mutate(
@@ -229,6 +263,20 @@ export default function SaleDetail() {
                   <span>Payment has been refunded to the customer.</span>
                 </div>
               )}
+              {isUnpaid && (
+                <div className="flex items-start gap-2 text-sm text-amber-700 dark:text-amber-400 bg-amber-500/10 rounded-md p-3">
+                  <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+                  <span>This sale was dispensed on credit and is unpaid.</span>
+                </div>
+              )}
+              {isUnpaid && (
+                <Button
+                  className="w-full justify-center"
+                  onClick={() => setCollectOpen(true)}
+                >
+                  Collect Payment · {formatCurrency(order.total)}
+                </Button>
+              )}
             </CardContent>
           </Card>
 
@@ -317,6 +365,41 @@ export default function SaleDetail() {
                 : isPaid
                 ? "Confirm Return & Refund"
                 : "Confirm Cancellation"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Collect payment confirmation dialog for unpaid/credit sales */}
+      <AlertDialog open={collectOpen} onOpenChange={setCollectOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Collect Payment — {formatCurrency(order.total)}</AlertDialogTitle>
+            <AlertDialogDescription>
+              This sale was dispensed on credit and is currently unpaid. Choose how the customer is paying now to settle it.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <div className="py-2">
+            <Label htmlFor="collect-method" className="mb-2 block">Payment method</Label>
+            <Select value={collectMethod} onValueChange={(v) => setCollectMethod(v as PaymentInputMethod)}>
+              <SelectTrigger id="collect-method" className="w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {PAYMENT_METHODS.map((m) => (
+                  <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setCollectOpen(false)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-emerald-600 hover:bg-emerald-700"
+              onClick={handleCollect}
+              disabled={createPaymentMutation.isPending}
+            >
+              {createPaymentMutation.isPending ? "Recording…" : `Confirm ${formatCurrency(order.total)}`}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -1,10 +1,10 @@
 import type { ReactElement } from 'react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   Search, Plus, Minus, Trash2, ShoppingBag, Pill, Scan,
   CheckCircle2, Loader2, Receipt, AlertTriangle, ShieldAlert, ShieldCheck, Lock,
-  FileText, AlertCircle, X, ArrowRight, Banknote, CreditCard
+  FileText, AlertCircle, X, ArrowRight, Banknote, CreditCard, CalendarClock
 } from 'lucide-react'
 import { useListMedicines, useCreateOrder, useGetMedicine, getListMedicinesQueryKey } from '@workspace/api-client-react'
 import type { Medicine, MedicineUnit, OrderInputPaymentMethod } from '@workspace/api-client-react'
@@ -79,10 +79,15 @@ interface GenericAlternative {
   manufacturer: string | null
 }
 
-const PAYMENT_METHODS: [OrderInputPaymentMethod, string, typeof Banknote][] = [
+// 'credit' = "pay later" — goods are dispensed now, payment collected later
+// (order is created with paymentStatus='unpaid'; settled via the Sales screen).
+type PaymentChoice = OrderInputPaymentMethod | 'credit'
+
+const PAYMENT_METHODS: [PaymentChoice, string, typeof Banknote][] = [
   ['cash', 'Cash', Banknote],
   ['card', 'Card / PoS', CreditCard],
-  ['insurance', 'Insurance', ShieldCheck]
+  ['insurance', 'Insurance', ShieldCheck],
+  ['credit', 'Pay Later', CalendarClock]
 ]
 
 // Severity → theme tokens (mirrors web's SEVERITY_COLOR)
@@ -136,7 +141,7 @@ export default function NewSale(): ReactElement {
   const [saleItems, setSaleItems] = useState<SaleItem[]>([])
   const [patientName, setPatientName] = useState('')
   const [patientId, setPatientId] = useState<number | null>(null)
-  const [payment, setPayment] = useState<OrderInputPaymentMethod>('cash')
+  const [payment, setPayment] = useState<PaymentChoice>('cash')
   const [notes, setNotes] = useState('')
   const [discountAmount, setDiscountAmount] = useState(0)
   const [submitting, setSubmitting] = useState(false)
@@ -477,7 +482,7 @@ export default function NewSale(): ReactElement {
       const result = await createOrder.mutateAsync({
         data: {
           patientName: patientName.trim() || undefined,
-          paymentMethod: payment,
+          ...(payment === 'credit' ? { paymentStatus: 'unpaid' } : { paymentMethod: payment }),
           notes: notes.trim() || undefined,
           items: saleItems.map((i) => ({
             medicineId: i.medicine.id,
@@ -706,26 +711,56 @@ export default function NewSale(): ReactElement {
         {/* Medicine search */}
         <div className="relative">
           <div
-            className="flex items-center gap-2 px-3 py-2.5 rounded-xl transition-shadow duration-150 focus-within:shadow-[0_0_0_3px_rgba(47,191,143,0.18)]"
-            style={inputStyle}
+            style={{
+              background: `linear-gradient(180deg, ${theme.cardAlt} 0%, ${theme.cardAlt} 100%)`,
+              border: `1px solid ${search ? theme.primary + '66' : theme.borderStrong}`,
+              boxShadow: search ? `0 0 0 3px ${theme.primary}1f, ${theme.shadow}` : theme.shadow
+            }}
+            className="rounded-2xl p-3.5 transition-all duration-150 new-sale-search"
           >
-            <Search size={15} color={theme.muted} />
-            <input
-              ref={searchRef}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={handleSearchKeyDown}
-              autoFocus
-              placeholder="Search medicine by name or generic name…"
-              style={{ color: theme.text, background: 'transparent' }}
-              className="flex-1 text-sm outline-none placeholder:opacity-60"
-            />
+            <label
+              style={{ color: theme.muted }}
+              className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider mb-2"
+            >
+              <Pill size={11} />
+              Search medicine
+              <span className="opacity-60 font-normal normal-case mx-1">·</span>
+              <span style={{ color: theme.muted }} className="font-normal normal-case">
+                name or generic name
+              </span>
+              <span className="ml-auto">
+                <Kbd>F2</Kbd>
+              </span>
+            </label>
+            <div className="flex items-center gap-3">
+              <Search size={18} color={theme.primary} className="shrink-0" />
+              <input
+                ref={searchRef}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={handleSearchKeyDown}
+                autoFocus
+                placeholder="Type to search and press Enter to add…"
+                style={{ color: theme.text }}
+                className="flex-1 text-[15px] bg-transparent border-none outline-none placeholder:opacity-50"
+              />
+              {search && (
+                <button
+                  onClick={() => setSearch('')}
+                  title="Clear search"
+                  style={{ color: theme.muted }}
+                  className="shrink-0 p-1 rounded-md transition-colors hover:bg-[color:var(--row-hover)]"
+                >
+                  <X size={15} />
+                </button>
+              )}
+            </div>
           </div>
 
           {showDropdown && (
             <div
               style={{ background: theme.card, border: `1px solid ${theme.borderStrong}`, boxShadow: theme.shadowLg }}
-              className="absolute z-20 top-full mt-1 left-0 right-0 rounded-xl max-h-72 overflow-y-auto animate-scale-in"
+              className="absolute z-20 top-full mt-1.5 left-0 right-0 rounded-2xl max-h-80 overflow-y-auto animate-scale-in"
             >
               {medicineRows.map((m, rIdx) => {
                 const units = getUnits(m)
@@ -740,7 +775,7 @@ export default function NewSale(): ReactElement {
                   <button
                     key={m.id}
                     onClick={() => addItem(m)}
-                    className="w-full flex items-center justify-between p-3 text-left text-sm transition-colors hover:bg-[color:var(--row-hover)]"
+                    className="w-full flex items-center justify-between p-3.5 text-left text-sm transition-colors hover:bg-[color:var(--row-hover)]"
                     style={
                       {
                         '--row-hover': theme.hover,
@@ -1025,136 +1060,192 @@ export default function NewSale(): ReactElement {
               </div>
             </div>
           ) : (
-            <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
-              {saleItems.map((item, idx) => {
-                const units = getUnits(item.medicine)
-                const unitPrice = priceForUnit(item.medicine.price, item.conversionFactor)
-                const lineTotal = unitPrice * item.quantity
-                const baseUnitsUsed = item.quantity * item.conversionFactor
-                const maxQty = Math.floor(item.medicine.quantity / item.conversionFactor)
-                const cs = item.medicine.controlledSchedule
-                const isContraindicated = contraindicatedPairs.some(
-                  (p) => p.medicine1Id === item.medicine.id || p.medicine2Id === item.medicine.id
-                )
-                const highlighted = focusedRowId === item.medicine.id
-                return (
-                  <div
-                    key={item.medicine.id}
-                    className="rounded-xl p-3 space-y-2"
-                    style={{
-                      background: theme.cardAlt,
-                      border: `1px solid ${isContraindicated ? theme.red : highlighted ? theme.primary : theme.border}`
-                    }}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <p style={{ color: theme.text }} className="font-medium text-sm truncate">
-                            {item.medicine.name}
-                          </p>
-                          {cs && (
-                            <span
-                              style={{ background: theme.redBg, color: theme.red }}
-                              className="text-[9px] font-bold px-1 py-0 rounded shrink-0"
-                            >
-                              Sch {cs}
-                            </span>
-                          )}
-                        </div>
-                        <p style={{ color: theme.muted }} className="text-xs">
-                          {formatCurrency(unitPrice, settings)}
-                          {item.unitName ? ` / ${item.unitName}` : ' / unit'}
-                          {item.conversionFactor > 1 && ` (= ${item.conversionFactor} base units)`}
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => removeItem(item.medicine.id)}
-                        className="p-1 rounded-md transition-colors shrink-0 hover:bg-[color:var(--row-hover)]"
-                        style={{ '--row-hover': theme.redBg, color: theme.muted } as React.CSSProperties}
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {units.length > 0 && (
-                        <select
-                          value={item.unitId ?? ''}
-                          onChange={(e) =>
-                            updateUnit(item.medicine.id, e.target.value ? Number(e.target.value) : undefined, units)
-                          }
-                          style={inputStyle}
-                          className="h-7 rounded-md px-2 py-0 text-xs outline-none"
-                        >
-                          {!units.some((u) => u.isBaseUnit || u.conversionFactorToBase === 1) && (
-                            <option value="">Individual unit (×1)</option>
-                          )}
-                          {[...units]
-                            .sort((a, b) => a.conversionFactorToBase - b.conversionFactorToBase)
-                            .map((u) => (
-                              <option key={u.id} value={u.id}>
-                                {u.unitName}
-                              </option>
-                            ))}
-                        </select>
-                      )}
-                      <div className="flex items-center gap-1 ml-auto">
-                        <button
-                          onClick={() => updateQty(item.medicine.id, item.quantity - 1)}
-                          style={{ border: `1px solid ${theme.border}`, color: theme.text }}
-                          className="w-7 h-7 rounded-md flex items-center justify-center transition-colors hover:bg-[color:var(--row-hover)]"
-                        >
-                          <Minus size={11} />
-                        </button>
-                        <input
-                          ref={(el) => {
-                            qtyRefs.current[item.medicine.id] = el
-                          }}
-                          type="number"
-                          min={1}
-                          max={maxQty}
-                          value={item.quantity}
-                          onChange={(e) => updateQty(item.medicine.id, parseInt(e.target.value) || 0)}
-                          onFocus={() => setFocusedRowId(item.medicine.id)}
-                          onBlur={() => setFocusedRowId(null)}
-                          onKeyDown={(e) => handleQtyKeyDown(e, idx)}
-                          style={{ ...mono, ...inputStyle }}
-                          className="w-14 h-7 text-center rounded-md text-sm outline-none"
-                        />
-                        <button
-                          onClick={() => updateQty(item.medicine.id, item.quantity + 1)}
-                          disabled={item.quantity >= maxQty}
+            <div className="flex-1 overflow-y-auto">
+              <table className="w-full border-collapse text-sm">
+                <thead className="sticky top-0" style={{ background: theme.cardAlt, borderBottom: `1px solid ${theme.borderStrong}` }}>
+                  <tr>
+                    <th style={{ color: theme.muted }} className="py-2 px-3 text-left text-[11px] font-semibold uppercase tracking-wider">Item</th>
+                    <th style={{ color: theme.muted }} className="py-2 px-2 text-left text-[11px] font-semibold uppercase tracking-wider">Unit</th>
+                    <th style={{ color: theme.muted }} className="py-2 px-2 text-center text-[11px] font-semibold uppercase tracking-wider">Qty</th>
+                    <th style={{ color: theme.muted }} className="py-2 px-3 text-right text-[11px] font-semibold uppercase tracking-wider">Total</th>
+                    <th className="py-2 px-2 w-8" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {saleItems.map((item, idx) => {
+                    const units = getUnits(item.medicine)
+                    const unitPrice = priceForUnit(item.medicine.price, item.conversionFactor)
+                    const lineTotal = unitPrice * item.quantity
+                    const baseUnitsUsed = item.quantity * item.conversionFactor
+                    const maxQty = Math.floor(item.medicine.quantity / item.conversionFactor)
+                    const cs = item.medicine.controlledSchedule
+                    const isContraindicated = contraindicatedPairs.some(
+                      (p) => p.medicine1Id === item.medicine.id || p.medicine2Id === item.medicine.id
+                    )
+                    const highlighted = focusedRowId === item.medicine.id
+                    const isAtMax = item.quantity >= maxQty
+                    const accent = isContraindicated ? theme.red : theme.primary
+                    const accentSoft = isContraindicated ? theme.redBg : theme.primarySoft
+                    return (
+                      <Fragment key={item.medicine.id}>
+                        <tr
+                          onMouseEnter={() => setFocusedRowId(item.medicine.id)}
+                          onMouseLeave={() => setFocusedRowId(null)}
                           style={{
-                            border: `1px solid ${theme.border}`,
-                            color: item.quantity >= maxQty ? theme.muted : theme.text,
-                            opacity: item.quantity >= maxQty ? 0.4 : 1
+                            background: highlighted ? accentSoft : 'transparent',
+                            borderBottom: `1px solid ${theme.border}`
                           }}
-                          className="w-7 h-7 rounded-md flex items-center justify-center transition-colors hover:bg-[color:var(--row-hover)]"
+                          className="transition-colors"
                         >
-                          <Plus size={11} />
-                        </button>
-                      </div>
-                      <div className="w-24 text-right shrink-0">
-                        <p style={{ ...mono, color: theme.text }} className="font-semibold text-sm">
-                          {formatCurrency(lineTotal, settings)}
-                        </p>
-                        {item.conversionFactor > 1 && (
-                          <p style={{ color: theme.muted }} className="text-[10px]">
-                            {baseUnitsUsed} base units
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    {/* SIG — dosing instructions */}
-                    <input
-                      placeholder="Dosing instructions (e.g. Take 1 tablet twice daily after food)"
-                      value={item.sig ?? ''}
-                      onChange={(e) => updateSig(item.medicine.id, e.target.value)}
-                      style={inputStyle}
-                      className="w-full h-7 rounded-md px-2 text-xs outline-none placeholder:opacity-50"
-                    />
-                  </div>
-                )
-              })}
+                          {/* Item */}
+                          <td className="py-2.5 px-3">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <span
+                                style={{ background: accentSoft, color: accent }}
+                                className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 font-semibold text-xs"
+                              >
+                                {item.medicine.name.charAt(0).toUpperCase()}
+                              </span>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <p style={{ color: theme.text }} className="font-medium text-[13px] truncate">
+                                    {item.medicine.name}
+                                  </p>
+                                  {cs && (
+                                    <span style={{ background: theme.redBg, color: theme.red }} className="text-[9px] font-bold px-1 py-px rounded shrink-0">
+                                      Sch {cs}
+                                    </span>
+                                  )}
+                                  {item.medicine.prescriptionRequired && (
+                                    <span style={{ background: theme.amberBg, color: theme.amber }} className="text-[9px] font-bold px-1 py-px rounded uppercase shrink-0">
+                                      Rx
+                                    </span>
+                                  )}
+                                </div>
+                                <p style={{ color: theme.muted }} className="text-[11px] mt-0.5">
+                                  <span style={{ ...mono }}>{formatCurrency(unitPrice, settings)}</span>
+                                  <span> / {item.unitName ?? 'unit'}</span>
+                                  {item.conversionFactor > 1 && (
+                                    <span className="opacity-80"> · {item.conversionFactor} base units</span>
+                                  )}
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* Unit */}
+                          <td className="py-2.5 px-2">
+                            {units.length > 0 ? (
+                              <select
+                                value={item.unitId ?? ''}
+                                onChange={(e) =>
+                                  updateUnit(item.medicine.id, e.target.value ? Number(e.target.value) : undefined, units)
+                                }
+                                style={inputStyle}
+                                className="h-8 rounded-lg px-2 py-0 text-xs outline-none focus:ring-2 focus:ring-emerald-500/40 max-w-[7.5rem]"
+                              >
+                                {!units.some((u) => u.isBaseUnit || u.conversionFactorToBase === 1) && (
+                                  <option value="">Individual (×1)</option>
+                                )}
+                                {[...units]
+                                  .sort((a, b) => a.conversionFactorToBase - b.conversionFactorToBase)
+                                  .map((u) => (
+                                    <option key={u.id} value={u.id}>
+                                      {u.unitName}
+                                    </option>
+                                  ))}
+                              </select>
+                            ) : (
+                              <span style={{ color: theme.muted }} className="text-xs">—</span>
+                            )}
+                          </td>
+
+                          {/* Qty stepper */}
+                          <td className="py-2.5 px-2">
+                            <div
+                              className="flex items-center rounded-lg overflow-hidden mx-auto"
+                              style={{ border: `1px solid ${theme.borderStrong}`, background: theme.card, width: 'fit-content' }}
+                            >
+                              <button
+                                onClick={() => updateQty(item.medicine.id, item.quantity - 1)}
+                                className="w-7 h-7 flex items-center justify-center transition-colors"
+                                style={{ color: theme.text, background: 'transparent' }}
+                              >
+                                <Minus size={11} />
+                              </button>
+                              <input
+                                ref={(el) => {
+                                  qtyRefs.current[item.medicine.id] = el
+                                }}
+                                type="number"
+                                min={1}
+                                max={maxQty}
+                                value={item.quantity}
+                                onChange={(e) => updateQty(item.medicine.id, parseInt(e.target.value) || 0)}
+                                onFocus={() => setFocusedRowId(item.medicine.id)}
+                                onBlur={() => setFocusedRowId(null)}
+                                onKeyDown={(e) => handleQtyKeyDown(e, idx)}
+                                style={{ ...mono, background: 'transparent', color: theme.text, borderLeft: `1px solid ${theme.borderStrong}`, borderRight: `1px solid ${theme.borderStrong}` }}
+                                className="w-10 h-7 text-center text-sm outline-none"
+                              />
+                              <button
+                                onClick={() => updateQty(item.medicine.id, item.quantity + 1)}
+                                disabled={isAtMax}
+                                className="w-7 h-7 flex items-center justify-center transition-colors"
+                                style={{ color: isAtMax ? theme.muted : theme.text, background: 'transparent', opacity: isAtMax ? 0.4 : 1 }}
+                              >
+                                <Plus size={11} />
+                              </button>
+                            </div>
+                          </td>
+
+                          {/* Total */}
+                          <td className="py-2.5 px-3 text-right" style={{ ...mono, color: accent, fontWeight: 700 }}>
+                            {formatCurrency(lineTotal, settings)}
+                            {item.conversionFactor > 1 && (
+                              <span style={{ color: theme.muted }} className="text-[10px] font-normal ml-1">
+                                {baseUnitsUsed}bu
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Remove */}
+                          <td className="py-2.5 px-2 text-right">
+                            <button
+                              onClick={() => removeItem(item.medicine.id)}
+                              title="Remove item"
+                              className="p-1.5 rounded-md transition-colors"
+                              style={{ color: theme.muted, '--row-hover': theme.redBg } as React.CSSProperties}
+                              onMouseEnter={(e) => (e.currentTarget.style.color = theme.red)}
+                              onMouseLeave={(e) => (e.currentTarget.style.color = theme.muted)}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </td>
+                        </tr>
+
+                        {/* SIG row */}
+                        <tr
+                          style={{ background: theme.card, borderBottom: `1px solid ${theme.borderStrong}` }}
+                        >
+                          <td colSpan={5} className="px-3 py-2">
+                            <div className="flex items-center gap-2">
+                              <FileText size={13} style={{ color: theme.muted }} className="shrink-0" />
+                              <input
+                                placeholder="Dosing instructions (e.g. Take 1 tablet twice daily after food)"
+                                value={item.sig ?? ''}
+                                onChange={(e) => updateSig(item.medicine.id, e.target.value)}
+                                style={inputStyle}
+                                className="flex-1 h-8 rounded-lg px-2.5 text-xs outline-none placeholder:opacity-50 focus:ring-2 focus:ring-emerald-500/40"
+                              />
+                            </div>
+                          </td>
+                        </tr>
+                      </Fragment>
+                    )
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
@@ -1312,7 +1403,7 @@ export default function NewSale(): ReactElement {
           <h2 style={{ color: theme.text }} className="text-sm font-semibold tracking-tight mb-3">
             Payment
           </h2>
-          <div className="grid grid-cols-3 gap-2 mb-3">
+          <div className="grid grid-cols-4 gap-2 mb-3">
             {PAYMENT_METHODS.map(([value, label, Icon]) => (
               <button
                 key={value}
@@ -1333,6 +1424,11 @@ export default function NewSale(): ReactElement {
               </button>
             ))}
           </div>
+          {payment === 'credit' && (
+            <p style={{ background: theme.amberBg, color: theme.amber, border: `1px solid ${theme.amber}33` }} className="text-[11px] font-medium rounded-md px-2.5 py-1.5 mb-3">
+              Pay later — items are dispensed now, collect payment on the Sales screen.
+            </p>
+          )}
           <input
             placeholder="Notes (optional) — e.g. prescription #…"
             value={notes}

@@ -22,7 +22,7 @@ import { useMedicineBatches, type MedicineBatch } from '../hooks/useExtraQueries
 import { apiUrl, authHeaders, jsonOrThrow } from '../lib/apiClient'
 import Modal from '../components/Modal'
 
-// Matches purchaseOrderStatusEnum in lib/db/src/schema/purchase-orders.ts â€” a purchase
+// Matches purchaseOrderStatusEnum in lib/db/src/schema/purchase-orders.ts — a purchase
 // order is only ever "pending", "received", or "cancelled" (no "completed"/"ordered").
 const STATUS_COLOR: Record<string, 'ok' | 'low' | 'expiring'> = {
   received: 'ok',
@@ -185,7 +185,7 @@ function CreatePurchaseOrderModal({ onClose }: { onClose: () => void }): ReactEl
           style={{ background: theme.cardAlt, border: `1px solid ${theme.border}`, color: theme.text }}
           className="w-full text-sm rounded-lg px-3 py-2 outline-none"
         >
-          <option value="">Select a supplierâ€¦</option>
+          <option value="">Select a supplier…</option>
           {suppliers.map((s: Supplier) => (
             <option key={s.id} value={s.id}>
               {s.name}
@@ -206,7 +206,7 @@ function CreatePurchaseOrderModal({ onClose }: { onClose: () => void }): ReactEl
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search medicine nameâ€¦"
+            placeholder="Search medicine name…"
             style={{ color: theme.text, background: 'transparent' }}
             className="w-full text-sm outline-none placeholder:opacity-50"
           />
@@ -338,7 +338,7 @@ function CreatePurchaseOrderModal({ onClose }: { onClose: () => void }): ReactEl
         className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium disabled:opacity-60"
       >
         {createPO.isPending && <Loader2 size={14} className="animate-spin" />}
-        {createPO.isPending ? 'Creatingâ€¦' : 'Create purchase order'}
+        {createPO.isPending ? 'Creating…' : 'Create purchase order'}
       </button>
     </Modal>
   )
@@ -713,7 +713,7 @@ export default function PurchaseOrders(): ReactElement {
       <div style={{ background: theme.card, border: `1px solid ${theme.border}` }} className="rounded-xl overflow-hidden">
         {isLoading ? (
           <p style={{ color: theme.muted }} className="p-4 text-sm">
-            Loading purchase ordersâ€¦
+            Loading purchase orders…
           </p>
         ) : purchaseOrders.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
@@ -764,7 +764,7 @@ export default function PurchaseOrders(): ReactElement {
                     #{String(po.id).padStart(4, '0')}
                   </td>
                   <td className="py-2.5 px-4" style={{ color: theme.text }}>
-                    {po.supplierName ?? 'â€”'}
+                    {po.supplierName ?? '—'}
                   </td>
                   <td className="py-2.5 px-4 text-center" style={{ ...mono, color: theme.muted }}>
                     {(po as any).itemCount ?? po.items?.length ?? 0}
