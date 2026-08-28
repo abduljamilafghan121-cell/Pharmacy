@@ -130,6 +130,27 @@ input[type='number']::-webkit-inner-spin-button {
   border-radius: 8px;
 }
 
+/* Prescription card. Resting colors come from CSS variables injected on the
+   element (--rx-bg/--rx-border/--rx-shadow), so hover styles can *override*
+   them cleanly via CSS instead of losing to inline styles.
+
+   IMPORTANT: the hover effect uses only background/border/box-shadow. It must
+   NOT use transform or filter — those make this element the CSS containing
+   block for its fixed-position modal descendants, which would trap and shake
+   the detail/reject modals. */
+.rx-card {
+  background: var(--rx-bg);
+  border: 1px solid var(--rx-border);
+  box-shadow: var(--rx-shadow);
+  transition: box-shadow 0.16s ease, border-color 0.16s ease, background-color 0.16s ease;
+}
+.rx-card:hover {
+  border-color: rgba(16, 185, 129, 0.5);
+  background: linear-gradient(150deg, var(--rx-bg) 0%, rgba(16, 185, 129, 0.07) 100%);
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.3), 0 14px 30px -16px rgba(16, 185, 129, 0.45);
+}
+
+
 /* Entrance animations */
 @keyframes pc-fade-up {
   from {

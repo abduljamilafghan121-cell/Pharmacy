@@ -1,4 +1,4 @@
-﻿import type { ReactElement } from 'react'
+﻿import type { ReactElement, ReactNode } from 'react'
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -8,7 +8,7 @@ import {
   useCreatePrescription,
   getListPrescriptionsQueryKey
 } from '@workspace/api-client-react'
-import { FileText, CheckCircle, XCircle, Plus, User, Stethoscope, Paperclip, ImagePlus, AlertCircle, Loader2, RefreshCw } from 'lucide-react'
+import { FileText, CheckCircle, XCircle, Plus, User, Stethoscope, Paperclip, ImagePlus, AlertCircle, Loader2, RefreshCw, Eye } from 'lucide-react'
 import { useUiStore } from '../store/uiStore'
 import { getTheme, mono, serif } from '../theme'
 import { usePharmacySettings } from '../hooks/usePharmacySettings'
@@ -309,6 +309,7 @@ function PrescriptionCard({ rx }: { rx: PrescriptionRow }): ReactElement {
   const queryClient = useQueryClient()
   const [rejectOpen, setRejectOpen] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
+  const [detailOpen, setDetailOpen] = useState(false)
 
   const attachMutation = useAttachPrescriptionFile()
 
@@ -369,8 +370,8 @@ function PrescriptionCard({ rx }: { rx: PrescriptionRow }): ReactElement {
 
   return (
     <div
-      style={{ background: theme.card, border: `1px solid ${theme.border}`, boxShadow: theme.shadow }}
-      className="rounded-xl p-5 flex flex-col"
+      style={{ '--rx-bg': theme.card, '--rx-border': theme.border, '--rx-shadow': theme.shadow } as React.CSSProperties}
+      className="rx-card rounded-xl p-5 flex flex-col"
     >
       <div className="flex justify-between items-start mb-4">
         <div>
@@ -382,9 +383,18 @@ function PrescriptionCard({ rx }: { rx: PrescriptionRow }): ReactElement {
             {rx.patientName || <span style={{ color: theme.muted }} className="italic font-normal">Unknown patient</span>}
           </p>
         </div>
-        <span style={{ background: st.bg, color: st.fg }} className="text-[11px] font-medium px-2 py-0.5 rounded-full capitalize">
-          {rx.status}
-        </span>
+        <div className="flex flex-col items-end gap-2">
+          <span style={{ background: st.bg, color: st.fg }} className="text-[11px] font-medium px-2 py-0.5 rounded-full capitalize">
+            {rx.status}
+          </span>
+          <button
+            onClick={() => setDetailOpen(true)}
+            style={{ border: `1px solid ${theme.border}`, color: theme.muted }}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors hover:border-emerald-500/50 hover:text-emerald-500"
+          >
+            <Eye size={12} /> View
+          </button>
+        </div>
       </div>
 
       <div className="space-y-2 mb-4 flex-1">
@@ -516,6 +526,184 @@ function PrescriptionCard({ rx }: { rx: PrescriptionRow }): ReactElement {
           </div>
         </Modal>
       )}
+
+      {detailOpen && (
+        <PrescriptionDetailModal rx={rx} onClose={() => setDetailOpen(false)} />
+      )}
     </div>
+  )
+}
+
+// ── Prescription detail modal ─────────────────────────────────────────────────
+
+function PrescriptionDetailModal({ rx, onClose }: { rx: PrescriptionRow; onClose: () => void }): ReactElement {
+  const { dark, showToast } = useUiStore()
+  const theme = getTheme(dark)
+  const queryClient = useQueryClient()
+
+  const verifyMutation = useVerifyPrescription({
+    mutation: {
+      onSuccess: () => {
+        showToast('Prescription verified — ready to dispense')
+        queryClient.invalidateQueries({ queryKey: getListPrescriptionsQueryKey() })
+      },
+      onError: (err: Error) => showToast(err.message || "Couldn't verify prescription")
+    }
+  })
+
+  const statusStyle: Record<string, { bg: string; fg: string }> = {
+    pending: { bg: theme.amberBg, fg: theme.amber },
+    verified: { bg: theme.greenBg, fg: theme.green },
+    rejected: { bg: theme.redBg, fg: theme.red }
+  }
+  const st = statusStyle[rx.status] ?? { bg: theme.hover, fg: theme.muted }
+  const refillsUsed = rx.refillsUsed ?? 0
+  const refillsExhausted = rx.maxRefills != null && refillsUsed > rx.maxRefills
+
+  const Item = ({ label, children }: { label: string; children: ReactNode }): ReactElement => (
+    <div>
+      <p style={{ color: theme.muted }} className="text-[11px] uppercase tracking-wide mb-1">
+        {label}
+      </p>
+      <div className="text-sm" style={{ color: theme.text }}>
+        {children}
+      </div>
+    </div>
+  )
+
+  return (
+    <Modal title={`Prescription RX #${rx.id}`} onClose={onClose} width={520}>
+      {/* Header banner */}
+      <div
+        style={{ background: st.bg, border: `1px solid ${st.fg}33` }}
+        className="rounded-xl px-4 py-3 flex items-center justify-between mb-5"
+      >
+        <span className="flex items-center gap-2">
+          <span
+            style={{ background: st.fg, color: st.bg }}
+            className="w-2 h-2 rounded-full inline-block"
+          />
+          <span style={{ color: st.fg }} className="text-sm font-semibold capitalize">{rx.status}</span>
+        </span>
+        <span style={{ color: theme.muted }} className="text-xs">
+          Recorded {new Date(rx.createdAt).toLocaleString()}
+        </span>
+      </div>
+
+      {/* Detail card */}
+      <div
+        style={{ background: theme.cardAlt, border: `1px solid ${theme.border}` }}
+        className="rounded-xl p-4 mb-5"
+      >
+        <div className="grid grid-cols-2 gap-x-6 gap-y-5">
+          <Item label="Patient">
+            <span className="flex items-center gap-1.5">
+              <User size={13} color={theme.muted} />
+              {rx.patientName || <span className="italic font-normal" style={{ color: theme.muted }}>Unknown patient</span>}
+            </span>
+          </Item>
+          <Item label="Prescribing Doctor">
+            <span className="flex items-center gap-1.5">
+              <Stethoscope size={13} color={theme.muted} />
+              {rx.doctorName ? `Dr. ${rx.doctorName}` : <span className="italic font-normal" style={{ color: theme.muted }}>Not specified</span>}
+            </span>
+          </Item>
+          {rx.maxRefills != null && (
+            <Item label="Refills">
+              <span className="flex items-center gap-1.5">
+                <span style={mono}>{refillsUsed}</span>
+                <span style={{ color: theme.muted }}>/ {rx.maxRefills} used</span>
+                {refillsExhausted && (
+                  <span style={{ color: theme.red }} className="text-xs font-semibold">• exhausted</span>
+                )}
+              </span>
+            </Item>
+          )}
+          <Item label="Attachment">
+            {rx.attachmentUrl ? (
+              <span style={{ color: theme.green }} className="flex items-center gap-1.5">
+                <Paperclip size={13} /> Attached
+              </span>
+            ) : (
+              <span style={{ color: theme.amber }} className="flex items-center gap-1.5">
+                <AlertCircle size={13} /> Not attached
+              </span>
+            )}
+          </Item>
+        </div>
+      </div>
+
+      {/* Attachment preview */}
+      {rx.attachmentUrl ? (
+        <div className="mb-5">
+          <p style={{ color: theme.muted }} className="text-[11px] uppercase tracking-wide mb-2">
+            Attached document
+          </p>
+          {rx.attachmentUrl.startsWith('data:image') ? (
+            <a href={rx.attachmentUrl} target="_blank" rel="noopener noreferrer">
+              {/* eslint-disable-next-line jsx-a11y/alt-text */}
+              <img
+                src={rx.attachmentUrl}
+                alt="Prescription"
+                style={{ border: `1px solid ${theme.border}` }}
+                className="w-full max-h-72 object-contain rounded-xl"
+              />
+            </a>
+          ) : (
+            <a
+              href={rx.attachmentUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ border: `1px solid ${theme.border}` }}
+              className="flex items-center gap-2.5 rounded-xl p-3 transition-colors hover:border-emerald-500/50"
+            >
+              <FileText size={18} color={theme.muted} />
+              <span style={{ color: theme.muted }} className="text-sm">View attached file (PDF)</span>
+            </a>
+          )}
+        </div>
+      ) : (
+        <div style={{ background: theme.amberBg, border: `1px solid ${theme.amber}33` }} className="flex items-center gap-2 rounded-xl p-3 mb-5">
+          <AlertCircle size={15} color={theme.amber} />
+          <span style={{ color: theme.amber }} className="text-xs">
+            No document attached. Attach one to verify this prescription.
+          </span>
+        </div>
+      )}
+
+      {/* Notes */}
+      {rx.notes && (
+        <div>
+          <p style={{ color: theme.muted }} className="text-[11px] uppercase tracking-wide mb-2">
+            Notes
+          </p>
+          <div style={{ background: theme.hover, border: `1px solid ${theme.border}` }} className="rounded-xl p-3.5 mb-5">
+            <p style={{ color: theme.text }} className="text-sm whitespace-pre-line">{rx.notes}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Pending actions */}
+      {rx.status === 'pending' && (
+        <div className="flex gap-2 pt-1">
+          <button
+            disabled={verifyMutation.isPending || !rx.attachmentUrl}
+            onClick={() => verifyMutation.mutate({ id: rx.id, data: { notes: 'Verified by pharmacist' } })}
+            style={{ background: 'linear-gradient(135deg, #22B57F 0%, #0E8A64 100%)', opacity: !rx.attachmentUrl ? 0.5 : 1 }}
+            className="flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2.5 text-white text-sm font-semibold disabled:cursor-not-allowed"
+          >
+            {verifyMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />} Verify
+          </button>
+        </div>
+      )}
+
+      {rx.status === 'verified' && (
+        <div style={{ background: theme.greenBg, border: `1px solid ${theme.green}33` }} className="rounded-xl p-3.5 text-center">
+          <p style={{ color: theme.green }} className="text-sm font-medium flex items-center justify-center gap-2">
+            <CheckCircle size={15} /> Verified — ready to dispense against this prescription
+          </p>
+        </div>
+      )}
+    </Modal>
   )
 }
