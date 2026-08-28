@@ -163,10 +163,15 @@ function buildErrorMessage(response: Response, data: unknown): string {
     getStringField(data, "error_description") ??
     getStringField(data, "error");
 
-  if (title && detail) return `${prefix}: ${title} — ${detail}`;
-  if (detail) return `${prefix}: ${detail}`;
-  if (message) return `${prefix}: ${message}`;
-  if (title) return `${prefix}: ${title}`;
+  // Prefer the server's friendly message and only fall back to the raw HTTP
+  // status when there's nothing more useful — so UIs show "Cannot delete
+  // supplier..." instead of "HTTP 409 Conflict: Cannot delete supplier...".
+  if (message) return message.length > 0 ? message : prefix;
+  if (detail) return detail.length > 0 ? detail : prefix;
+  if (title) {
+    if (detail) return `${title} — ${detail}`;
+    return title;
+  }
 
   return prefix;
 }

@@ -102,4 +102,5 @@ overrides:
   "metro-transform-worker": "^0.83.0"
 
 allowBuilds:
+  electron: true
   esbuild: true

@@ -56,7 +56,26 @@ router.get("/purchase-orders", requireAuth, requireRole("admin", "pharmacist"), 
     .from(purchaseOrdersTable)
     .leftJoin(suppliersTable, eq(purchaseOrdersTable.supplierId, suppliersTable.id))
     .orderBy(purchaseOrdersTable.createdAt);
-  res.json(pos.map((po) => ({ ...po, items: [] })));
+
+  // Count line items per order so list UIs can show a real number instead of
+  // fetching the full detail for every row. Kept as a single grouped query.
+  const counts = await db
+    .select({
+      purchaseOrderId: purchaseOrderItemsTable.purchaseOrderId,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(purchaseOrderItemsTable)
+    .groupBy(purchaseOrderItemsTable.purchaseOrderId);
+
+  const countById = new Map(counts.map((c) => [c.purchaseOrderId, c.count]));
+
+  res.json(
+    pos.map((po) => ({
+      ...po,
+      items: [],
+      itemCount: countById.get(po.id) ?? 0,
+    })),
+  );
 });
 
 // Extended item input: standard fields + optional unitId

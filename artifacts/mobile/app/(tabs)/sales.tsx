@@ -203,7 +203,7 @@ export default function SalesScreen() {
   useEffect(() => {
     gridRef.current?.scrollToOffset({ offset: 0, animated: false });
   }, [search, catId]);
-  const { data: orders, isLoading: ordersLoading, refetch: refetchOrders } = useListOrders({ query: { enabled: mode === 'history' } });
+  const { data: orders, isLoading: ordersLoading, refetch: refetchOrders } = useListOrders({ query: { queryKey: getListOrdersQueryKey(), enabled: mode === 'history' } });
 
   const createOrder = useCreateOrder({ mutation: {} });
 
@@ -336,7 +336,7 @@ export default function SalesScreen() {
     segmentRow: { flexDirection: 'row', backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 12, marginTop: 12, padding: 3 },
     segmentBtn: { flex: 1, paddingVertical: 8, borderRadius: 9, alignItems: 'center' },
     segmentText: { fontSize: 13, fontFamily: 'Inter_600SemiBold' },
-    catScrollWrap: { height: 52 },
+    catScrollWrap: { height: 52, flexShrink: 0 },
     catScroll: { paddingHorizontal: 12, paddingVertical: 10, alignItems: 'center' },
     catChip: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, marginRight: 8, borderWidth: 1 },
     catLabel: { fontSize: 12, fontFamily: 'Inter_500Medium' },
@@ -472,6 +472,7 @@ export default function SalesScreen() {
           ) : (
             <FlatList
               ref={gridRef}
+              style={{ flex: 1 }}
               data={(medicines ?? []).length % 2 === 1 ? [...(medicines ?? []), null] : (medicines ?? [])}
               keyExtractor={(m, i) => (m ? String(m.id) : `filler-${i}`)}
               numColumns={2}
