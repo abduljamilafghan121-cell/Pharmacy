@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, ilike, or, and, sql, gte, asc } from "drizzle-orm";
+import { eq, ilike, or, and, sql, gte, asc, isNull } from "drizzle-orm";
 import { db, medicinesTable, categoriesTable, medicineUnitsTable, ordersTable, orderItemsTable, medicineBatchesTable } from "@workspace/db";
 import {
   CreateMedicineBody, UpdateMedicineBody,
@@ -96,6 +96,66 @@ router.get("/medicines/expiring", requireAuth, async (_req, res): Promise<void> 
     res.json(withUnits);
   } catch (err) {
     res.status(500).json({ error: "Failed to load expiring medicines.", detail: getDbErrorMessage(err) });
+  }
+});
+
+// ── Batch Inventory ───────────────────────────────────────────────────────────
+// Flat, one-row-per-lot view of what's actually on the shelf. Each lot
+// (medicine_batches row) is joined back to its medicine for the display name
+// and scan/SKU value, so the Inventory screen can show every batch lot with
+// its SKU, batch number, expiry and remaining quantity. Declared before
+// GET /medicines/:id so the literal "batches-inventory" path isn't swallowed
+// by the :id param route (same reason /medicines/low-stock is up here).
+
+router.get("/medicines/batches-inventory", requireAuth, requireRole("admin", "pharmacist", "viewer"), async (_req, res): Promise<void> => {
+  const today = new Date().toISOString().split("T")[0];
+  const ninety = new Date();
+  ninety.setDate(ninety.getDate() + 90);
+  const cutoff = ninety.toISOString().split("T")[0];
+
+  try {
+    const rows = await db
+      .select({
+        id: medicineBatchesTable.id,
+        medicineId: medicineBatchesTable.medicineId,
+        name: medicinesTable.name,
+        genericName: medicinesTable.genericName,
+        sku: medicinesTable.barcode,
+        batch: medicineBatchesTable.batchNumber,
+        expiry: medicineBatchesTable.expiryDate,
+        qty: medicineBatchesTable.quantity,
+        reorderLevel: medicinesTable.reorderLevel,
+        price: medicinesTable.price,
+        medicineQty: medicinesTable.quantity,
+      })
+      .from(medicineBatchesTable)
+      .innerJoin(medicinesTable, eq(medicineBatchesTable.medicineId, medicinesTable.id))
+      .where(isNull(medicineBatchesTable.writeOffAt))
+      .orderBy(medicinesTable.name, asc(medicineBatchesTable.expiryDate));
+
+    // Attach a display status per lot: low-stock when the aggregating medicine
+    // is at/below its reorder level, expiring when in the next 90 days.
+    const data = rows.map((r) => {
+      const medicineLow = r.medicineQty <= r.reorderLevel;
+      const expiring = !!r.expiry && r.expiry >= today && r.expiry <= cutoff;
+      const status = medicineLow ? "low" : expiring ? "expiring" : "ok";
+      return {
+        id: String(r.id),
+        medicineId: r.medicineId,
+        name: r.name,
+        genericName: r.genericName,
+        sku: r.sku ?? "—",
+        batch: r.batch ?? "—",
+        expiry: r.expiry ?? "—",
+        qty: r.qty,
+        price: parseFloat(r.price),
+        status,
+      };
+    });
+
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to load batch inventory.", detail: getDbErrorMessage(err) });
   }
 });
 
