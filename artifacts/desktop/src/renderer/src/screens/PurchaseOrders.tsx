@@ -1,6 +1,6 @@
 ﻿import type { ReactElement } from 'react'
-import { useCallback, useEffect, useState } from 'react'
-import { Plus, Loader2, Trash2, Search, PackageCheck, Scan, X, Eye, PackagePlus } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Plus, Loader2, Trash2, Search, PackageCheck, Scan, X, Eye, PackagePlus, PackageSearch } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   useListPurchaseOrders,
@@ -695,6 +695,48 @@ export default function PurchaseOrders(): ReactElement {
     }
   })
 
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [supplierFilter, setSupplierFilter] = useState('all')
+  const [fromDate, setFromDate] = useState('')
+  const [toDate, setToDate] = useState('')
+
+  const suppliers = useMemo(() => {
+    const map = new Map<string, string>()
+    purchaseOrders.forEach((po) => {
+      const name = po.supplierName ?? ''
+      if (name) map.set(String(po.supplierId), name)
+    })
+    return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]))
+  }, [purchaseOrders])
+
+  const filteredOrders = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return purchaseOrders.filter((po) => {
+      if (statusFilter !== 'all' && po.status !== statusFilter) return false
+      if (supplierFilter !== 'all' && String(po.supplierId) !== supplierFilter) return false
+      const day = po.createdAt?.slice(0, 10)
+      if (fromDate && day < fromDate) return false
+      if (toDate && day > toDate) return false
+      if (q) {
+        const poNo = `#${po.id.toString().padStart(4, '0')}`.toLowerCase()
+        const haystack = `${poNo} ${po.id} ${po.supplierName ?? ''}`.toLowerCase()
+        if (!haystack.includes(q)) return false
+      }
+      return true
+    })
+  }, [purchaseOrders, search, statusFilter, supplierFilter, fromDate, toDate])
+
+  const hasActiveFilters = !!(search || statusFilter !== 'all' || supplierFilter !== 'all' || fromDate || toDate)
+
+  const clearFilters = (): void => {
+    setSearch('')
+    setStatusFilter('all')
+    setSupplierFilter('all')
+    setFromDate('')
+    setToDate('')
+  }
+
   return (
     <div className="p-7">
       <div className="flex items-center justify-between mb-4">
@@ -738,7 +780,112 @@ export default function PurchaseOrders(): ReactElement {
             </button>
           </div>
         ) : (
-          <table className="w-full text-sm">
+          <>
+            {/* Filter bar */}
+            <div
+              style={{ background: theme.card, borderBottom: `1px solid ${theme.border}` }}
+              className="p-3 flex flex-wrap items-center gap-2"
+            >
+              <div
+                className="flex items-center gap-2 px-3 py-2 rounded-lg flex-1 min-w-[200px]"
+                style={{ background: theme.cardAlt, border: `1px solid ${theme.border}` }}
+              >
+                <Search size={13} color={theme.muted} />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search by PO #, supplier…"
+                  style={{ color: theme.text, background: 'transparent' }}
+                  className="field-inbox w-full text-sm placeholder:opacity-50"
+                />
+                {search && (
+                  <button onClick={() => setSearch('')} style={{ color: theme.muted }} className="hover:opacity-70">
+                    <X size={13} />
+                  </button>
+                )}
+              </div>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                style={{ background: theme.cardAlt, border: `1px solid ${theme.border}`, color: theme.text }}
+                className="text-sm rounded-lg px-3 py-2 outline-none"
+              >
+                <option value="all">All statuses</option>
+                <option value="pending">Pending</option>
+                <option value="received">Received</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+              <select
+                value={supplierFilter}
+                onChange={(e) => setSupplierFilter(e.target.value)}
+                style={{ background: theme.cardAlt, border: `1px solid ${theme.border}`, color: theme.text }}
+                className="text-sm rounded-lg px-3 py-2 outline-none"
+              >
+                <option value="all">All suppliers</option>
+                {suppliers.map(([id, name]) => (
+                  <option key={id} value={id}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="date"
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+                style={{ background: theme.cardAlt, border: `1px solid ${theme.border}`, color: theme.text }}
+                className="text-sm rounded-lg px-2.5 py-2 outline-none"
+              />
+              <span style={{ color: theme.muted }} className="text-xs">
+                to
+              </span>
+              <input
+                type="date"
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+                style={{ background: theme.cardAlt, border: `1px solid ${theme.border}`, color: theme.text }}
+                className="text-sm rounded-lg px-2.5 py-2 outline-none"
+              />
+              {hasActiveFilters && (
+                <button
+                  onClick={clearFilters}
+                  style={{ color: theme.muted }}
+                  className="flex items-center gap-1 text-xs px-2 py-1.5 hover:opacity-70"
+                >
+                  <X size={12} /> Clear
+                </button>
+              )}
+            </div>
+
+            {hasActiveFilters && (
+              <p style={{ color: theme.muted }} className="text-xs py-3 px-4">
+                Showing {filteredOrders.length} of {purchaseOrders.length} purchase orders
+              </p>
+            )}
+
+            {filteredOrders.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+                <div
+                  style={{ background: theme.primarySoft, color: theme.primaryText }}
+                  className="w-12 h-12 rounded-xl flex items-center justify-center mb-3"
+                >
+                  <PackageSearch size={22} />
+                </div>
+                <p style={{ ...serif, color: theme.text }} className="text-base font-medium">
+                  No matching purchase orders
+                </p>
+                <p style={{ color: theme.muted }} className="text-sm mt-1 mb-4 max-w-sm">
+                  Try adjusting your search or filters.
+                </p>
+                <button
+                  onClick={clearFilters}
+                  style={{ color: theme.primaryText, background: theme.primarySoft }}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium"
+                >
+                  <X size={14} /> Clear filters
+                </button>
+              </div>
+            ) : (
+              <table className="w-full text-sm">
             <thead>
               <tr
                 style={{ color: theme.muted, borderBottom: `1px solid ${theme.border}` }}
@@ -754,7 +901,7 @@ export default function PurchaseOrders(): ReactElement {
               </tr>
             </thead>
             <tbody>
-              {purchaseOrders.map((po, idx) => (
+              {filteredOrders.map((po, idx) => (
                 <tr
                   key={po.id}
                   style={{ borderTop: idx ? `1px solid ${theme.border}` : 'none', '--row-hover': theme.hover } as React.CSSProperties}
@@ -805,6 +952,8 @@ export default function PurchaseOrders(): ReactElement {
               ))}
             </tbody>
           </table>
+            )}
+          </>
         )}
       </div>
       {showCreate && <CreatePurchaseOrderModal onClose={() => setShowCreate(false)} />}
