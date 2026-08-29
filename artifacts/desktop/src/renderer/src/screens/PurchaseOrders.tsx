@@ -719,9 +719,15 @@ export default function PurchaseOrders(): ReactElement {
       if (fromDate && day < fromDate) return false
       if (toDate && day > toDate) return false
       if (q) {
-        const poNo = `#${po.id.toString().padStart(4, '0')}`.toLowerCase()
-        const haystack = `${poNo} ${po.id} ${po.supplierName ?? ''}`.toLowerCase()
-        if (!haystack.includes(q)) return false
+        if (/^\d+$/.test(q)) {
+          // Numeric query = exact PO number match (leading zeros allowed).
+          // e.g. "001" == PO #0001, NOT #0011/#0012 (avoids substring false matches).
+          const numericQuery = Number(q)
+          if (po.id !== numericQuery) return false
+        } else {
+          const haystack = (po.supplierName ?? '').toLowerCase()
+          if (!haystack.includes(q)) return false
+        }
       }
       return true
     })
