@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react'
-import { useState } from 'react'
-import { Lock, Unlock, Clock, CheckCircle2, AlertTriangle, DollarSign } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { Lock, Unlock, Clock, CheckCircle2, AlertTriangle, DollarSign, Search, X } from 'lucide-react'
 import { useUiStore } from '../store/uiStore'
 import { getTheme, mono } from '../theme'
 import { usePharmacySettings, formatCurrency } from '../hooks/usePharmacySettings'
@@ -26,6 +26,52 @@ export default function CashRegister(): ReactElement {
   const [manualCashOut, setManualCashOut] = useState('')
   const [notes, setNotes] = useState('')
   const [closeResult, setCloseResult] = useState<any>(null)
+
+  // Shift-history filters
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [cashierFilter, setCashierFilter] = useState('all')
+  const [reconcileFilter, setReconcileFilter] = useState('all')
+  const [fromDate, setFromDate] = useState('')
+  const [toDate, setToDate] = useState('')
+
+  const cashiers = useMemo(() => {
+    const names = new Set<string>()
+    ;(history ?? []).forEach((s) => { if (s.openedByName) names.add(s.openedByName) })
+    return [...names].sort((a, b) => a.localeCompare(b))
+  }, [history])
+
+  const filteredHistory = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    const base = history ?? []
+    return base.filter((shift) => {
+      if (statusFilter !== 'all' && shift.status !== statusFilter) return false
+      if (cashierFilter !== 'all' && shift.openedByName !== cashierFilter) return false
+      const variance = shift.variance != null ? parseFloat(shift.variance) : null
+      const isBalanced = variance != null && Math.abs(variance) < 0.01
+      if (reconcileFilter === 'balanced' && !isBalanced) return false
+      if (reconcileFilter === 'variance' && isBalanced) return false
+      const day = shift.openedAt?.slice(0, 10)
+      if (fromDate && day < fromDate) return false
+      if (toDate && day > toDate) return false
+      if (q) {
+        const haystack = `${shift.openedByName ?? ''} ${shift.notes ?? ''}`.toLowerCase()
+        if (!haystack.includes(q)) return false
+      }
+      return true
+    })
+  }, [history, search, statusFilter, cashierFilter, reconcileFilter, fromDate, toDate])
+
+  const hasActiveFilters = !!(search || statusFilter !== 'all' || cashierFilter !== 'all' || reconcileFilter !== 'all' || fromDate || toDate)
+
+  const clearFilters = (): void => {
+    setSearch('')
+    setStatusFilter('all')
+    setCashierFilter('all')
+    setReconcileFilter('all')
+    setFromDate('')
+    setToDate('')
+  }
 
   const handleOpen = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault()
@@ -241,47 +287,141 @@ export default function CashRegister(): ReactElement {
       {/* ── Shift history ── */}
       {history && history.length > 0 && (
         <div style={cardStyle} className="rounded-xl overflow-hidden">
-          <div style={{ borderBottom: `1px solid ${theme.border}` }} className="px-4 py-3">
+          <div style={{ borderBottom: `1px solid ${theme.border}` }} className="px-4 py-3 flex items-center justify-between">
             <h2 style={{ color: theme.text }} className="text-sm font-medium flex items-center gap-2">
-              <Clock size={13} /> Recent shifts
+              <Clock size={13} /> Shift history
             </h2>
+            {hasActiveFilters && (
+              <span style={{ color: theme.muted }} className="text-xs">
+                {filteredHistory.length} of {history.length} shifts
+              </span>
+            )}
           </div>
-          <div className="divide-y" style={{ borderColor: theme.border }}>
-            {history.slice(0, 10).map((shift) => {
-              const variance = shift.variance != null ? parseFloat(shift.variance) : null
-              const isBalanced = variance != null && Math.abs(variance) < 0.01
-              return (
-                <div key={shift.id} className="flex items-center justify-between px-4 py-3 text-sm">
-                  <div>
-                    <p style={{ color: theme.text }} className="font-medium">{shift.openedByName ?? '—'}</p>
-                    <p style={{ color: theme.muted }} className="text-xs">
-                      {new Date(shift.openedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    {shift.status === 'closed' && variance != null && (
-                      <span style={{ color: isBalanced ? theme.green : theme.red }} className="flex items-center gap-1">
-                        {isBalanced ? <CheckCircle2 size={12} /> : <AlertTriangle size={12} />}
-                        <span style={mono} className="text-xs font-medium">
-                          {variance > 0 ? '+' : ''}{formatCurrency(variance, settings)}
+
+          {/* Filter bar */}
+          <div className="px-4 py-3 flex flex-wrap items-center gap-2" style={{ borderBottom: `1px solid ${theme.border}` }}>
+            <div
+              className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg flex-1 min-w-[180px]"
+              style={{ background: theme.cardAlt, border: `1px solid ${theme.border}` }}
+            >
+              <Search size={13} color={theme.muted} />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by cashier, notes…"
+                style={{ color: theme.text, background: 'transparent' }}
+                className="w-full text-sm outline-none placeholder:opacity-50"
+              />
+            </div>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              style={{ background: theme.cardAlt, border: `1px solid ${theme.border}`, color: theme.text }}
+              className="text-sm rounded-lg px-3 py-2 outline-none"
+            >
+              <option value="all">All statuses</option>
+              <option value="open">Open</option>
+              <option value="closed">Closed</option>
+            </select>
+            <select
+              value={cashierFilter}
+              onChange={(e) => setCashierFilter(e.target.value)}
+              style={{ background: theme.cardAlt, border: `1px solid ${theme.border}`, color: theme.text }}
+              className="text-sm rounded-lg px-3 py-2 outline-none"
+            >
+              <option value="all">All cashiers</option>
+              {cashiers.map((name) => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
+            <select
+              value={reconcileFilter}
+              onChange={(e) => setReconcileFilter(e.target.value)}
+              style={{ background: theme.cardAlt, border: `1px solid ${theme.border}`, color: theme.text }}
+              className="text-sm rounded-lg px-3 py-2 outline-none"
+            >
+              <option value="all">All reconciliations</option>
+              <option value="balanced">Balanced</option>
+              <option value="variance">Variance</option>
+            </select>
+            <input
+              type="date"
+              value={fromDate}
+              onChange={(e) => setFromDate(e.target.value)}
+              style={{ background: theme.cardAlt, border: `1px solid ${theme.border}`, color: theme.text }}
+              className="text-sm rounded-lg px-2.5 py-2 outline-none"
+            />
+            <span style={{ color: theme.muted }} className="text-xs">
+              to
+            </span>
+            <input
+              type="date"
+              value={toDate}
+              onChange={(e) => setToDate(e.target.value)}
+              style={{ background: theme.cardAlt, border: `1px solid ${theme.border}`, color: theme.text }}
+              className="text-sm rounded-lg px-2.5 py-2 outline-none"
+            />
+            {hasActiveFilters && (
+              <button
+                onClick={clearFilters}
+                style={{ color: theme.muted }}
+                className="flex items-center gap-1 text-xs px-2 py-1.5 hover:opacity-70"
+              >
+                <X size={12} /> Clear
+              </button>
+            )}
+          </div>
+
+          {filteredHistory.length === 0 ? (
+            <div className="flex flex-col items-center gap-1 py-8">
+              <Search size={18} color={theme.muted} />
+              <p style={{ color: theme.muted }} className="text-sm">No shifts match your filters.</p>
+              <button
+                onClick={clearFilters}
+                style={{ border: `1px solid ${theme.border}`, color: theme.text }}
+                className="mt-1 px-3 py-1.5 rounded-lg text-xs"
+              >
+                Clear filters
+              </button>
+            </div>
+          ) : (
+            <div className="divide-y" style={{ borderColor: theme.border }}>
+              {filteredHistory.map((shift) => {
+                const variance = shift.variance != null ? parseFloat(shift.variance) : null
+                const isBalanced = variance != null && Math.abs(variance) < 0.01
+                return (
+                  <div key={shift.id} className="flex items-center justify-between px-4 py-3 text-sm">
+                    <div>
+                      <p style={{ color: theme.text }} className="font-medium">{shift.openedByName ?? '—'}</p>
+                      <p style={{ color: theme.muted }} className="text-xs">
+                        {new Date(shift.openedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {shift.status === 'closed' && variance != null && (
+                        <span style={{ color: isBalanced ? theme.green : theme.red }} className="flex items-center gap-1">
+                          {isBalanced ? <CheckCircle2 size={12} /> : <AlertTriangle size={12} />}
+                          <span style={mono} className="text-xs font-medium">
+                            {variance > 0 ? '+' : ''}{formatCurrency(variance, settings)}
+                          </span>
                         </span>
+                      )}
+                      <span
+                        style={
+                          shift.status === 'open'
+                            ? { background: theme.greenBg, color: theme.green }
+                            : { background: theme.cardAlt, color: theme.muted }
+                        }
+                        className="text-xs px-2 py-0.5 rounded-full capitalize"
+                      >
+                        {shift.status}
                       </span>
-                    )}
-                    <span
-                      style={
-                        shift.status === 'open'
-                          ? { background: theme.greenBg, color: theme.green }
-                          : { background: theme.cardAlt, color: theme.muted }
-                      }
-                      className="text-xs px-2 py-0.5 rounded-full capitalize"
-                    >
-                      {shift.status}
-                    </span>
+                    </div>
                   </div>
-                </div>
-              )
-            })}
-          </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       )}
     </div>
