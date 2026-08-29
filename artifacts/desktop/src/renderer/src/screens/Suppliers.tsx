@@ -210,7 +210,7 @@ export default function Suppliers(): ReactElement {
           Showing {filteredSuppliers.length} of {suppliers.length} suppliers
         </p>
       )}
-      <div style={{ background: theme.card, border: `1px solid ${theme.border}` }} className="rounded-xl p-3 mb-4">
+      <div style={{ background: theme.card, borderBottom: `1px solid ${theme.border}` }} className="p-3 mb-4">
         <div
           className="flex items-center gap-2 px-3 py-2 rounded-lg max-w-md"
           style={{ background: theme.cardAlt, border: `1px solid ${theme.border}` }}

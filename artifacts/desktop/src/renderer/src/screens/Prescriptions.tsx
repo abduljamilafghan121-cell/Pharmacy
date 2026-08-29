@@ -127,8 +127,8 @@ export default function Prescriptions(): ReactElement {
         <>
           {/* Filter bar */}
           <div
-            style={{ background: theme.card, border: `1px solid ${theme.border}` }}
-            className="rounded-xl p-3 mb-4 flex flex-wrap items-center gap-2"
+            style={{ background: theme.card, borderBottom: `1px solid ${theme.border}` }}
+            className="p-3 mb-4 flex flex-wrap items-center gap-2"
           >
             <div
               className="flex items-center gap-2 px-3 py-2 rounded-lg flex-1 min-w-[200px]"

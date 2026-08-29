@@ -107,8 +107,8 @@ export default function Sales(): ReactElement {
       </div>
 
       <div
-        style={{ background: theme.card, border: `1px solid ${theme.border}` }}
-        className="rounded-xl p-3 mb-3 flex flex-wrap items-center gap-2"
+        style={{ background: theme.card, borderBottom: `1px solid ${theme.border}` }}
+        className="p-3 mb-3 flex flex-wrap items-center gap-2"
       >
         <div
           className="flex items-center gap-2 px-3 py-2 rounded-lg flex-1 min-w-[200px]"
