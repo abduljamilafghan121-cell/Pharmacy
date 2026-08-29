@@ -107,7 +107,7 @@ export default function CommandPalette(): ReactElement | null {
             }}
             placeholder="Type a command or search…"
             style={{ color: theme.text, background: 'transparent' }}
-            className="flex-1 text-sm outline-none"
+            className="field-inbox flex-1 text-sm"
           />
           <Kbd>ESC</Kbd>
         </div>

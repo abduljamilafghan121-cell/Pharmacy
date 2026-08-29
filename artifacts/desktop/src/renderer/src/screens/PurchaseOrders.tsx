@@ -208,7 +208,7 @@ function CreatePurchaseOrderModal({ onClose }: { onClose: () => void }): ReactEl
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search medicine name…"
             style={{ color: theme.text, background: 'transparent' }}
-            className="w-full text-sm outline-none placeholder:opacity-50"
+            className="field-inbox w-full text-sm placeholder:opacity-50"
           />
         </div>
         {search.trim() && results.length > 0 && (

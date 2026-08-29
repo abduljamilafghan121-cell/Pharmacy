@@ -88,7 +88,7 @@ export default function Medicines(): ReactElement {
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search medicines by name or generic name..."
             style={{ color: theme.text, background: 'transparent' }}
-            className="flex-1 text-sm outline-none placeholder:opacity-60"
+            className="field-inbox flex-1 text-sm placeholder:opacity-60"
           />
         </div>
         <div className="flex items-center gap-2 shrink-0">

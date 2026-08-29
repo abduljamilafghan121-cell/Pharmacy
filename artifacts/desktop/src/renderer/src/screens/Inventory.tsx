@@ -61,7 +61,7 @@ export default function Inventory(): ReactElement {
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search drug, SKU, batch…"
             style={{ color: theme.text, background: 'transparent' }}
-            className="flex-1 text-sm outline-none placeholder:opacity-60"
+            className="field-inbox flex-1 text-sm placeholder:opacity-60"
           />
         </div>
       </div>

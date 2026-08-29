@@ -87,6 +87,32 @@ input[type='number']::-webkit-inner-spin-button {
   transition: background-color 9999s ease-in-out 0s;
 }
 
+/* Reusable "inner input" treatment for any search/input field that sits
+   inside a visible wrapper box. The wrapper carries the visible border,
+   background, radius and focus ring; the actual <input> is made visually
+   inert so it can never render as a second nested rectangle, and native
+   autofill can't paint a pale box inside it. Apply .field-inbox to the
+   <input> (not the wrapper). */
+.field-inbox {
+  min-width: 0;
+  box-shadow: none;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  border: none;
+  outline: none;
+  background: transparent;
+  border-radius: 0;
+}
+
+.field-inbox:-webkit-autofill,
+.field-inbox:-webkit-autofill:hover,
+.field-inbox:-webkit-autofill:focus {
+  -webkit-text-fill-color: inherit;
+  -webkit-box-shadow: 0 0 0 1000px transparent inset;
+  transition: background-color 9999s ease-in-out 0s;
+}
+
 
 /* App-wide slim scrollbars — Chromium/Electron only */
 *::-webkit-scrollbar {

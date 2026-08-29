@@ -260,7 +260,7 @@ export default function DrugInteractions(): ReactElement {
           onChange={(e) => setFilterQuery(e.target.value)}
           placeholder="Filter by medicine or severity…"
           style={{ color: theme.text, background: 'transparent' }}
-          className="w-full text-sm outline-none placeholder:opacity-50"
+          className="field-inbox w-full text-sm placeholder:opacity-50"
         />
       </div>
 

@@ -120,7 +120,7 @@ export default function Sales(): ReactElement {
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by sale #, patient…"
             style={{ color: theme.text, background: 'transparent' }}
-            className="w-full text-sm outline-none placeholder:opacity-50"
+            className="field-inbox w-full text-sm placeholder:opacity-50"
           />
         </div>
         <select

@@ -96,7 +96,7 @@ export default function ControlledSubstanceLogs(): ReactElement {
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search medicine, patient, staff…"
             style={{ color: theme.text, background: 'transparent' }}
-            className="w-full text-sm outline-none placeholder:opacity-50"
+            className="field-inbox w-full text-sm placeholder:opacity-50"
           />
         </div>
         {!isLoading && (

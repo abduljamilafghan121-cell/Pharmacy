@@ -549,7 +549,7 @@ export default function Patients(): ReactElement {
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by name…"
               style={{ ...mono, color: theme.text, background: 'transparent' }}
-              className="text-sm outline-none placeholder:opacity-60 w-56"
+              className="field-inbox text-sm placeholder:opacity-60 w-56"
             />
           </div>
           <button

@@ -140,7 +140,7 @@ export default function Prescriptions(): ReactElement {
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search by RX #, patient, doctor…"
                 style={{ color: theme.text, background: 'transparent' }}
-                className="w-full text-sm outline-none placeholder:opacity-50"
+                className="field-inbox w-full text-sm placeholder:opacity-50"
               />
             </div>
             <select

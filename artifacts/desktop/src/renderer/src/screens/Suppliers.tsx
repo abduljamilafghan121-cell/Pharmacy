@@ -221,7 +221,7 @@ export default function Suppliers(): ReactElement {
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by name, contact, email, phone, address…"
             style={{ color: theme.text, background: 'transparent' }}
-            className="w-full text-sm outline-none placeholder:opacity-50"
+            className="field-inbox w-full text-sm placeholder:opacity-50"
           />
           {hasSearch && (
             <button onClick={() => setSearch('')} style={{ color: theme.muted }} className="hover:opacity-70">
