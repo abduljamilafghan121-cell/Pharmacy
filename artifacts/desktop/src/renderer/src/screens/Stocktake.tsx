@@ -1,6 +1,6 @@
 ﻿import type { ReactElement } from 'react'
-import { useState } from 'react'
-import { ClipboardCheck, CheckCircle2, Clock, User, Plus, Loader2, ArrowLeft, AlertTriangle, Search } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { ClipboardCheck, CheckCircle2, Clock, User, Plus, Loader2, ArrowLeft, AlertTriangle, Search, X } from 'lucide-react'
 import {
   useListStocktakes,
   useStocktakeDetail,
@@ -252,6 +252,37 @@ export default function Stocktake(): ReactElement {
   const [showStart, setShowStart] = useState(false)
   const [openId, setOpenId] = useState<number | null>(null)
 
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [fromDate, setFromDate] = useState('')
+  const [toDate, setToDate] = useState('')
+
+  const filteredStocktakes = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return stocktakes.filter((s) => {
+      const finalized = s.status === 'finalized'
+      if (statusFilter === 'finalized' && !finalized) return false
+      if (statusFilter === 'inprogress' && finalized) return false
+      const day = (finalized && s.finalizedAt ? s.finalizedAt : s.createdAt)?.slice(0, 10)
+      if (fromDate && day < fromDate) return false
+      if (toDate && day > toDate) return false
+      if (q) {
+        const haystack = `${s.reference ?? ''} ${s.createdByName ?? ''} ${s.notes ?? ''}`.toLowerCase()
+        if (!haystack.includes(q)) return false
+      }
+      return true
+    })
+  }, [stocktakes, search, statusFilter, fromDate, toDate])
+
+  const hasActiveFilters = !!(search || statusFilter !== 'all' || fromDate || toDate)
+
+  const clearFilters = (): void => {
+    setSearch('')
+    setStatusFilter('all')
+    setFromDate('')
+    setToDate('')
+  }
+
   if (openId !== null) {
     return (
       <div className="p-7">
@@ -300,8 +331,94 @@ export default function Stocktake(): ReactElement {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-3 gap-4">
-          {stocktakes.map((s) => {
+        <>
+          {/* Filter bar */}
+          <div
+            style={{ background: theme.card, border: `1px solid ${theme.border}` }}
+            className="rounded-xl p-3 mb-4 flex flex-wrap items-center gap-2"
+          >
+            <div
+              className="flex items-center gap-2 px-3 py-2 rounded-lg flex-1 min-w-[200px]"
+              style={{ background: theme.cardAlt, border: `1px solid ${theme.border}` }}
+            >
+              <Search size={13} color={theme.muted} />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by reference, staff, notes…"
+                style={{ color: theme.text, background: 'transparent' }}
+                className="field-inbox w-full text-sm placeholder:opacity-50"
+              />
+              {search && (
+                <button onClick={() => setSearch('')} style={{ color: theme.muted }} className="hover:opacity-70">
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              style={{ background: theme.cardAlt, border: `1px solid ${theme.border}`, color: theme.text }}
+              className="text-sm rounded-lg px-3 py-2 outline-none"
+            >
+              <option value="all">All statuses</option>
+              <option value="inprogress">In progress</option>
+              <option value="finalized">Finalized</option>
+            </select>
+            <input
+              type="date"
+              value={fromDate}
+              onChange={(e) => setFromDate(e.target.value)}
+              style={{ background: theme.cardAlt, border: `1px solid ${theme.border}`, color: theme.text }}
+              className="text-sm rounded-lg px-2.5 py-2 outline-none"
+            />
+            <span style={{ color: theme.muted }} className="text-xs">
+              to
+            </span>
+            <input
+              type="date"
+              value={toDate}
+              onChange={(e) => setToDate(e.target.value)}
+              style={{ background: theme.cardAlt, border: `1px solid ${theme.border}`, color: theme.text }}
+              className="text-sm rounded-lg px-2.5 py-2 outline-none"
+            />
+            {hasActiveFilters && (
+              <button
+                onClick={clearFilters}
+                style={{ color: theme.muted }}
+                className="flex items-center gap-1 text-xs px-2 py-1.5 hover:opacity-70"
+              >
+                <X size={12} /> Clear
+              </button>
+            )}
+          </div>
+
+          {hasActiveFilters && (
+            <p style={{ color: theme.muted }} className="text-xs mb-3">
+              Showing {filteredStocktakes.length} of {stocktakes.length} stocktakes
+            </p>
+          )}
+
+          {filteredStocktakes.length === 0 ? (
+            <div
+              style={{ background: theme.card, border: `1px dashed ${theme.border}` }}
+              className="rounded-2xl p-10 text-center"
+            >
+              <Search size={22} color={theme.muted} className="mx-auto mb-2" />
+              <p style={{ color: theme.muted }} className="text-sm">
+                No matching stocktakes.
+              </p>
+              <button
+                onClick={clearFilters}
+                style={{ color: theme.primaryText, background: theme.primarySoft, marginTop: 12 }}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium"
+              >
+                <X size={14} /> Clear filters
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 gap-4">
+              {filteredStocktakes.map((s) => {
             const finalized = s.status === 'finalized'
             return (
               <button
@@ -345,8 +462,10 @@ export default function Stocktake(): ReactElement {
                 </div>
               </button>
             )
-          })}
-        </div>
+            })}
+            </div>
+            )}
+          </>
       )}
 
       {showStart && (
