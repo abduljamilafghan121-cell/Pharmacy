@@ -41,14 +41,14 @@ input[type='number']::-webkit-inner-spin-button {
    nested box. This also neutralizes Chromium/Electron autofill's pale
    background which otherwise paints a second rectangle inside the field. */
 .login-form input {
-  border: none;
-  outline: none;
-  background: transparent;
+  border: none !important;
+  outline: none !important;
+  background: transparent !important;
   -webkit-appearance: none;
   -moz-appearance: none;
   appearance: none;
-  box-shadow: none;
-  border-radius: 0;
+  box-shadow: none !important;
+  border-radius: 0 !important;
   padding: 0;
   margin: 0;
   min-width: 0;
@@ -66,14 +66,14 @@ input[type='number']::-webkit-inner-spin-button {
    box lives on the wrapper, the inner input is made visually inert so it can
    never appear as a nested field. */
 .new-sale-search input {
-  border: none;
-  outline: none;
-  background: transparent;
+  border: none !important;
+  outline: none !important;
+  background: transparent !important;
   -webkit-appearance: none;
   -moz-appearance: none;
   appearance: none;
-  box-shadow: none;
-  border-radius: 0;
+  box-shadow: none !important;
+  border-radius: 0 !important;
   padding: 0;
   margin: 0;
   min-width: 0;
@@ -95,14 +95,14 @@ input[type='number']::-webkit-inner-spin-button {
    <input> (not the wrapper). */
 .field-inbox {
   min-width: 0;
-  box-shadow: none;
+  box-shadow: none !important;
   appearance: none;
   -webkit-appearance: none;
   -moz-appearance: none;
-  border: none;
-  outline: none;
-  background: transparent;
-  border-radius: 0;
+  border: none !important;
+  outline: none !important;
+  background: transparent !important;
+  border-radius: 0 !important;
 }
 
 .field-inbox:-webkit-autofill,
@@ -154,6 +154,21 @@ input[type='number']::-webkit-inner-spin-button {
   outline: none;
   box-shadow: 0 0 0 2px rgba(47, 191, 143, 0.55);
   border-radius: 8px;
+}
+
+/* Inert inner inputs (single-box pattern) must NOT render the global focus
+   ring themselves — the visible wrapper owns the focus state. Otherwise the
+   auto-focused medicine search (and any focused search) paints a distinct
+   emerald box INSIDE the toolbar. */
+.field-inbox:focus-visible,
+.field-inbox:focus,
+.new-sale-search input:focus-visible,
+.new-sale-search input:focus,
+.login-form input:focus-visible,
+.login-form input:focus {
+  box-shadow: none;
+  outline: none;
+  border-radius: 0;
 }
 
 /* Prescription card. Resting colors come from CSS variables injected on the
