@@ -1,6 +1,6 @@
 ﻿import type { ReactElement } from 'react'
-import { useState } from 'react'
-import { CreditCard, ChevronRight, Loader2, TrendingUp, Wallet } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { CreditCard, ChevronRight, Loader2, TrendingUp, Wallet, Search, X } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   useListSupplierLedger,
@@ -252,6 +252,28 @@ export default function SupplierLedger(): ReactElement {
   const totalPaid = summaries.reduce((sum, s) => sum + parseFloat(s.totalPaid), 0)
   const totalBalance = summaries.reduce((sum, s) => sum + parseFloat(s.balance), 0)
 
+  const [search, setSearch] = useState('')
+  const [balanceFilter, setBalanceFilter] = useState('all')
+
+  const filteredSummaries = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return summaries.filter((s) => {
+      if (q && !s.supplierName.toLowerCase().includes(q)) return false
+      const bal = parseFloat(s.balance)
+      if (balanceFilter === 'outstanding' && bal <= 0) return false
+      if (balanceFilter === 'settled' && bal !== 0) return false
+      if (balanceFilter === 'credit' && bal >= 0) return false
+      return true
+    })
+  }, [summaries, search, balanceFilter])
+
+  const hasActiveFilters = !!(search || balanceFilter !== 'all')
+
+  const clearFilters = (): void => {
+    setSearch('')
+    setBalanceFilter('all')
+  }
+
   return (
     <div className="p-7">
       <div className="mb-4">
@@ -319,7 +341,79 @@ export default function SupplierLedger(): ReactElement {
             </p>
           </div>
         ) : (
-          <table className="w-full text-sm">
+          <>
+            {/* Filter bar */}
+            <div
+              style={{ background: theme.card, borderBottom: `1px solid ${theme.border}` }}
+              className="p-3 flex flex-wrap items-center gap-2"
+            >
+              <div
+                className="flex items-center gap-2 px-3 py-2 rounded-lg flex-1 min-w-[200px]"
+                style={{ background: theme.cardAlt, border: `1px solid ${theme.border}` }}
+              >
+                <Search size={13} color={theme.muted} />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search by supplier…"
+                  style={{ color: theme.text, background: 'transparent' }}
+                  className="field-inbox w-full text-sm placeholder:opacity-50"
+                />
+                {search && (
+                  <button onClick={() => setSearch('')} style={{ color: theme.muted }} className="hover:opacity-70">
+                    <X size={13} />
+                  </button>
+                )}
+              </div>
+              <select
+                value={balanceFilter}
+                onChange={(e) => setBalanceFilter(e.target.value)}
+                style={{ background: theme.cardAlt, border: `1px solid ${theme.border}`, color: theme.text }}
+                className="text-sm rounded-lg px-3 py-2 outline-none"
+              >
+                <option value="all">Balance (any)</option>
+                <option value="outstanding">Has balance</option>
+                <option value="settled">Settled</option>
+                <option value="credit">Overpaid</option>
+              </select>
+              {hasActiveFilters && (
+                <button
+                  onClick={clearFilters}
+                  style={{ color: theme.muted }}
+                  className="flex items-center gap-1 text-xs px-2 py-1.5 hover:opacity-70"
+                >
+                  <X size={12} /> Clear
+                </button>
+              )}
+            </div>
+
+            {hasActiveFilters && (
+              <p style={{ color: theme.muted }} className="text-xs py-3 px-4">
+                Showing {filteredSummaries.length} of {summaries.length} suppliers
+              </p>
+            )}
+
+            {filteredSummaries.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-14 px-4 text-center">
+                <div style={{ background: theme.hover, color: theme.muted }} className="w-12 h-12 rounded-xl flex items-center justify-center mb-3">
+                  <Search size={22} />
+                </div>
+                <p style={{ color: theme.text }} className="text-base font-medium">
+                  No matching suppliers
+                </p>
+                <p style={{ color: theme.muted }} className="text-sm mt-1 mb-4 max-w-sm">
+                  Try a different name or balance filter.
+                </p>
+                <button
+                  onClick={clearFilters}
+                  style={{ color: theme.primaryText, background: theme.primarySoft }}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium"
+                >
+                  <X size={14} /> Clear filters
+                </button>
+              </div>
+            ) : (
+              <table className="w-full text-sm">
             <thead>
               <tr
                 style={{ color: theme.muted, borderBottom: `1px solid ${theme.border}` }}
@@ -334,7 +428,7 @@ export default function SupplierLedger(): ReactElement {
               </tr>
             </thead>
             <tbody>
-              {summaries.map((s, idx) => (
+              {filteredSummaries.map((s, idx) => (
                 <tr
                   key={s.supplierId}
                   style={{ borderTop: idx ? `1px solid ${theme.border}` : 'none', '--row-hover': theme.hover } as React.CSSProperties}
@@ -379,6 +473,8 @@ export default function SupplierLedger(): ReactElement {
               ))}
             </tbody>
           </table>
+            )}
+          </>
         )}
       </div>
 
