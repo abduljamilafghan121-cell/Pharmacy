@@ -1,6 +1,6 @@
 ﻿import type { ReactElement } from 'react'
-import { useState } from 'react'
-import { Plus, Loader2, Truck, Pencil, Trash2, AlertTriangle } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { Plus, Loader2, Truck, Pencil, Trash2, AlertTriangle, Search, X } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   useListSuppliers,
@@ -166,6 +166,20 @@ export default function Suppliers(): ReactElement {
   const [deleteTarget, setDeleteTarget] = useState<Supplier | null>(null)
   const { data: suppliers = [], isLoading } = useListSuppliers()
 
+  const [search, setSearch] = useState('')
+
+  const filteredSuppliers = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return suppliers
+    return suppliers.filter((s) =>
+      `${s.name} ${s.contactName ?? ''} ${s.email ?? ''} ${s.phone ?? ''} ${s.address ?? ''}`
+        .toLowerCase()
+        .includes(q)
+    )
+  }, [suppliers, search])
+
+  const hasSearch = search.trim().length > 0
+
   const canEdit = user?.role === 'admin' || user?.role === 'pharmacist'
   const canDelete = user?.role === 'admin'
 
@@ -177,7 +191,7 @@ export default function Suppliers(): ReactElement {
             Suppliers
           </h1>
           <p style={{ color: theme.muted }} className="text-xs mt-0.5">
-            {suppliers.length} suppliers on file
+            {hasSearch ? `${filteredSuppliers.length} of ${suppliers.length} suppliers` : `${suppliers.length} suppliers on file`}
           </p>
         </div>
         {canEdit && (
@@ -190,6 +204,31 @@ export default function Suppliers(): ReactElement {
             Add supplier
           </button>
         )}
+      </div>
+      {hasSearch && (
+        <p style={{ color: theme.muted }} className="text-xs mb-3">
+          Showing {filteredSuppliers.length} of {suppliers.length} suppliers
+        </p>
+      )}
+      <div style={{ background: theme.card, border: `1px solid ${theme.border}` }} className="rounded-xl p-3 mb-4">
+        <div
+          className="flex items-center gap-2 px-3 py-2 rounded-lg max-w-md"
+          style={{ background: theme.cardAlt, border: `1px solid ${theme.border}` }}
+        >
+          <Search size={13} color={theme.muted} />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by name, contact, email, phone, address…"
+            style={{ color: theme.text, background: 'transparent' }}
+            className="w-full text-sm outline-none placeholder:opacity-50"
+          />
+          {hasSearch && (
+            <button onClick={() => setSearch('')} style={{ color: theme.muted }} className="hover:opacity-70">
+              <X size={13} />
+            </button>
+          )}
+        </div>
       </div>
       <div style={{ background: theme.card, border: `1px solid ${theme.border}` }} className="rounded-xl overflow-hidden">
         {isLoading ? (
@@ -217,6 +256,20 @@ export default function Suppliers(): ReactElement {
               </button>
             )}
           </div>
+        ) : filteredSuppliers.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+            <Search size={24} color={theme.muted} className="mb-2" />
+            <p style={{ ...serif, color: theme.text }} className="text-base font-medium">
+              No suppliers match your search
+            </p>
+            <button
+              onClick={() => setSearch('')}
+              style={{ border: `1px solid ${theme.border}`, color: theme.text }}
+              className="mt-3 px-3 py-1.5 rounded-lg text-xs"
+            >
+              Clear search
+            </button>
+          </div>
         ) : (
           <table className="w-full text-sm">
             <thead>
@@ -235,7 +288,7 @@ export default function Suppliers(): ReactElement {
               </tr>
             </thead>
             <tbody>
-              {suppliers.map((s, idx) => (
+              {filteredSuppliers.map((s, idx) => (
                 <tr
                   key={s.id}
                   style={{ borderTop: idx ? `1px solid ${theme.border}` : 'none', '--row-hover': theme.hover } as React.CSSProperties}
