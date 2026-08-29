@@ -565,7 +565,7 @@ export default function Patients(): ReactElement {
       <div style={{ background: theme.card, border: `1px solid ${theme.border}` }} className="rounded-xl overflow-hidden">
         {isLoading ? (
           <p style={{ color: theme.muted }} className="p-4 text-sm">
-            Loading patients�
+            Loading patients…
           </p>
         ) : isError ? (
           <div className="p-4 text-center">
