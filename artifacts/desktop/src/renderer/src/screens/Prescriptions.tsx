@@ -1,5 +1,5 @@
 ﻿import type { ReactElement, ReactNode } from 'react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   useListPrescriptions,
@@ -8,7 +8,7 @@ import {
   useCreatePrescription,
   getListPrescriptionsQueryKey
 } from '@workspace/api-client-react'
-import { FileText, CheckCircle, XCircle, Plus, User, Stethoscope, Paperclip, ImagePlus, AlertCircle, Loader2, RefreshCw, Eye } from 'lucide-react'
+import { FileText, CheckCircle, XCircle, Plus, User, Stethoscope, Paperclip, ImagePlus, AlertCircle, Loader2, RefreshCw, Eye, Search, X } from 'lucide-react'
 import { useUiStore } from '../store/uiStore'
 import { getTheme, mono, serif } from '../theme'
 import { usePharmacySettings } from '../hooks/usePharmacySettings'
@@ -63,6 +63,46 @@ export default function Prescriptions(): ReactElement {
   const [createOpen, setCreateOpen] = useState(false)
   const rows = (prescriptions ?? []) as unknown as PrescriptionRow[]
 
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [attachFilter, setAttachFilter] = useState('all')
+  const [refillFilter, setRefillFilter] = useState('all')
+  const [fromDate, setFromDate] = useState('')
+  const [toDate, setToDate] = useState('')
+
+  const filteredRows = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return rows.filter((rx) => {
+      if (statusFilter !== 'all' && rx.status !== statusFilter) return false
+      const hasAttachment = !!rx.attachmentUrl
+      if (attachFilter === 'attached' && !hasAttachment) return false
+      if (attachFilter === 'unattached' && hasAttachment) return false
+      const exhausted = rx.maxRefills != null && (rx.refillsUsed ?? 0) > rx.maxRefills
+      if (refillFilter === 'refills' && exhausted) return false
+      if (refillFilter === 'exhausted' && !exhausted) return false
+      const day = rx.createdAt?.slice(0, 10)
+      if (fromDate && day < fromDate) return false
+      if (toDate && day > toDate) return false
+      if (q) {
+        const rxNo = `#${rx.id.toString().padStart(4, '0')}`.toLowerCase()
+        const haystack = `${rxNo} ${rx.id} ${rx.patientName ?? ''} ${rx.doctorName ?? ''}`.toLowerCase()
+        if (!haystack.includes(q)) return false
+      }
+      return true
+    })
+  }, [rows, search, statusFilter, attachFilter, refillFilter, fromDate, toDate])
+
+  const hasActiveFilters = !!(search || statusFilter !== 'all' || attachFilter !== 'all' || refillFilter !== 'all' || fromDate || toDate)
+
+  const clearFilters = (): void => {
+    setSearch('')
+    setStatusFilter('all')
+    setAttachFilter('all')
+    setRefillFilter('all')
+    setFromDate('')
+    setToDate('')
+  }
+
   return (
     <div className="p-7 max-w-6xl">
       <div className="flex items-center justify-between mb-5">
@@ -82,6 +122,118 @@ export default function Prescriptions(): ReactElement {
           <Plus size={14} /> New Prescription
         </button>
       </div>
+
+      {!isLoading && rows.length > 0 && (
+        <>
+          {/* Filter bar */}
+          <div
+            style={{ background: theme.card, border: `1px solid ${theme.border}` }}
+            className="rounded-xl p-3 mb-4 flex flex-wrap items-center gap-2"
+          >
+            <div
+              className="flex items-center gap-2 px-3 py-2 rounded-lg flex-1 min-w-[200px]"
+              style={{ background: theme.cardAlt, border: `1px solid ${theme.border}` }}
+            >
+              <Search size={13} color={theme.muted} />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by RX #, patient, doctor…"
+                style={{ color: theme.text, background: 'transparent' }}
+                className="w-full text-sm outline-none placeholder:opacity-50"
+              />
+            </div>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              style={{ background: theme.cardAlt, border: `1px solid ${theme.border}`, color: theme.text }}
+              className="text-sm rounded-lg px-3 py-2 outline-none"
+            >
+              <option value="all">All statuses</option>
+              <option value="pending">Pending</option>
+              <option value="verified">Verified</option>
+              <option value="rejected">Rejected</option>
+            </select>
+            <select
+              value={attachFilter}
+              onChange={(e) => setAttachFilter(e.target.value)}
+              style={{ background: theme.cardAlt, border: `1px solid ${theme.border}`, color: theme.text }}
+              className="text-sm rounded-lg px-3 py-2 outline-none"
+            >
+              <option value="all">Attachment (any)</option>
+              <option value="attached">Has attachment</option>
+              <option value="unattached">No attachment</option>
+            </select>
+            <select
+              value={refillFilter}
+              onChange={(e) => setRefillFilter(e.target.value)}
+              style={{ background: theme.cardAlt, border: `1px solid ${theme.border}`, color: theme.text }}
+              className="text-sm rounded-lg px-3 py-2 outline-none"
+            >
+              <option value="all">Refills (any)</option>
+              <option value="refills">Has refills left</option>
+              <option value="exhausted">Refills exhausted</option>
+            </select>
+            <input
+              type="date"
+              value={fromDate}
+              onChange={(e) => setFromDate(e.target.value)}
+              style={{ background: theme.cardAlt, border: `1px solid ${theme.border}`, color: theme.text }}
+              className="text-sm rounded-lg px-2.5 py-2 outline-none"
+            />
+            <span style={{ color: theme.muted }} className="text-xs">
+              to
+            </span>
+            <input
+              type="date"
+              value={toDate}
+              onChange={(e) => setToDate(e.target.value)}
+              style={{ background: theme.cardAlt, border: `1px solid ${theme.border}`, color: theme.text }}
+              className="text-sm rounded-lg px-2.5 py-2 outline-none"
+            />
+            {hasActiveFilters && (
+              <button
+                onClick={clearFilters}
+                style={{ color: theme.muted }}
+                className="flex items-center gap-1 text-xs px-2 py-1.5 hover:opacity-70"
+              >
+                <X size={12} /> Clear
+              </button>
+            )}
+          </div>
+
+          {hasActiveFilters && (
+            <p style={{ color: theme.muted }} className="text-xs mb-3">
+              Showing {filteredRows.length} of {rows.length} prescriptions
+            </p>
+          )}
+
+          {filteredRows.length === 0 ? (
+            <div
+              style={{ background: theme.card, border: `1px solid ${theme.border}` }}
+              className="text-center py-16 rounded-xl"
+            >
+              <Search size={24} color={theme.muted} className="mx-auto mb-3" />
+              <h3 style={{ color: theme.text }} className="text-sm font-medium">
+                No prescriptions match your filters
+              </h3>
+              <button
+                onClick={clearFilters}
+                style={{ border: `1px solid ${theme.border}`, color: theme.text }}
+                className="mt-3 px-3 py-1.5 rounded-lg text-xs"
+              >
+                Clear filters
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 gap-4">
+              {filteredRows.map((rx) => (
+                <PrescriptionCard key={rx.id} rx={rx} />
+              ))}
+            </div>
+          )}
+        </>
+      )}
 
       {isLoading ? (
         <div className="grid grid-cols-3 gap-4">
@@ -122,13 +274,7 @@ export default function Prescriptions(): ReactElement {
             Create a new prescription to get started.
           </p>
         </div>
-      ) : (
-        <div className="grid grid-cols-3 gap-4">
-          {rows.map((rx) => (
-            <PrescriptionCard key={rx.id} rx={rx} />
-          ))}
-        </div>
-      )}
+      ) : null}
 
       {createOpen && <NewPrescriptionModal onClose={() => setCreateOpen(false)} />}
     </div>
