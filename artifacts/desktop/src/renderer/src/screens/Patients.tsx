@@ -617,8 +617,8 @@ export default function Patients(): ReactElement {
                 <tr
                   key={p.id}
                   onClick={() => setSelected(p)}
-                  style={{ borderTop: idx ? `1px solid ${theme.border}` : 'none' }}
-                  className="cursor-pointer hover:opacity-80"
+                  style={{ borderTop: idx ? `1px solid ${theme.border}` : 'none', '--row-hover': theme.hover } as React.CSSProperties}
+                  className="cursor-pointer transition-colors hover:bg-[color:var(--row-hover)]"
                 >
                   <td className="py-2.5 px-4" style={{ color: theme.text }}>
                     {p.name}
