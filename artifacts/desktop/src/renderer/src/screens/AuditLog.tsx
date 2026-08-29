@@ -1,6 +1,6 @@
 ﻿import type { ReactElement } from 'react'
-import { useState } from 'react'
-import { History, Pill, ShoppingCart, FileText, Users, Truck, Settings as SettingsIcon, RefreshCw, X } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { History, Pill, ShoppingCart, FileText, Users, Truck, Settings as SettingsIcon, RefreshCw, X, Search } from 'lucide-react'
 import { useAuditLog } from '../hooks/useExtraQueries'
 import { useUiStore } from '../store/uiStore'
 import { getTheme, mono, serif } from '../theme'
@@ -66,6 +66,40 @@ export default function AuditLog(): ReactElement {
   const entries = data?.entries ?? []
   const total = data?.total ?? 0
 
+  const [search, setSearch] = useState('')
+  const [actionFilter, setActionFilter] = useState('all')
+  const [fromDate, setFromDate] = useState('')
+  const [toDate, setToDate] = useState('')
+
+  const filteredEntries = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return entries.filter((e) => {
+      if (actionFilter !== 'all' && e.action.toLowerCase() !== actionFilter.toLowerCase()) return false
+      const day = e.createdAt?.slice(0, 10)
+      if (fromDate && day < fromDate) return false
+      if (toDate && day > toDate) return false
+      if (q) {
+        const haystack = `${e.userName ?? ''} ${e.description ?? ''}`.toLowerCase()
+        if (!haystack.includes(q)) return false
+      }
+      return true
+    })
+  }, [entries, search, actionFilter, fromDate, toDate])
+
+  const hasActiveFilters = !!(search || actionFilter !== 'all' || fromDate || toDate)
+
+  const clearClientFilters = (): void => {
+    setSearch('')
+    setActionFilter('all')
+    setFromDate('')
+    setToDate('')
+  }
+
+  const clearAll = (): void => {
+    clearClientFilters()
+    setEntityFilter('all')
+  }
+
   return (
     <div className="p-7">
       <div className="flex items-center justify-between mb-1">
@@ -78,7 +112,28 @@ export default function AuditLog(): ReactElement {
         A record of sensitive actions — who did what, and when.
       </p>
 
-      <div className="flex items-center gap-2 mb-3">
+      <div
+        style={{ background: theme.card, border: `1px solid ${theme.border}` }}
+        className="rounded-xl p-3 mb-4 flex flex-wrap items-center gap-2"
+      >
+        <div
+          className="flex items-center gap-2 px-3 py-2 rounded-lg flex-1 min-w-[200px]"
+          style={{ background: theme.cardAlt, border: `1px solid ${theme.border}` }}
+        >
+          <Search size={13} color={theme.muted} />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by user or description…"
+            style={{ color: theme.text, background: 'transparent' }}
+            className="field-inbox w-full text-sm placeholder:opacity-50"
+          />
+          {search && (
+            <button onClick={() => setSearch('')} style={{ color: theme.muted }} className="hover:opacity-70">
+              <X size={13} />
+            </button>
+          )}
+        </div>
         <select
           value={entityFilter}
           onChange={(e) => setEntityFilter(e.target.value)}
@@ -92,14 +147,47 @@ export default function AuditLog(): ReactElement {
             </option>
           ))}
         </select>
-        {entityFilter !== 'all' && (
-          <button onClick={() => setEntityFilter('all')} style={{ color: theme.muted }} className="flex items-center gap-1 text-xs px-2 py-1.5 hover:opacity-70">
+        <select
+          value={actionFilter}
+          onChange={(e) => setActionFilter(e.target.value)}
+          style={{ background: theme.cardAlt, border: `1px solid ${theme.border}`, color: theme.text }}
+          className="text-sm rounded-lg px-3 py-2 outline-none"
+        >
+          <option value="all">All actions</option>
+          <option value="create">Create</option>
+          <option value="update">Update</option>
+          <option value="delete">Delete</option>
+          <option value="verify">Verify</option>
+          <option value="receive">Receive</option>
+          <option value="login">Login</option>
+          <option value="logout">Logout</option>
+          <option value="finalize">Finalize</option>
+        </select>
+        <input
+          type="date"
+          value={fromDate}
+          onChange={(e) => setFromDate(e.target.value)}
+          style={{ background: theme.cardAlt, border: `1px solid ${theme.border}`, color: theme.text }}
+          className="text-sm rounded-lg px-2.5 py-2 outline-none"
+        />
+        <span style={{ color: theme.muted }} className="text-xs">
+          to
+        </span>
+        <input
+          type="date"
+          value={toDate}
+          onChange={(e) => setToDate(e.target.value)}
+          style={{ background: theme.cardAlt, border: `1px solid ${theme.border}`, color: theme.text }}
+          className="text-sm rounded-lg px-2.5 py-2 outline-none"
+        />
+        {(hasActiveFilters || entityFilter !== 'all') && (
+          <button onClick={clearAll} style={{ color: theme.muted }} className="flex items-center gap-1 text-xs px-2 py-1.5 hover:opacity-70">
             <X size={12} /> Clear
           </button>
         )}
         {!isLoading && (
           <span style={{ color: theme.muted }} className="text-xs ml-auto">
-            {total} entries
+            {hasActiveFilters || entityFilter !== 'all' ? `${filteredEntries.length} of ${total} entries` : `${total} entries`}
           </span>
         )}
       </div>
@@ -126,6 +214,23 @@ export default function AuditLog(): ReactElement {
               Actions across medicines, orders, prescriptions and more will be logged here.
             </p>
           </div>
+        ) : filteredEntries.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-14 px-4 text-center">
+            <div style={{ background: theme.hover, color: theme.muted }} className="w-11 h-11 rounded-lg flex items-center justify-center mb-2.5">
+              <Search size={20} />
+            </div>
+            <p style={{ color: theme.text }} className="text-sm font-medium">No matching entries</p>
+            <p style={{ color: theme.muted }} className="text-xs mt-0.5">
+              Try adjusting your search or filters.
+            </p>
+            <button
+              onClick={clearAll}
+              style={{ color: theme.primaryText, background: theme.primarySoft, marginTop: 12 }}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium"
+            >
+              <X size={14} /> Clear filters
+            </button>
+          </div>
         ) : (
           <table className="w-full text-sm">
             <thead>
@@ -141,7 +246,7 @@ export default function AuditLog(): ReactElement {
               </tr>
             </thead>
             <tbody>
-              {entries.map((e, idx) => {
+              {filteredEntries.map((e, idx) => {
                 const Icon = ENTITY_ICONS[e.entityType] ?? History
                 return (
                   <tr key={e.id} style={{ borderTop: idx ? `1px solid ${theme.border}` : 'none' }}>

@@ -7,6 +7,7 @@ import { db, usersTable } from "@workspace/db";
 import { RegisterUserBody, LoginUserBody } from "@workspace/api-zod";
 import { signToken, requireAuth, requireRole } from "../middlewares/auth";
 import { logger } from "../lib/logger";
+import { logAudit } from "../lib/audit";
 import { formatZodError, getDbErrorMessage } from "../lib/api-errors";
 import { sendPasswordResetEmail } from "../lib/mailer";
 
@@ -75,6 +76,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     }
 
     const token = signToken({ userId: user.id, role: user.role });
+    await logAudit(user.id, "login", "user", user.id, `${user.name} logged in.`);
     res.json({
       token,
       user: { id: user.id, name: user.name, email: user.email, phone: user.phone, role: user.role, createdAt: user.createdAt },
@@ -82,6 +84,19 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   } catch (err) {
     logger.error({ err, email }, "login: unexpected error");
     res.status(500).json({ error: "Login failed. Please try again.", detail: getDbErrorMessage(err) });
+  }
+});
+
+router.post("/auth/logout", requireAuth, async (req, res): Promise<void> => {
+  try {
+    const [user] = await db.select({ id: usersTable.id, name: usersTable.name }).from(usersTable).where(eq(usersTable.id, req.auth!.userId));
+    if (user) {
+      await logAudit(user.id, "logout", "user", user.id, `${user.name} logged out.`);
+    }
+    res.status(204).end();
+  } catch (err) {
+    logger.error({ err }, "logout: unexpected error");
+    res.status(204).end();
   }
 });
 

@@ -2,7 +2,7 @@ import type { ReactElement } from 'react'
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { useGetMe, useLoginUser } from '@workspace/api-client-react'
 import type { User } from '@workspace/api-client-react'
-import { getToken, setToken as persistToken } from '../lib/apiClient'
+import { getToken, setToken as persistToken, notifyLogout } from '../lib/apiClient'
 import { rememberEmail } from '../lib/emailRecall'
 
 interface AuthContextType {
@@ -55,6 +55,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
   }
 
   const logout = (): void => {
+    notifyLogout()
     tokenRef.current = null
     persistToken(null)
     setToken(null)

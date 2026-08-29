@@ -70,3 +70,18 @@ export async function jsonOrThrow(res: Response, fallback: string): Promise<any>
   if (!res.ok) throw new Error(body.error ?? fallback)
   return body
 }
+
+// Best-effort logout notification to the API so a "logout" audit entry can
+// be recorded. Fire-and-forget: the local session is cleared regardless of
+// whether the request succeeds (e.g. token already expired).
+export function notifyLogout(): void {
+  try {
+    void fetch(`${apiUrl('auth/logout')}`, {
+      method: 'POST',
+      headers: { ...authHeaders() },
+      keepalive: true
+    }).catch(() => {})
+  } catch {
+    // ignore — logout should never fail because of audit reporting
+  }
+}
