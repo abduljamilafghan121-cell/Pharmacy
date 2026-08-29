@@ -1,6 +1,6 @@
 ﻿import type { ReactElement } from 'react'
-import { useEffect, useState } from 'react'
-import { Plus, Loader2, Trash2, Eye, RotateCcw } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Plus, Loader2, Trash2, Eye, RotateCcw, Search, X } from 'lucide-react'
 import { useListSuppliers, useListMedicines, getListMedicinesQueryKey } from '@workspace/api-client-react'
 import type { Medicine } from '@workspace/api-client-react'
 import {
@@ -377,6 +377,49 @@ export default function SupplierReturns(): ReactElement {
   const [detailId, setDetailId] = useState<number | null>(null)
   const { data: returns = [], isLoading, isError } = useListSupplierReturns()
 
+  const [search, setSearch] = useState('')
+  const [supplierFilter, setSupplierFilter] = useState('all')
+  const [fromDate, setFromDate] = useState('')
+  const [toDate, setToDate] = useState('')
+
+  const suppliers = useMemo(() => {
+    const map = new Map<string, string>()
+    returns.forEach((r) => {
+      const name = r.supplierName ?? ''
+      if (name) map.set(String(r.supplierId), name)
+    })
+    return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]))
+  }, [returns])
+
+  const filteredReturns = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return returns.filter((r) => {
+      if (supplierFilter !== 'all' && String(r.supplierId) !== supplierFilter) return false
+      const day = r.createdAt?.slice(0, 10)
+      if (fromDate && day < fromDate) return false
+      if (toDate && day > toDate) return false
+      if (q) {
+        if (/^\d+$/.test(q)) {
+          const numericQuery = Number(q)
+          if (r.id !== numericQuery && r.purchaseOrderId !== numericQuery) return false
+        } else {
+          const haystack = `${r.supplierName ?? ''} ${r.reason ?? ''}`.toLowerCase()
+          if (!haystack.includes(q)) return false
+        }
+      }
+      return true
+    })
+  }, [returns, search, supplierFilter, fromDate, toDate])
+
+  const hasActiveFilters = !!(search || supplierFilter !== 'all' || fromDate || toDate)
+
+  const clearFilters = (): void => {
+    setSearch('')
+    setSupplierFilter('all')
+    setFromDate('')
+    setToDate('')
+  }
+
   return (
     <div className="p-7">
       <div className="flex items-center justify-between mb-4">
@@ -421,7 +464,98 @@ export default function SupplierReturns(): ReactElement {
             </button>
           </div>
         ) : (
-          <table className="w-full text-sm">
+          <>
+            {/* Filter bar */}
+            <div
+              style={{ background: theme.card, borderBottom: `1px solid ${theme.border}` }}
+              className="p-3 flex flex-wrap items-center gap-2"
+            >
+              <div
+                className="flex items-center gap-2 px-3 py-2 rounded-lg flex-1 min-w-[200px]"
+                style={{ background: theme.cardAlt, border: `1px solid ${theme.border}` }}
+              >
+                <Search size={13} color={theme.muted} />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search by return #, supplier, PO…"
+                  style={{ color: theme.text, background: 'transparent' }}
+                  className="field-inbox w-full text-sm placeholder:opacity-50"
+                />
+                {search && (
+                  <button onClick={() => setSearch('')} style={{ color: theme.muted }} className="hover:opacity-70">
+                    <X size={13} />
+                  </button>
+                )}
+              </div>
+              <select
+                value={supplierFilter}
+                onChange={(e) => setSupplierFilter(e.target.value)}
+                style={{ background: theme.cardAlt, border: `1px solid ${theme.border}`, color: theme.text }}
+                className="text-sm rounded-lg px-3 py-2 outline-none"
+              >
+                <option value="all">All suppliers</option>
+                {suppliers.map(([id, name]) => (
+                  <option key={id} value={id}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="date"
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+                style={{ background: theme.cardAlt, border: `1px solid ${theme.border}`, color: theme.text }}
+                className="text-sm rounded-lg px-2.5 py-2 outline-none"
+              />
+              <span style={{ color: theme.muted }} className="text-xs">
+                to
+              </span>
+              <input
+                type="date"
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+                style={{ background: theme.cardAlt, border: `1px solid ${theme.border}`, color: theme.text }}
+                className="text-sm rounded-lg px-2.5 py-2 outline-none"
+              />
+              {hasActiveFilters && (
+                <button
+                  onClick={clearFilters}
+                  style={{ color: theme.muted }}
+                  className="flex items-center gap-1 text-xs px-2 py-1.5 hover:opacity-70"
+                >
+                  <X size={12} /> Clear
+                </button>
+              )}
+            </div>
+
+            {hasActiveFilters && (
+              <p style={{ color: theme.muted }} className="text-xs py-3 px-4">
+                Showing {filteredReturns.length} of {returns.length} returns
+              </p>
+            )}
+
+            {filteredReturns.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-14 px-4 text-center">
+                <div style={{ background: theme.hover, color: theme.muted }} className="w-12 h-12 rounded-xl flex items-center justify-center mb-3">
+                  <Search size={22} />
+                </div>
+                <p style={{ color: theme.text }} className="text-base font-medium">
+                  No matching returns
+                </p>
+                <p style={{ color: theme.muted }} className="text-sm mt-1 mb-4 max-w-sm">
+                  Try adjusting your search or filters.
+                </p>
+                <button
+                  onClick={clearFilters}
+                  style={{ color: theme.primaryText, background: theme.primarySoft }}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium"
+                >
+                  <X size={14} /> Clear filters
+                </button>
+              </div>
+            ) : (
+              <table className="w-full text-sm">
             <thead>
               <tr
                 style={{ color: theme.muted, borderBottom: `1px solid ${theme.border}` }}
@@ -437,7 +571,7 @@ export default function SupplierReturns(): ReactElement {
               </tr>
             </thead>
             <tbody>
-              {returns.map((r, idx) => (
+              {filteredReturns.map((r, idx) => (
                 <tr
                   key={r.id}
                   style={{ borderTop: idx ? `1px solid ${theme.border}` : 'none', '--row-hover': theme.hover } as React.CSSProperties}
@@ -474,6 +608,8 @@ export default function SupplierReturns(): ReactElement {
               ))}
             </tbody>
           </table>
+            )}
+          </>
         )}
       </div>
       {showNew && <NewReturnModal onClose={() => setShowNew(false)} />}
