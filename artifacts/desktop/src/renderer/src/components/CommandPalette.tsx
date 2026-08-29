@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Search, LayoutDashboard, Package, ShoppingCart, Printer, Settings, Cog, Sun, Moon, DollarSign, Receipt, Pill, Users, Truck, FileText, ClipboardList, BookOpen, UserCog, Undo2, ShieldCheck, FileCheck, History, BarChart3, ClipboardCheck, Zap, Lock, CornerDownLeft } from 'lucide-react'
+import { Search, LayoutDashboard, Package, ShoppingCart, Settings, Cog, Sun, Moon, DollarSign, Receipt, Pill, Users, Truck, FileText, ClipboardList, BookOpen, UserCog, Undo2, ShieldCheck, FileCheck, History, BarChart3, ClipboardCheck, Zap, Lock, CornerDownLeft } from 'lucide-react'
 import { useUiStore, canAccessScreen, type Screen } from '../store/uiStore'
 import { getTheme } from '../theme'
 import { useAuth } from '../hooks/useAuth'
@@ -38,7 +38,6 @@ export default function CommandPalette(): ReactElement | null {
       { label: 'Go to Insurance Claims', icon: ShieldCheck, screen: 'insurance-claims' as Screen, run: () => setScreen('insurance-claims') },
       { label: 'Go to Pre-Authorizations', icon: FileCheck, screen: 'pre-authorizations' as Screen, run: () => setScreen('pre-authorizations') },
       { label: 'Cash register', icon: DollarSign, screen: 'cash-register' as Screen, run: () => setScreen('cash-register') },
-      { label: 'Print last receipt', icon: Printer, screen: 'receipts' as Screen, run: () => setScreen('receipts') },
       { label: 'Go to Reports', icon: BarChart3, screen: 'reports' as Screen, run: () => setScreen('reports') },
       { label: 'Go to Stocktake', icon: ClipboardCheck, screen: 'stocktake' as Screen, run: () => setScreen('stocktake') },
       { label: 'Go to Drug Interactions', icon: Zap, screen: 'drug-interactions' as Screen, run: () => setScreen('drug-interactions') },

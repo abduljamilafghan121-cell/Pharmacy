@@ -4,7 +4,6 @@ import {
   Package,
   ShoppingCart,
   DollarSign,
-  Printer,
   Settings,
   LogOut,
   Receipt,
@@ -45,8 +44,7 @@ const SECTIONS: { label: string; items: NavItem[] }[] = [
     items: [
       { key: 'new-sale', label: 'New Sale', icon: ShoppingCart },
       { key: 'sales', label: 'Sales', icon: Receipt },
-      { key: 'cash-register', label: 'Cash Register', icon: DollarSign },
-      { key: 'receipts', label: 'Receipts', icon: Printer }
+      { key: 'cash-register', label: 'Cash Register', icon: DollarSign }
     ]
   },
   {

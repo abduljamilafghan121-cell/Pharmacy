@@ -30,7 +30,6 @@ import DrugInteractions from './screens/DrugInteractions'
 import ControlledSubstanceLogs from './screens/ControlledSubstanceLogs'
 import UsersScreen from './screens/Users'
 import CashRegister from './screens/CashRegister'
-import Receipts from './screens/Receipts'
 import Hardware from './screens/Hardware'
 import SettingsScreen from './screens/Settings'
 import MedicineDetail from './screens/MedicineDetail'
@@ -56,7 +55,6 @@ const SCREENS = {
   'controlled-substances': ControlledSubstanceLogs,
   users: UsersScreen,
   'cash-register': CashRegister,
-  receipts: Receipts,
   hardware: Hardware,
   settings: SettingsScreen,
   'medicine-detail': MedicineDetail

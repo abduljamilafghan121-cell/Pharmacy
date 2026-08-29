@@ -22,7 +22,6 @@ export type Screen =
   | 'controlled-substances'
   | 'users'
   | 'cash-register'
-  | 'receipts'
   | 'hardware'
   | 'settings'
   | 'medicine-detail'
