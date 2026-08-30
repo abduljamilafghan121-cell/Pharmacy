@@ -27,6 +27,7 @@ import {
 } from "@workspace/db";
 import { requireAuth, requireRole } from "../middlewares/auth";
 import { getDbErrorMessage } from "../lib/api-errors";
+import { logAudit } from "../lib/audit";
 
 const router: IRouter = Router();
 
@@ -82,6 +83,7 @@ router.post("/patients/:id/allergies", requireAuth, requireRole("admin", "pharma
       severity: parsed.data.severity,
       reaction: parsed.data.reaction ?? null,
     }).returning();
+    await logAudit(req.auth!.userId, "CREATE", "patient", id, `Added allergy "${row.allergen}" (${row.severity}) for patient #${id}.`);
     res.status(201).json(row);
   } catch (err) {
     res.status(500).json({ error: getDbErrorMessage(err) });
@@ -97,6 +99,7 @@ router.delete("/patients/:id/allergies/:allergyId", requireAuth, requireRole("ad
       .where(and(eq(patientAllergiesTable.id, allergyId), eq(patientAllergiesTable.patientId, id)))
       .returning();
     if (!row) { res.status(404).json({ error: "Allergy record not found" }); return; }
+    await logAudit(req.auth!.userId, "DELETE", "patient", id, `Removed allergy "${row.allergen}" from patient #${id}.`);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: getDbErrorMessage(err) });
@@ -136,6 +139,7 @@ router.post("/patients/:id/conditions", requireAuth, requireRole("admin", "pharm
       condition: parsed.data.condition,
       notes: parsed.data.notes ?? null,
     }).returning();
+    await logAudit(req.auth!.userId, "CREATE", "patient", id, `Added condition "${row.condition}" for patient #${id}.`);
     res.status(201).json(row);
   } catch (err) {
     res.status(500).json({ error: getDbErrorMessage(err) });
@@ -151,6 +155,7 @@ router.delete("/patients/:id/conditions/:conditionId", requireAuth, requireRole(
       .where(and(eq(patientConditionsTable.id, conditionId), eq(patientConditionsTable.patientId, id)))
       .returning();
     if (!row) { res.status(404).json({ error: "Condition record not found" }); return; }
+    await logAudit(req.auth!.userId, "DELETE", "patient", id, `Removed condition "${row.condition}" from patient #${id}.`);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: getDbErrorMessage(err) });
@@ -194,6 +199,7 @@ router.post("/drug-interactions", requireAuth, requireRole("admin", "pharmacist"
   }
   try {
     const [row] = await db.insert(drugInteractionsTable).values(parsed.data).returning();
+    await logAudit(req.auth!.userId, "CREATE", "medicine", row.id, `Created drug interaction (${row.severity}) between medicine #${row.medicine1Id} and #${row.medicine2Id}.`);
     res.status(201).json(row);
   } catch (err) {
     res.status(500).json({ error: getDbErrorMessage(err) });
@@ -206,6 +212,7 @@ router.delete("/drug-interactions/:id", requireAuth, requireRole("admin"), async
   try {
     const [row] = await db.delete(drugInteractionsTable).where(eq(drugInteractionsTable.id, id)).returning();
     if (!row) { res.status(404).json({ error: "Interaction not found" }); return; }
+    await logAudit(req.auth!.userId, "DELETE", "medicine", id, `Deleted drug interaction #${id} (medicine #${row.medicine1Id} vs #${row.medicine2Id}).`);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: getDbErrorMessage(err) });
@@ -294,6 +301,7 @@ router.post("/medicines/:id/contraindications", requireAuth, requireRole("admin"
       severity: parsed.data.severity,
       description: parsed.data.description,
     }).returning();
+    await logAudit(req.auth!.userId, "CREATE", "medicine", id, `Added a ${row.contraindicationType} contraindication (${row.value}) for medicine #${id}.`);
     res.status(201).json(row);
   } catch (err) {
     res.status(500).json({ error: getDbErrorMessage(err) });
@@ -309,6 +317,7 @@ router.delete("/medicines/:id/contraindications/:cid", requireAuth, requireRole(
       .where(and(eq(drugContraindicationsTable.id, cid), eq(drugContraindicationsTable.medicineId, id)))
       .returning();
     if (!row) { res.status(404).json({ error: "Contraindication not found" }); return; }
+    await logAudit(req.auth!.userId, "DELETE", "medicine", id, `Removed a ${row.contraindicationType} contraindication (${row.value}) from medicine #${id}.`);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: getDbErrorMessage(err) });

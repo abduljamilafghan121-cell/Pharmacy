@@ -3,6 +3,7 @@ import { eq, and, sql } from "drizzle-orm";
 import { db, insurancePreAuthsTable, medicinesTable, patientsTable, usersTable } from "@workspace/db";
 import { requireAuth, requireRole } from "../middlewares/auth";
 import { getDbErrorMessage } from "../lib/api-errors";
+import { logAudit } from "../lib/audit";
 import { z } from "zod";
 
 const router: IRouter = Router();
@@ -107,6 +108,7 @@ router.post("/pre-authorizations", requireAuth, requireRole("admin", "pharmacist
       })
       .returning();
     const full = await fetchPA(row.id);
+    await logAudit(req.auth!.userId, "create", "insurance_claim", row.id, `Created pre-authorization #${row.id} for ${row.insurerName}.`);
     res.status(201).json(full);
   } catch (err) {
     res.status(500).json({ error: "Failed to create pre-authorization.", detail: getDbErrorMessage(err) });
@@ -132,6 +134,7 @@ router.patch("/pre-authorizations/:id", requireAuth, requireRole("admin", "pharm
       .returning();
     if (!updated) { res.status(404).json({ error: "Pre-authorization not found." }); return; }
     const full = await fetchPA(updated.id);
+    await logAudit(req.auth!.userId, "update", "insurance_claim", updated.id, `Updated pre-authorization #${updated.id} status to ${updated.status}.`);
     res.json(full);
   } catch (err) {
     res.status(500).json({ error: "Failed to update pre-authorization.", detail: getDbErrorMessage(err) });

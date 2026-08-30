@@ -133,6 +133,7 @@ router.patch("/stocktakes/:id/items/:itemId", requireAuth, async (req, res): Pro
       .returning();
 
     if (!updated) { res.status(404).json({ error: "Item not found." }); return; }
+    await logAudit(req.auth!.userId, "UPDATE", "stocktake", stocktakeId, `Recorded a counted quantity of ${updated.countedQuantity ?? "—"} for item #${itemId} in stocktake #${stocktakeId}.`);
     res.json(updated);
   } catch (err) {
     res.status(500).json({ error: "Failed to update item.", detail: getDbErrorMessage(err) });

@@ -7,6 +7,7 @@ import {
   supplierPaymentsTable,
 } from "@workspace/db";
 import { requireAuth, requireRole } from "../middlewares/auth";
+import { logAudit } from "../lib/audit";
 import { z } from "zod";
 
 const router: IRouter = Router();
@@ -214,6 +215,14 @@ router.post(
       note: payment.note,
       createdAt: payment.createdAt,
     });
+
+    await logAudit(
+      req.auth!.userId,
+      "payment",
+      "purchase_order",
+      payment.purchaseOrderId ?? payment.id,
+      `Recorded a ${method} payment of ${amount} to ${supplier.name}${note ? ` — ${note}` : ""}.`
+    );
   }
 );
 

@@ -67,6 +67,7 @@ router.post("/prescriptions", requireAuth, requireRole("admin", "pharmacist", "c
       notes: parsed.data.notes ?? null,
       maxRefills: parsed.data.maxRefills ?? 0,
     }).returning();
+    await logAudit(req.auth!.userId, "create", "prescription", row.id, `Created prescription #${row.id}${row.patientName ? ` for ${row.patientName}` : ""}.`);
     res.status(201).json(row);
   } catch (err) {
     res.status(500).json({ error: "Failed to save prescription.", detail: getDbErrorMessage(err) });
@@ -103,6 +104,7 @@ router.patch("/prescriptions/:id/attachment", requireAuth, requireRole("admin", 
       .where(eq(prescriptionsTable.id, params.data.id))
       .returning();
     if (!row) { res.status(404).json({ error: "Prescription not found." }); return; }
+    await logAudit(req.auth!.userId, "update", "prescription", row.id, `Updated prescription #${row.id} attachment.`);
     res.json(row);
   } catch (err) {
     res.status(500).json({ error: "Failed to save attachment.", detail: getDbErrorMessage(err) });

@@ -7,6 +7,7 @@ import {
   CreatePurchaseOrderBody, GetPurchaseOrderParams, ReceivePurchaseOrderParams,
 } from "@workspace/api-zod";
 import { requireAuth, requireRole } from "../middlewares/auth";
+import { logAudit } from "../lib/audit";
 
 const router: IRouter = Router();
 
@@ -140,6 +141,8 @@ router.post("/purchase-orders", requireAuth, requireRole("admin", "pharmacist"),
   });
 
   const full = await fetchPurchaseOrder(poId);
+  const [supplier] = await db.select({ name: suppliersTable.name }).from(suppliersTable).where(eq(suppliersTable.id, supplierId));
+  await logAudit(req.auth!.userId, "create", "purchase_order", poId, `Created purchase order #${poId} for ${supplier?.name ?? "supplier"} with ${items.length} item(s).`);
   res.status(201).json(full);
 });
 
@@ -316,6 +319,7 @@ router.patch("/purchase-orders/:id/receive", requireAuth, requireRole("admin", "
   }
 
   const full = await fetchPurchaseOrder(receivedId);
+  await logAudit(req.auth!.userId, "receive", "purchase_order", receivedId, `Received purchase order #${receivedId}${full?.supplierName ? ` from ${full.supplierName}` : ""}.`);
   res.json(full);
 });
 

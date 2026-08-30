@@ -5,6 +5,7 @@ import { CreatePatientBody, GetPatientParams, UpdatePatientParams, UpdatePatient
 import { z } from "zod";
 import { requireAuth, requireRole } from "../middlewares/auth";
 import { formatZodError, getDbErrorMessage } from "../lib/api-errors";
+import { logAudit } from "../lib/audit";
 
 const router: IRouter = Router();
 
@@ -60,6 +61,7 @@ router.post("/patients", requireAuth, requireRole("admin", "pharmacist", "cashie
   }
   try {
     const [row] = await db.insert(patientsTable).values(parsed.data).returning();
+    await logAudit(req.auth!.userId, "create", "patient", row.id, `Registered patient ${row.name}.`);
     res.status(201).json(row);
   } catch (err) {
     res.status(500).json({ error: "Failed to register patient.", detail: getDbErrorMessage(err) });
@@ -86,6 +88,7 @@ router.patch("/patients/:id", requireAuth, requireRole("admin", "pharmacist", "c
   try {
     const [row] = await db.update(patientsTable).set(parsed.data).where(eq(patientsTable.id, params.data.id)).returning();
     if (!row) { res.status(404).json({ error: "Patient not found." }); return; }
+    await logAudit(req.auth!.userId, "update", "patient", row.id, `Updated patient record for ${row.name}.`);
     res.json(row);
   } catch (err) {
     res.status(500).json({ error: "Failed to update patient.", detail: getDbErrorMessage(err) });

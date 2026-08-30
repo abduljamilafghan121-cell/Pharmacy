@@ -44,6 +44,7 @@ router.post("/auth/register", async (req, res): Promise<void> => {
 
     logger.info({ userId: user.id, email }, "register: user created successfully");
     const token = signToken({ userId: user.id, role: user.role });
+    await logAudit(user.id, "register", "user", user.id, `Registered user ${user.name} (${user.role}).`);
     res.status(201).json({
       token,
       user: { id: user.id, name: user.name, email: user.email, phone: user.phone, role: user.role, createdAt: user.createdAt },
@@ -137,6 +138,7 @@ router.patch("/auth/me", requireAuth, async (req, res): Promise<void> => {
       .set(updates)
       .where(eq(usersTable.id, req.auth!.userId))
       .returning();
+    await logAudit(req.auth!.userId, "update", "user", user.id, `Updated own profile${name ? ` (name → ${name.trim()})` : ""}.`);
     res.json({ id: user.id, name: user.name, email: user.email, phone: user.phone, role: user.role, createdAt: user.createdAt });
   } catch (err) {
     logger.error({ err }, "auth/me PATCH: failed to update profile");
@@ -167,6 +169,7 @@ router.post("/auth/change-password", requireAuth, async (req, res): Promise<void
     }
     const passwordHash = await bcrypt.hash(newPassword, 10);
     await db.update(usersTable).set({ passwordHash }).where(eq(usersTable.id, user.id));
+    await logAudit(user.id, "change_password", "user", user.id, `${user.name} changed their own password.`);
     res.json({ message: "Password changed successfully." });
   } catch (err) {
     logger.error({ err }, "auth/change-password: failed");
@@ -226,6 +229,7 @@ router.post("/users", requireAuth, requireRole("admin"), async (req, res): Promi
       isActive: usersTable.isActive,
       createdAt: usersTable.createdAt,
     });
+    await logAudit(req.auth!.userId, "create", "user", user.id, `Created staff account ${user.name} (${user.role}).`);
     res.status(201).json(user);
   } catch (err) {
     logger.error({ err, email }, "users: failed to create staff account");
@@ -263,6 +267,7 @@ router.patch("/users/:id", requireAuth, requireRole("admin"), async (req, res): 
     const [user] = await db.update(usersTable).set(updates).where(eq(usersTable.id, params.data.id))
       .returning({ id: usersTable.id, name: usersTable.name, email: usersTable.email, phone: usersTable.phone, role: usersTable.role, isActive: usersTable.isActive, createdAt: usersTable.createdAt });
     if (!user) { res.status(404).json({ error: "User not found." }); return; }
+    await logAudit(req.auth!.userId, "update", "user", user.id, `Updated staff account ${user.name} (role: ${user.role}, active: ${user.isActive}).`);
     res.json(user);
   } catch (err) {
     logger.error({ err }, "users: failed to update staff account");
@@ -300,6 +305,8 @@ router.post("/auth/forgot-password", async (req, res): Promise<void> => {
     await db.update(usersTable)
       .set({ resetTokenHash: tokenHash, resetTokenExpiresAt: expiresAt })
       .where(eq(usersTable.id, user.id));
+
+    await logAudit(user.id, "reset_password", "user", user.id, `A password reset link was requested for ${user.email}.`);
 
     // Construct the reset URL from APP_URL — set this to your Vercel deployment
     // URL (e.g. https://pharmacore.vercel.app) in your environment variables.
@@ -381,6 +388,7 @@ router.post("/auth/reset-password", async (req, res): Promise<void> => {
       .where(eq(usersTable.id, user.id));
 
     logger.info({ userId: user.id }, "reset-password: password updated");
+    await logAudit(user.id, "reset_password", "user", user.id, "Password reset via emailed link was completed.");
     res.json({ message: "Password has been reset. You can now log in with your new password." });
   } catch (err) {
     logger.error({ err }, "reset-password: failed");
@@ -403,6 +411,7 @@ router.post("/users/:id/reset-password", requireAuth, requireRole("admin"), asyn
       .returning({ id: usersTable.id, name: usersTable.name });
     if (!user) { res.status(404).json({ error: "User not found." }); return; }
     logger.info({ userId: params.data.id, by: req.auth!.userId }, "admin reset password for user");
+    await logAudit(req.auth!.userId, "reset_password", "user", params.data.id, `Admin reset password for ${user.name}.`);
     res.json({ message: `Password for ${user.name} has been reset.` });
   } catch (err) {
     logger.error({ err }, "users: failed to reset password");

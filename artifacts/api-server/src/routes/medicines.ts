@@ -575,6 +575,7 @@ router.post("/medicines/:id/units", requireAuth, requireRole("admin", "pharmacis
       conversionFactorToBase: parsed.data.conversionFactorToBase,
       isBaseUnit: parsed.data.isBaseUnit,
     }).returning();
+    await logAudit(req.auth!.userId, "CREATE", "medicine", params.data.id, `Created unit "${unit.unitName}" for medicine #${params.data.id}.`);
     res.status(201).json(unit);
   } catch (err) {
     res.status(500).json({ error: "Failed to create unit.", detail: getDbErrorMessage(err) });
@@ -585,8 +586,15 @@ router.delete("/medicines/:id/units/:unitId", requireAuth, requireRole("admin", 
   const params = MedicineUnitDeleteParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
   try {
+    const [existing] = await db
+      .select({ id: medicineUnitsTable.id, unitName: medicineUnitsTable.unitName })
+      .from(medicineUnitsTable)
+      .where(and(eq(medicineUnitsTable.id, params.data.unitId), eq(medicineUnitsTable.medicineId, params.data.id)));
     await db.delete(medicineUnitsTable)
       .where(and(eq(medicineUnitsTable.id, params.data.unitId), eq(medicineUnitsTable.medicineId, params.data.id)));
+    if (existing) {
+      await logAudit(req.auth!.userId, "DELETE", "medicine", params.data.id, `Deleted unit "${existing.unitName}" from medicine #${params.data.id}.`);
+    }
     res.sendStatus(204);
   } catch (err) {
     res.status(500).json({ error: "Failed to delete unit.", detail: getDbErrorMessage(err) });

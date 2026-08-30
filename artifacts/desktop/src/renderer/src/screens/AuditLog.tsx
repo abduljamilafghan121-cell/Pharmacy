@@ -1,6 +1,6 @@
 ﻿import type { ReactElement } from 'react'
 import { useMemo, useState } from 'react'
-import { History, Pill, ShoppingCart, FileText, Users, Truck, Settings as SettingsIcon, RefreshCw, X, Search } from 'lucide-react'
+import { History, Pill, ShoppingCart, FileText, Users, Truck, Settings as SettingsIcon, RefreshCw, X, Search, Contact, Building2, Tag } from 'lucide-react'
 import { useAuditLog } from '../hooks/useExtraQueries'
 import { useUiStore } from '../store/uiStore'
 import { getTheme, mono, serif } from '../theme'
@@ -11,6 +11,10 @@ const ENTITY_TYPES = [
   { value: 'prescription', label: 'Prescription' },
   { value: 'purchase_order', label: 'Purchase order' },
   { value: 'user', label: 'User' },
+  { value: 'patient', label: 'Patient' },
+  { value: 'supplier', label: 'Supplier' },
+  { value: 'category', label: 'Category' },
+  { value: 'insurance_claim', label: 'Insurance claim' },
   { value: 'pharmacy_settings', label: 'Pharmacy settings' }
 ] as const
 
@@ -20,8 +24,15 @@ const ENTITY_ICONS: Record<string, typeof Pill> = {
   prescription: FileText,
   purchase_order: Truck,
   user: Users,
+  patient: Contact,
+  supplier: Building2,
+  category: Tag,
+  insurance_claim: FileText,
   pharmacy_settings: SettingsIcon
 }
+
+const entityLabel = (entityType: string): string =>
+  entityType.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase())
 
 // Mirrors web's SEOUL_ACTION_COLORS — create/verify/receive are success,
 // destructive actions are red, etc.
@@ -262,7 +273,7 @@ export default function AuditLog(): ReactElement {
                     <td className="py-2.5 px-4">
                       <span style={{ color: theme.muted }} className="flex items-center gap-1.5">
                         <Icon size={13} />
-                        <span className="capitalize">{e.entityType}</span>
+                        <span>{entityLabel(e.entityType)}</span>
                         {e.entityId != null && <span style={mono}>#{e.entityId}</span>}
                       </span>
                     </td>

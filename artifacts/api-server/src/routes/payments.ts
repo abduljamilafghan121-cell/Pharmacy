@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db, paymentsTable, ordersTable } from "@workspace/db";
 import { CreatePaymentBody, GetPaymentParams } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/auth";
+import { logAudit } from "../lib/audit";
 
 const router: IRouter = Router();
 
@@ -48,6 +49,8 @@ router.post("/payments", requireAuth, async (req, res): Promise<void> => {
   }).returning();
 
   await db.update(ordersTable).set({ paymentStatus: "paid" }).where(eq(ordersTable.id, parsed.data.orderId));
+
+  await logAudit(req.auth!.userId, "payment", "order", parsed.data.orderId, `Recorded a ${parsed.data.method} payment of ${parsed.data.amount} for order #${parsed.data.orderId}.`);
 
   res.status(201).json(payment);
 });

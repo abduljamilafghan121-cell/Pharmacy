@@ -4,6 +4,7 @@ import { db, suppliersTable } from "@workspace/db";
 import { CreateSupplierBody, UpdateSupplierBody, GetSupplierParams, UpdateSupplierParams, DeleteSupplierParams } from "@workspace/api-zod";
 import { requireAuth, requireRole } from "../middlewares/auth";
 import { formatZodError, getDbErrorMessage, getDeleteErrorMessage } from "../lib/api-errors";
+import { logAudit } from "../lib/audit";
 
 const router: IRouter = Router();
 
@@ -24,6 +25,7 @@ router.post("/suppliers", requireAuth, requireRole("admin", "pharmacist"), async
   }
   try {
     const [row] = await db.insert(suppliersTable).values(parsed.data).returning();
+    await logAudit(req.auth!.userId, "create", "supplier", row.id, `Added supplier ${row.name}.`);
     res.status(201).json(row);
   } catch (err) {
     res.status(500).json({ error: "Failed to add supplier.", detail: getDbErrorMessage(err) });
@@ -50,6 +52,7 @@ router.patch("/suppliers/:id", requireAuth, requireRole("admin", "pharmacist"), 
   try {
     const [row] = await db.update(suppliersTable).set(parsed.data).where(eq(suppliersTable.id, params.data.id)).returning();
     if (!row) { res.status(404).json({ error: "Supplier not found." }); return; }
+    await logAudit(req.auth!.userId, "update", "supplier", row.id, `Updated supplier ${row.name}.`);
     res.json(row);
   } catch (err) {
     res.status(500).json({ error: "Failed to update supplier.", detail: getDbErrorMessage(err) });
@@ -60,7 +63,11 @@ router.delete("/suppliers/:id", requireAuth, requireRole("admin"), async (req, r
   const params = DeleteSupplierParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: formatZodError(params.error) }); return; }
   try {
+    const [existing] = await db.select({ id: suppliersTable.id, name: suppliersTable.name }).from(suppliersTable).where(eq(suppliersTable.id, params.data.id));
     await db.delete(suppliersTable).where(eq(suppliersTable.id, params.data.id));
+    if (existing) {
+      await logAudit(req.auth!.userId, "delete", "supplier", existing.id, `Deleted supplier ${existing.name}.`);
+    }
     res.sendStatus(204);
   } catch (err) {
     res.status(409).json({ error: getDeleteErrorMessage(err, "supplier") });
