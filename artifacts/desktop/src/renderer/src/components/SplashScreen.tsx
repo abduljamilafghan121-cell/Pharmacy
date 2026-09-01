@@ -64,7 +64,7 @@ export default function SplashScreen(): ReactElement {
 
       {/* Footer */}
       <p className="splash-footer" style={{ color: theme.muted }}>
-        PharmaCore
+        PharmaCore <span style={{ opacity: 0.7 }}>· v{__APP_VERSION__}</span>
       </p>
 
       <style>{`
