@@ -5,7 +5,7 @@ import { useUiStore } from '../store/uiStore'
 import { getTheme, serif } from '../theme'
 import { useAuth } from '../hooks/useAuth'
 import { apiUrl, jsonOrThrow } from '../lib/apiClient'
-import { getRecallEmails, rememberEmail } from '../lib/emailRecall'
+import { getRecallEmails, rememberEmail, clearRecallEmails } from '../lib/emailRecall'
 import appIcon from '../assets/icon.png'
 import loginBg from '../assets/for log.jpg'
 
@@ -29,6 +29,10 @@ export default function Login(): ReactElement {
   const [submitting, setSubmitting] = useState(false)
   const [emailFocus, setEmailFocus] = useState(false)
   const [activeSuggestion, setActiveSuggestion] = useState(-1)
+
+  // Bumped when the user clears remembered accounts, so the suggestion list
+  // (derived from localStorage at render time) refreshes immediately.
+  const [, setRecallVersion] = useState(0)
 
   // Email autocomplete — remembered accounts, filtered live as the user types
   // (case-insensitive substring over the full address). The dropdown only
@@ -339,6 +343,26 @@ export default function Login(): ReactElement {
                       </span>
                     </button>
                   ))}
+                  <div
+                    style={{ borderTop: `1px solid ${theme.border}` }}
+                    className="login-autocomplete-option w-full text-left"
+                  >
+                    <button
+                      type="button"
+                      onMouseDown={(e) => {
+                        e.preventDefault()
+                        clearRecallEmails()
+                        setRecallVersion((v) => v + 1)
+                        setEmail('')
+                        setEmailFocus(false)
+                        setActiveSuggestion(-1)
+                      }}
+                      style={{ color: theme.muted }}
+                      className="w-full text-left px-3 py-2 text-xs hover:opacity-80"
+                    >
+                      Clear remembered accounts
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

@@ -46,6 +46,19 @@
     "win": {
       "target": "nsis"
     },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "PharmaCore",
+      "installerLanguages": [
+        "en_US"
+      ],
+      "artifactName": "PharmaCore Setup ${version}.exe"
+    },
     "mac": {
       "target": "dmg"
     },

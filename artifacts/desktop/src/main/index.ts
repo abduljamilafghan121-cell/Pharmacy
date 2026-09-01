@@ -97,13 +97,32 @@ ipcMain.handle('printer:test', async () => {
   return { ok: true }
 })
 
-app.whenReady().then(() => {
-  createWindow()
+// Only allow one running instance. If the user launches the app again (e.g.
+// from the shortcut or a second double-click), the new copy exits immediately
+// and we instead focus/restore the already-open window instead of opening a
+// duplicate. Without this, every launch spawns an extra window.
+const gotTheLock = app.requestSingleInstanceLock()
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+if (!gotTheLock) {
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    const win = BrowserWindow.getAllWindows()[0]
+    if (win) {
+      if (win.isMinimized()) win.restore()
+      if (!win.isVisible()) win.show()
+      win.focus()
+    }
   })
-})
+
+  app.whenReady().then(() => {
+    createWindow()
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    })
+  })
+}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()

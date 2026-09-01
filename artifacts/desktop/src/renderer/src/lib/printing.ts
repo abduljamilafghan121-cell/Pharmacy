@@ -59,14 +59,14 @@ export function printDispensingLabel(
 ): void {
   const dispensedDate = data.dispensedDate ?? new Date().toISOString()
   const batchLine = [
-    data.batchNumber ? `Batch: ${data.batchNumber}` : null,
+    data.batchNumber ? `Batch: ${esc(data.batchNumber)}` : null,
     data.expiryDate ? `Exp: ${formatDate(data.expiryDate)}` : null
   ]
     .filter(Boolean)
     .join('  ·  ')
 
   const qtyLine =
-    data.qty != null ? `Qty: ${data.qty}${data.unitName ? ` ${data.unitName}` : ''}` : null
+    data.qty != null ? `Qty: ${data.qty}${data.unitName ? ` ${esc(data.unitName)}` : ''}` : null
 
   const html = `<!DOCTYPE html>
 <html>
@@ -103,12 +103,12 @@ export function printDispensingLabel(
 </head>
 <body>
   <div class="pharmacy">
-    ${pharmacyName}
-    ${pharmacyAddress ? `<span class="pharmacy-addr"> — ${pharmacyAddress}</span>` : ''}
+    ${esc(pharmacyName)}
+    ${pharmacyAddress ? `<span class="pharmacy-addr"> — ${esc(pharmacyAddress)}</span>` : ''}
   </div>
-  <div class="medicine">${data.medicineName}</div>
-  ${data.patientName ? `<div class="patient">Patient: <span>${data.patientName}</span></div>` : ''}
-  ${data.sig ? `<div class="sig">${data.sig}</div>` : ''}
+  <div class="medicine">${esc(data.medicineName)}</div>
+  ${data.patientName ? `<div class="patient">Patient: <span>${esc(data.patientName)}</span></div>` : ''}
+  ${data.sig ? `<div class="sig">${esc(data.sig)}</div>` : ''}
   <div class="meta">${qtyLine ?? ''}${qtyLine && batchLine ? '  ·  ' : ''}${batchLine}</div>
   <div class="date">Dispensed: ${formatDate(dispensedDate)}</div>
 </body>

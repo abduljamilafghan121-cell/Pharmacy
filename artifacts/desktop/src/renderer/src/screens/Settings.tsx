@@ -75,7 +75,9 @@ export default function SettingsScreen(): ReactElement {
 
       <PasswordSection cardStyle={cardStyle} inputStyle={inputStyle} labelCls={labelCls} inputCls={inputCls} />
 
-      <CategoriesSection cardStyle={cardStyle} inputStyle={inputStyle} inputCls={inputCls} />
+      {user?.role === 'admin' && (
+        <CategoriesSection cardStyle={cardStyle} inputStyle={inputStyle} inputCls={inputCls} />
+      )}
     </div>
   )
 }

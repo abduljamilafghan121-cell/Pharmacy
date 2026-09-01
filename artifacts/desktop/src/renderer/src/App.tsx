@@ -10,6 +10,7 @@ import CommandPalette from './components/CommandPalette'
 import Toast from './components/Toast'
 import SplashScreen from './components/SplashScreen'
 import OfflineBanner from './components/OfflineBanner'
+import ErrorBoundary from './components/ErrorBoundary'
 import { useConnectivity } from './hooks/useConnectivity'
 import Login from './screens/Login'
 import Setup from './screens/Setup'
@@ -95,7 +96,13 @@ function AuthedApp(): ReactElement {
       <TitleBar />
       <div className="flex flex-1 min-h-0">
         <Sidebar />
-        <div className="flex-1 overflow-y-auto">{screenAllowed ? <ActiveScreen /> : null}</div>
+        <div className="flex-1 overflow-y-auto">
+          {screenAllowed ? (
+            <ErrorBoundary>
+              <ActiveScreen />
+            </ErrorBoundary>
+          ) : null}
+        </div>
       </div>
       <CommandPalette />
       <Toast />
