@@ -102,5 +102,6 @@ overrides:
   "metro-transform-worker": "^0.83.0"
 
 allowBuilds:
+  core-js: true
   electron: true
   esbuild: true

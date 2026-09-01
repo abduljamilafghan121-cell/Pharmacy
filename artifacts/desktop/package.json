@@ -16,6 +16,8 @@
   "dependencies": {
     "@tanstack/react-query": "catalog:",
     "@workspace/api-client-react": "workspace:*",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
     "lucide-react": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
@@ -38,9 +40,17 @@
   "build": {
     "appId": "com.pharmacore.desktop",
     "productName": "PharmaCore",
-    "files": ["out/**/*"],
-    "win": { "target": "nsis" },
-    "mac": { "target": "dmg" },
-    "linux": { "target": "AppImage" }
+    "files": [
+      "out/**/*"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
   }
 }

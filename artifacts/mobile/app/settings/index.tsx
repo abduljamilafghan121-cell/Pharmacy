@@ -45,8 +45,6 @@ async function pickLogoImage(): Promise<{ dataUrl: string } | null> {
     mediaTypes: ['images'],
     quality: 0.7,
     base64: true,
-    allowsEditing: true,
-    aspect: [1, 1],
   });
   if (result.canceled || !result.assets?.[0]?.base64) return null;
   const asset = result.assets[0];
@@ -304,7 +302,7 @@ export default function SettingsScreen() {
           <View style={s.logoRow}>
             <View style={s.logoBox}>
               {logoUrl ? (
-                <Image source={{ uri: logoUrl }} style={{ width: 72, height: 72 }} />
+                <Image source={{ uri: logoUrl }} style={{ width: 72, height: 72 }} resizeMode="cover" />
               ) : (
                 <Feather name="image" size={26} color={colors.mutedForeground} />
               )}

@@ -8,7 +8,9 @@ import TitleBar from './components/TitleBar'
 import Sidebar from './components/Sidebar'
 import CommandPalette from './components/CommandPalette'
 import Toast from './components/Toast'
-import Loading from './components/Loading'
+import SplashScreen from './components/SplashScreen'
+import OfflineBanner from './components/OfflineBanner'
+import { useConnectivity } from './hooks/useConnectivity'
 import Login from './screens/Login'
 import Setup from './screens/Setup'
 import Dashboard from './screens/Dashboard'
@@ -97,6 +99,7 @@ function AuthedApp(): ReactElement {
       </div>
       <CommandPalette />
       <Toast />
+      <OfflineBanner />
     </div>
   )
 }
@@ -114,6 +117,9 @@ function Gate(): ReactElement {
     isError: setupError
   } = useSetupCheck()
 
+  // Keep app-wide server-reachability tracking alive for the whole session.
+  useConnectivity()
+
   // Keep the html/body and native Electron window background in sync with
   // the active theme — without this, the OS-level window surface stays the
   // dark startup color and bleeds through on resize or after switching to
@@ -129,11 +135,7 @@ function Gate(): ReactElement {
   }, [theme.bg])
 
   if (isLoading || (setupLoading && !setupError)) {
-    return (
-      <div style={{ background: theme.bg }} className="h-screen flex items-center justify-center">
-        <Loading label="Loading…" size="lg" />
-      </div>
-    )
+    return <SplashScreen />
   }
 
   if (!isAuthenticated) {
@@ -142,6 +144,7 @@ function Gate(): ReactElement {
       <div style={{ background: theme.bg }} className="h-screen">
         <TitleBar />
         <div style={{ height: 'calc(100% - 46px)' }}>{needsSetup ? <Setup /> : <Login />}</div>
+        <OfflineBanner />
       </div>
     )
   }

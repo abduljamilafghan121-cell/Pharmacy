@@ -1,4 +1,10 @@
-import { setBaseUrl, setAuthTokenGetter } from '@workspace/api-client-react'
+import {
+  setBaseUrl,
+  setAuthTokenGetter,
+  setWriteBlocker,
+  OfflineError
+} from '@workspace/api-client-react'
+import { useUiStore } from '../store/uiStore'
 
 // This is the desktop app's only connection point to the shared client.
 // Same generated hooks (useListMedicines, useCreateOrder, useGetMe, ...)
@@ -50,6 +56,36 @@ function resolveOrigin(): string {
 export function initApiClient(): void {
   setBaseUrl(resolveOrigin())
   setAuthTokenGetter(() => tokenCache)
+  // Block all mutating API calls while the app is offline, so users can't
+  // create/change data (sales, edits, deletes) against an unreachable server.
+  setWriteBlocker(() => useUiStore.getState().offline)
+  guardRawWrites()
+}
+
+const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
+
+// The generated client already fails-fast via setWriteBlocker, but a handful
+// of endpoints (cash shifts, settings, allergies, stocktakes, ...) fetch the
+// API directly and bypass that guard. A narrow fetch wrapper here catches every
+// raw write for real: blocked only when offline, against the API origin, for
+// write methods. Reads and everything else pass straight through untouched.
+function guardRawWrites(): void {
+  const nativeFetch = window.fetch.bind(window)
+  const origin = resolveOrigin()
+  const canReject = (input: RequestInfo | URL, init?: RequestInit): boolean => {
+    const method =
+      (input instanceof Request ? input.method : init?.method ?? 'GET').toUpperCase()
+    const raw = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+    return (
+      useUiStore.getState().offline &&
+      WRITE_METHODS.has(method) &&
+      (raw.startsWith(origin) || raw.includes('/api/'))
+    )
+  }
+  window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+    if (canReject(input, init)) throw new OfflineError()
+    return nativeFetch(input, init)
+  }) as typeof fetch
 }
 
 // Small helper for the two endpoints that aren't in the generated client

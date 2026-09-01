@@ -14,7 +14,8 @@ import {
   Timer,
   ShieldAlert,
   FileText,
-  Receipt
+  Receipt,
+  FileDown
 } from 'lucide-react'
 import { useGetInventoryReport } from '@workspace/api-client-react'
 import {
@@ -35,6 +36,7 @@ import { getTheme, mono, serif } from '../theme'
 import { usePharmacySettings, formatCurrency } from '../hooks/usePharmacySettings'
 import { useGetSalesReport } from '@workspace/api-client-react'
 import Loading from '../components/Loading'
+import { exportReportAsPdf, buildCsv, downloadBlob, type ReportColumn } from '../lib/exportReport'
 
 type Tab = 'overview' | 'sales' | 'reorder' | 'staff' | 'payments' | 'purchases' | 'expiring' | 'controlled' | 'claims'
 
@@ -106,6 +108,44 @@ function toISODate(d: Date): string {
   return d.toISOString().slice(0, 10)
 }
 
+function ExportButtons({
+  disabled,
+  onCsv,
+  onPdf,
+  theme
+}: {
+  disabled: boolean
+  onCsv: () => void
+  onPdf: () => void
+  theme: ReturnType<typeof getTheme>
+}): ReactElement {
+  const base: React.CSSProperties = {
+    color: theme.muted,
+    border: `1px solid ${theme.borderStrong}`,
+    background: theme.cardAlt
+  }
+  return (
+    <div className="flex items-center gap-1.5">
+      <button
+        onClick={onCsv}
+        disabled={disabled}
+        style={base}
+        className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-opacity hover:opacity-70 disabled:opacity-50"
+      >
+        <Download size={13} /> CSV
+      </button>
+      <button
+        onClick={onPdf}
+        disabled={disabled}
+        style={{ ...base, color: '#c53030' }}
+        className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-opacity hover:opacity-70 disabled:opacity-50"
+      >
+        <FileDown size={13} /> PDF
+      </button>
+    </div>
+  )
+}
+
 export default function Reports(): ReactElement {
   const { dark } = useUiStore()
   const theme = getTheme(dark)
@@ -156,102 +196,200 @@ export default function Reports(): ReactElement {
     { key: 'claims', label: 'Claims', icon: FileText }
   ]
 
-  const exportSalesCsv = (): void => {
-    if (!sales?.byDay?.length) return
-    const header = ['Date', 'Orders', 'Revenue']
-    const rows = sales.byDay.map((d) => [d.date, d.orders, d.revenue])
-    const csv = [header, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `sales-report-${fromDate}-to-${toDate}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
+  const rangeLabel = `Period: ${fromDate} to ${toDate}`
+
+  const saveCsv = (name: string, columns: ReportColumn[], rows: Record<string, string | number | null>[]): void => {
+    downloadBlob(`${name}-${fromDate}-to-${toDate}.csv`, buildCsv(columns, rows), 'text/csv;charset=utf-8;')
   }
 
-  const exportTopMedicinesCsv = (): void => {
-    const header = ['Medicine', 'Units Sold', 'Revenue']
-    const rows = topMedicines.map((m) => [m.medicineName ?? `Medicine #${m.medicineId}`, m.totalSold, m.revenue])
-    const csv = [header, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `top-medicines-${fromDate}-to-${toDate}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
+  const savePdf = (
+    name: string,
+    title: string,
+    columns: ReportColumn[],
+    rows: Record<string, string | number | null>[],
+    summary: { label: string; value: string }[] = []
+  ): void => {
+    exportReportAsPdf({ fileName: `${name}-${fromDate}-to-${toDate}`, title, rangeLabel, pharmacy: settings, columns, rows, summary })
   }
 
-  const downloadCsv = (name: string, header: string[], rows: (string | number)[][]): void => {
-    if (!rows.length) return
-    const csv = [header, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${name}-${fromDate}-to-${toDate}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
-  }
+  // ── Overview: sales-by-day ──────────────────────────────────────────────
+  const salesCols: ReportColumn[] = [
+    { header: 'Date', key: 'date' },
+    { header: 'Orders', key: 'orders', align: 'right' },
+    { header: 'Revenue', key: 'revenue', align: 'right' }
+  ]
+  const salesRows = (sales?.byDay ?? []).map((d) => ({
+    date: d.date,
+    orders: d.orders,
+    revenue: d.revenue
+  }))
 
-  const exportPaymentsCsv = (): void => {
-    const rows: (string | number)[][] = []
-    payments?.byMethod.forEach((m) => rows.push([m.method, m.count, m.amount]))
-    downloadCsv('payments-report', ['Method', 'Transactions', 'Amount'], rows)
-  }
+  // ── Overview: top medicines ─────────────────────────────────────────────
+  const topMedCols: ReportColumn[] = [
+    { header: 'Medicine', key: 'medicineName' },
+    { header: 'Units Sold', key: 'totalSold', align: 'right' },
+    { header: 'Revenue', key: 'revenue', align: 'right' }
+  ]
+  const topMedRows = topMedicines.map((m) => ({
+    medicineName: m.medicineName ?? `Medicine #${m.medicineId}`,
+    totalSold: m.totalSold,
+    revenue: m.revenue
+  }))
 
-  const exportPurchasesCsv = (): void => {
-    downloadCsv(
-      'purchases-report',
-      ['Supplier', 'POs', 'Purchased', 'Paid', 'Returns', 'Balance'],
-      purchases.map((p) => [p.supplierName, p.purchaseOrders, p.totalPurchased, p.totalPaid, p.totalReturns, p.balance])
-    )
-  }
+  // ── Sale Report ─────────────────────────────────────────────────────────
+  const saleCols: ReportColumn[] = [
+    { header: 'Sale ID', key: 'id', align: 'right' },
+    { header: 'Date', key: 'createdAt' },
+    { header: 'Patient', key: 'patientName' },
+    { header: 'Staff', key: 'servedByName' },
+    { header: 'Items', key: 'itemCount', align: 'right' },
+    { header: 'Subtotal', key: 'subtotal', align: 'right' },
+    { header: 'Discount', key: 'discountAmount', align: 'right' },
+    { header: 'Tax', key: 'taxAmount', align: 'right' },
+    { header: 'Total', key: 'total', align: 'right' },
+    { header: 'Payment', key: 'payment' },
+    { header: 'Status', key: 'status' }
+  ]
+  const saleRows = (saleReport?.transactions ?? []).map((t) => ({
+    id: `#${t.id}`,
+    createdAt: new Date(t.createdAt).toLocaleString(),
+    patientName: t.patientName ?? 'Walk-in',
+    servedByName: t.servedByName ?? '—',
+    itemCount: t.itemCount,
+    subtotal: t.subtotal,
+    discountAmount: t.discountAmount,
+    taxAmount: t.taxAmount,
+    total: t.total,
+    payment: t.paymentMethod ?? t.paymentStatus,
+    status: t.status
+  }))
+  const saleSummary = [
+    { label: 'Total Sales', value: String(saleReport?.totalSales ?? 0) },
+    { label: 'Revenue', value: formatCurrency(parseFloat(saleReport?.totalRevenue ?? '0'), settings) },
+    { label: 'Discounts', value: formatCurrency(parseFloat(saleReport?.totalDiscount ?? '0'), settings) },
+    { label: 'Cancelled', value: String(saleReport?.cancelledCount ?? 0) }
+  ]
 
-  const exportExpiringCsv = (): void => {
-    downloadCsv(
-      'expiring-stock',
-      ['Medicine', 'Batch', 'Expiry', 'Qty', 'Supplier'],
-      expiring.map((e) => [e.medicineName ?? '', e.batchNumber ?? '', e.expiryDate ?? '', e.quantity, e.supplierName ?? ''])
-    )
-  }
+  // ── Reorder ─────────────────────────────────────────────────────────────
+  const reorderCols: ReportColumn[] = [
+    { header: 'Medicine', key: 'medicineName' },
+    { header: 'In Stock', key: 'currentStock', align: 'right' },
+    { header: 'Reorder Level', key: 'reorderLevel', align: 'right' },
+    { header: '30d Sold', key: 'sold30Days', align: 'right' },
+    { header: 'Suggested Qty', key: 'suggestedReorderQty', align: 'right' },
+    { header: 'Urgency', key: 'urgency' }
+  ]
+  const reorderRows = reorder.map((r) => ({
+    medicineName: r.genericName ? `${r.medicineName} (${r.genericName})` : r.medicineName,
+    currentStock: r.currentStock,
+    reorderLevel: r.reorderLevel,
+    sold30Days: r.sold30Days,
+    suggestedReorderQty: r.suggestedReorderQty,
+    urgency: r.urgency
+  }))
 
-  const exportControlledCsv = (): void => {
-    downloadCsv(
-      'controlled-substances',
-      ['Schedule', 'Events', 'Units'],
-      (controlled?.bySchedule ?? []).map((s) => [s.schedule, s.count, s.quantity])
-    )
-  }
+  // ── Staff ───────────────────────────────────────────────────────────────
+  const staffCols: ReportColumn[] = [
+    { header: 'Staff', key: 'userName' },
+    { header: 'Orders', key: 'totalOrders', align: 'right' },
+    { header: 'Items Sold', key: 'totalItems', align: 'right' },
+    { header: 'Revenue', key: 'totalRevenue', align: 'right' }
+  ]
+  const staffRows = staff.map((s) => ({
+    userName: s.userName ?? 'Unknown',
+    totalOrders: s.totalOrders,
+    totalItems: s.totalItems,
+    totalRevenue: s.totalRevenue
+  }))
+  const staffSummary = [
+    { label: 'Staff', value: String(staff.length) },
+    { label: 'Revenue', value: formatCurrency(staff.reduce((s, x) => s + parseFloat(x.totalRevenue), 0), settings) }
+  ]
 
-  const exportClaimsCsv = (): void => {
-    downloadCsv(
-      'insurance-claims',
-      ['Status', 'Claims', 'Amount'],
-      (claims?.byStatus ?? []).map((s) => [s.status, s.count, s.amount])
-    )
-  }
+  // ── Payments ────────────────────────────────────────────────────────────
+  const payCols: ReportColumn[] = [
+    { header: 'Method', key: 'method' },
+    { header: 'Transactions', key: 'count', align: 'right' },
+    { header: 'Amount', key: 'amount', align: 'right' }
+  ]
+  const payRows = (payments?.byMethod ?? []).map((m) => ({ method: m.method, count: m.count, amount: m.amount }))
+  const payStatusCols: ReportColumn[] = [
+    { header: 'Status', key: 'paymentStatus' },
+    { header: 'Orders', key: 'count', align: 'right' },
+    { header: 'Value', key: 'amount', align: 'right' }
+  ]
+  const payStatusRows = (payments?.byOrderStatus ?? []).map((o) => ({
+    paymentStatus: o.paymentStatus,
+    count: o.count,
+    amount: o.amount
+  }))
+  const paySummary = [
+    { label: 'Collected', value: formatCurrency(parseFloat(payments?.totalCollected ?? '0'), settings) },
+    { label: 'Outstanding', value: formatCurrency(parseFloat(payments?.outstanding.amount ?? '0'), settings) }
+  ]
 
-  const exportSalesTransactionsCsv = (): void => {
-    downloadCsv(
-      'sale-report',
-      ['Sale ID', 'Date', 'Patient', 'Staff', 'Items', 'Subtotal', 'Discount', 'Tax', 'Total', 'Payment', 'Status'],
-      (saleReport?.transactions ?? []).map((t) => [
-        t.id,
-        new Date(t.createdAt).toLocaleString(),
-        t.patientName ?? '',
-        t.servedByName ?? '',
-        t.itemCount,
-        t.subtotal,
-        t.discountAmount,
-        t.taxAmount,
-        t.total,
-        t.paymentMethod ?? t.paymentStatus,
-        t.status
-      ])
-    )
-  }
+  // ── Purchases ───────────────────────────────────────────────────────────
+  const purchaseCols: ReportColumn[] = [
+    { header: 'Supplier', key: 'supplierName' },
+    { header: 'POs', key: 'purchaseOrders', align: 'right' },
+    { header: 'Purchased', key: 'totalPurchased', align: 'right' },
+    { header: 'Paid', key: 'totalPaid', align: 'right' },
+    { header: 'Returns', key: 'totalReturns', align: 'right' },
+    { header: 'Balance', key: 'balance', align: 'right' }
+  ]
+  const purchaseRows = purchases.map((p) => ({
+    supplierName: p.supplierName,
+    purchaseOrders: p.purchaseOrders,
+    totalPurchased: p.totalPurchased,
+    totalPaid: p.totalPaid,
+    totalReturns: p.totalReturns,
+    balance: p.balance
+  }))
+
+  // ── Expiring ────────────────────────────────────────────────────────────
+  const expiringCols: ReportColumn[] = [
+    { header: 'Medicine', key: 'medicineName' },
+    { header: 'Batch', key: 'batchNumber' },
+    { header: 'Expiry', key: 'expiryDate' },
+    { header: 'Qty', key: 'quantity', align: 'right' },
+    { header: 'Supplier', key: 'supplierName' }
+  ]
+  const expiringRows = expiring.map((e) => ({
+    medicineName: e.medicineName ?? '',
+    batchNumber: e.batchNumber ?? '',
+    expiryDate: e.expiryDate ?? '',
+    quantity: e.quantity,
+    supplierName: e.supplierName ?? ''
+  }))
+
+  // ── Controlled ──────────────────────────────────────────────────────────
+  const controlledCols: ReportColumn[] = [
+    { header: 'Schedule', key: 'schedule' },
+    { header: 'Events', key: 'count', align: 'right' },
+    { header: 'Units', key: 'quantity', align: 'right' }
+  ]
+  const controlledRows = (controlled?.bySchedule ?? []).map((s) => ({
+    schedule: `Schedule ${s.schedule}`,
+    count: s.count,
+    quantity: s.quantity
+  }))
+  const controlledSummary = [
+    { label: 'Events', value: String(controlled?.totalEvents ?? 0) },
+    { label: 'Schedules', value: String(controlled?.bySchedule?.length ?? 0) }
+  ]
+
+  // ── Claims ──────────────────────────────────────────────────────────────
+  const claimsCols: ReportColumn[] = [
+    { header: 'Status', key: 'status' },
+    { header: 'Claims', key: 'count', align: 'right' },
+    { header: 'Amount', key: 'amount', align: 'right' }
+  ]
+  const claimsRows = (claims?.byStatus ?? []).map((s) => ({ status: s.status, count: s.count, amount: s.amount }))
+  const claimsSummary = [
+    { label: 'Total Claims', value: String(claims?.totalClaims ?? 0) },
+    { label: 'Total Amount', value: formatCurrency(parseFloat(claims?.totalAmount ?? '0'), settings) },
+    { label: 'Pending Receivable', value: formatCurrency(parseFloat(claims?.pendingReceivable ?? '0'), settings) }
+  ]
 
   return (
     <div className="p-7">
@@ -386,14 +524,12 @@ export default function Reports(): ReactElement {
                   {salesLoading ? 'Loading…' : `${sales?.byDay?.length ?? 0} days · ${sales?.totalOrders ?? 0} orders · ${formatCurrency(parseFloat(sales?.totalRevenue ?? '0'), settings)}`}
                 </p>
               </div>
-              <button
-                onClick={exportSalesCsv}
+              <ExportButtons
+                theme={theme}
                 disabled={!sales?.byDay?.length}
-                className="flex items-center gap-1.5 text-xs font-medium transition-opacity hover:opacity-70 disabled:opacity-50"
-                style={{ color: theme.muted }}
-              >
-                <Download size={13} /> Export CSV
-              </button>
+                onCsv={() => saveCsv('sales-report', salesCols, salesRows)}
+                onPdf={() => savePdf('sales-report', 'Daily Sales Report', salesCols, salesRows)}
+              />
             </div>
             <div className="h-[300px] w-full px-3 pb-4">
               {salesLoading ? (
@@ -442,13 +578,12 @@ export default function Reports(): ReactElement {
                 </h2>
               </div>
               {topMedicines.length > 0 && (
-                <button
-                  onClick={exportTopMedicinesCsv}
-                  className="flex items-center gap-1.5 text-xs font-medium transition-opacity hover:opacity-70"
-                  style={{ color: theme.muted }}
-                >
-                  <Download size={13} /> Export CSV
-                </button>
+                <ExportButtons
+                  theme={theme}
+                  disabled={topMedicines.length === 0}
+                  onCsv={() => saveCsv('top-medicines', topMedCols, topMedRows)}
+                  onPdf={() => savePdf('top-medicines', 'Top Selling Medicines', topMedCols, topMedRows)}
+                />
               )}
             </div>
             {topLoading ? (
@@ -535,9 +670,12 @@ export default function Reports(): ReactElement {
                 </p>
               </div>
               {saleReport?.transactions?.length ? (
-                <button onClick={exportSalesTransactionsCsv} className="flex items-center gap-1.5 text-xs font-medium transition-opacity hover:opacity-70" style={{ color: theme.muted }}>
-                  <Download size={13} /> Export CSV
-                </button>
+                <ExportButtons
+                  theme={theme}
+                  disabled={!saleReport?.transactions?.length}
+                  onCsv={() => saveCsv('sale-report', saleCols, saleRows)}
+                  onPdf={() => savePdf('sale-report', 'Sale Transactions Report', saleCols, saleRows, saleSummary)}
+                />
               ) : null}
             </div>
             {saleLoading ? (
@@ -619,6 +757,24 @@ export default function Reports(): ReactElement {
 
       {tab === 'reorder' && (
         <div style={{ background: theme.card, border: `1px solid ${theme.border}` }} className="rounded-2xl overflow-hidden">
+          <div className="flex items-center justify-between px-5 pt-4 pb-2">
+            <div>
+              <h2 style={{ color: theme.text }} className="text-base font-semibold">
+                Reorder Suggestions
+              </h2>
+              <p style={{ color: theme.muted }} className="text-xs mt-0.5">
+                Medicines that have fallen below their reorder level
+              </p>
+            </div>
+            {reorder.length > 0 && (
+              <ExportButtons
+                theme={theme}
+                disabled={reorder.length === 0}
+                onCsv={() => saveCsv('reorder-suggestions', reorderCols, reorderRows)}
+                onPdf={() => savePdf('reorder-suggestions', 'Reorder Suggestions Report', reorderCols, reorderRows)}
+              />
+            )}
+          </div>
           {reorderLoading ? (
             <Loading label="Loading reorder suggestions…" />
           ) : reorder.length === 0 ? (
@@ -673,6 +829,24 @@ export default function Reports(): ReactElement {
 
       {tab === 'staff' && (
         <div style={{ background: theme.card, border: `1px solid ${theme.border}` }} className="rounded-2xl overflow-hidden">
+          <div className="flex items-center justify-between px-5 pt-4 pb-2">
+            <div>
+              <h2 style={{ color: theme.text }} className="text-base font-semibold">
+                Staff Productivity
+              </h2>
+              <p style={{ color: theme.muted }} className="text-xs mt-0.5">
+                Orders, items and revenue by staff member
+              </p>
+            </div>
+            {staff.length > 0 && (
+              <ExportButtons
+                theme={theme}
+                disabled={staff.length === 0}
+                onCsv={() => saveCsv('staff-productivity', staffCols, staffRows)}
+                onPdf={() => savePdf('staff-productivity', 'Staff Productivity Report', staffCols, staffRows, staffSummary)}
+              />
+            )}
+          </div>
           {staffLoading ? (
             <Loading label="Loading staff productivity…" />
           ) : staff.length === 0 ? (
@@ -747,9 +921,12 @@ export default function Reports(): ReactElement {
                   </p>
                 </div>
                 {payments?.byMethod?.length ? (
-                  <button onClick={exportPaymentsCsv} className="flex items-center gap-1.5 text-xs font-medium transition-opacity hover:opacity-70" style={{ color: theme.muted }}>
-                    <Download size={13} /> Export CSV
-                  </button>
+                  <ExportButtons
+                    theme={theme}
+                    disabled={!payments?.byMethod?.length}
+                    onCsv={() => saveCsv('payments-report', payCols, payRows)}
+                    onPdf={() => savePdf('payments-report', 'Payments by Method', payCols, payRows, paySummary)}
+                  />
                 ) : null}
               </div>
               {paymentsLoading ? (
@@ -840,9 +1017,12 @@ export default function Reports(): ReactElement {
               </p>
             </div>
             {purchases.length ? (
-              <button onClick={exportPurchasesCsv} className="flex items-center gap-1.5 text-xs font-medium transition-opacity hover:opacity-70" style={{ color: theme.muted }}>
-                <Download size={13} /> Export CSV
-              </button>
+              <ExportButtons
+                theme={theme}
+                disabled={!purchases.length}
+                onCsv={() => saveCsv('purchases-report', purchaseCols, purchaseRows)}
+                onPdf={() => savePdf('purchases-report', 'Purchases by Supplier', purchaseCols, purchaseRows)}
+              />
             ) : null}
           </div>
           {purchasesLoading ? (
@@ -922,9 +1102,14 @@ export default function Reports(): ReactElement {
                 </button>
               ))}
               {expiring.length ? (
-                <button onClick={exportExpiringCsv} className="flex items-center gap-1.5 text-xs font-medium transition-opacity hover:opacity-70 ml-2" style={{ color: theme.muted }}>
-                  <Download size={13} /> Export CSV
-                </button>
+                <div className="ml-2">
+                  <ExportButtons
+                    theme={theme}
+                    disabled={!expiring.length}
+                    onCsv={() => saveCsv('expiring-stock', expiringCols, expiringRows)}
+                    onPdf={() => savePdf('expiring-stock', `Expiring Stock — Next ${expiryDays} Days`, expiringCols, expiringRows)}
+                  />
+                </div>
               ) : null}
             </div>
           </div>
@@ -992,9 +1177,12 @@ export default function Reports(): ReactElement {
                   </h2>
                 </div>
                 {controlled?.bySchedule?.length ? (
-                  <button onClick={exportControlledCsv} className="flex items-center gap-1.5 text-xs font-medium transition-opacity hover:opacity-70" style={{ color: theme.muted }}>
-                    <Download size={13} /> Export CSV
-                  </button>
+                  <ExportButtons
+                    theme={theme}
+                    disabled={!controlled?.bySchedule?.length}
+                    onCsv={() => saveCsv('controlled-substances', controlledCols, controlledRows)}
+                    onPdf={() => savePdf('controlled-substances', 'Controlled Substances Report', controlledCols, controlledRows, controlledSummary)}
+                  />
                 ) : null}
               </div>
               {controlledLoading ? (
@@ -1101,9 +1289,12 @@ export default function Reports(): ReactElement {
                 </h2>
               </div>
               {claims?.byStatus?.length ? (
-                <button onClick={exportClaimsCsv} className="flex items-center gap-1.5 text-xs font-medium transition-opacity hover:opacity-70" style={{ color: theme.muted }}>
-                  <Download size={13} /> Export CSV
-                </button>
+                <ExportButtons
+                  theme={theme}
+                  disabled={!claims?.byStatus?.length}
+                  onCsv={() => saveCsv('insurance-claims', claimsCols, claimsRows)}
+                  onPdf={() => savePdf('insurance-claims', 'Insurance Claims Report', claimsCols, claimsRows, claimsSummary)}
+                />
               ) : null}
             </div>
             {claimsLoading ? (

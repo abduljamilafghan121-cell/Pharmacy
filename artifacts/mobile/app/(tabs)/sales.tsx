@@ -322,7 +322,7 @@ export default function SalesScreen() {
   }, [orders, historySearch]);
 
   const s = StyleSheet.create({
-    container: { flex: 1, backgroundColor: colors.background },
+    container: { flex: 1, backgroundColor: colors.background, justifyContent: 'flex-start' },
     header: {
       backgroundColor: colors.primary,
       paddingTop: topInset + 10,
@@ -336,7 +336,8 @@ export default function SalesScreen() {
     segmentRow: { flexDirection: 'row', backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 12, marginTop: 12, padding: 3 },
     segmentBtn: { flex: 1, paddingVertical: 8, borderRadius: 9, alignItems: 'center' },
     segmentText: { fontSize: 13, fontFamily: 'Inter_600SemiBold' },
-    catScrollWrap: { height: 52, flexShrink: 0 },
+    catScrollWrap: { height: 52, flexShrink: 0, flexGrow: 0 },
+    catScrollInner: { flex: 1 },
     catScroll: { paddingHorizontal: 12, paddingVertical: 10, alignItems: 'center' },
     catChip: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, marginRight: 8, borderWidth: 1 },
     catLabel: { fontSize: 12, fontFamily: 'Inter_500Medium' },
@@ -454,17 +455,19 @@ export default function SalesScreen() {
       {mode === 'shop' ? (
         <>
           {/* Categories */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.catScrollWrap} contentContainerStyle={s.catScroll}>
-            {[{ id: null, name: 'All' }, ...(categories ?? [])].map(cat => {
-              const active = catId === cat.id;
-              return (
-                <TouchableOpacity key={cat.id ?? 'all'} style={[s.catChip, { backgroundColor: active ? colors.primary : colors.card, borderColor: active ? colors.primary : colors.border }]}
-                  onPress={() => setCatId(cat.id)}>
-                  <Text style={[s.catLabel, { color: active ? '#fff' : colors.mutedForeground }]}>{cat.name}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
+          <View style={s.catScrollWrap}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.catScrollInner} contentContainerStyle={s.catScroll}>
+              {[{ id: null, name: 'All' }, ...(categories ?? [])].map(cat => {
+                const active = catId === cat.id;
+                return (
+                  <TouchableOpacity key={cat.id ?? 'all'} style={[s.catChip, { backgroundColor: active ? colors.primary : colors.card, borderColor: active ? colors.primary : colors.border }]}
+                    onPress={() => setCatId(cat.id)}>
+                    <Text style={[s.catLabel, { color: active ? '#fff' : colors.mutedForeground }]}>{cat.name}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
 
           {/* Medicine grid */}
           {isLoading ? (

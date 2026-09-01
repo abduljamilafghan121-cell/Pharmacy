@@ -31,6 +31,11 @@ interface UiState {
   dark: boolean
   paletteOpen: boolean
   toast: string | null
+  // Real server reachability — true when the app can't reach the API
+  // (internet down, DNS, or the server is unreachable). Tracked globally so
+  // the offline banner can mount anywhere. Not persisted (session only).
+  offline: boolean
+  setOffline: (offline: boolean) => void
   // Set when a completed sale should be opened in the Sales screen's detail
   // modal — desktop's equivalent of web's /sales/:id deep link.
   pendingSaleDetailId: number | null
@@ -82,12 +87,14 @@ export const useUiStore = create<UiState>()(
       dark: true,
       paletteOpen: false,
       toast: null,
+      offline: false,
       pendingSaleDetailId: null,
       pendingMedicineDetailId: null,
       pendingCheckoutMedicineId: null,
       setScreen: (screen) => set({ screen }),
       toggleDark: () => set((s) => ({ dark: !s.dark })),
       setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
+      setOffline: (offline) => set({ offline }),
       showToast: (toast) => {
         set({ toast })
         setTimeout(() => set({ toast: null }), 3000)

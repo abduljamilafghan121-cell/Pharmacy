@@ -109,21 +109,24 @@ export default function StockScreen() {
         </View>
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ height: 52 }} contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 10, alignItems: 'center' }}>
-        {[{ id: null, name: 'All' }, ...(categories ?? [])].map(cat => {
-          const active = catId === cat.id;
-          return (
-            <TouchableOpacity key={cat.id ?? 'all'} style={[s.catChip, { backgroundColor: active ? colors.primary : colors.card, borderColor: active ? colors.primary : colors.border }]} onPress={() => setCatId(cat.id)}>
-              <Text style={{ fontSize: 12, fontFamily: 'Inter_500Medium', color: active ? '#fff' : colors.mutedForeground }}>{cat.name}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
+      <View style={{ height: 52, flexShrink: 0, flexGrow: 0 }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 10, alignItems: 'center' }}>
+          {[{ id: null, name: 'All' }, ...(categories ?? [])].map(cat => {
+            const active = catId === cat.id;
+            return (
+              <TouchableOpacity key={cat.id ?? 'all'} style={[s.catChip, { backgroundColor: active ? colors.primary : colors.card, borderColor: active ? colors.primary : colors.border }]} onPress={() => setCatId(cat.id)}>
+                <Text style={{ fontSize: 12, fontFamily: 'Inter_500Medium', color: active ? '#fff' : colors.mutedForeground }}>{cat.name}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
 
       {isLoading ? (
         <ActivityIndicator style={{ flex: 1 }} color={colors.primary} />
       ) : (
         <FlatList
+          style={{ flex: 1 }}
           data={medicines ?? []}
           keyExtractor={m => String(m.id)}
           contentContainerStyle={{ paddingBottom: 120 + (Platform.OS === 'web' ? 34 : 0) }}

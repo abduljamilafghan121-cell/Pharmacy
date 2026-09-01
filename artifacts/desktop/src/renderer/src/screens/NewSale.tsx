@@ -128,6 +128,7 @@ function defaultUnit(medicine: MedicineRow): { unitId?: number; unitName?: strin
 export default function NewSale(): ReactElement {
   const {
     dark,
+    offline,
     showToast,
     setScreen,
     setPendingSaleDetailId,
@@ -474,6 +475,10 @@ export default function NewSale(): ReactElement {
     }
     if (isSafetyBlocked) {
       showToast('Safety check failed — resolve warnings before proceeding')
+      return
+    }
+    if (offline) {
+      showToast("You're offline — can't reach the server. Reconnect to continue.")
       return
     }
 
@@ -1489,16 +1494,16 @@ export default function NewSale(): ReactElement {
 
           <button
             onClick={handleProcessSale}
-            disabled={saleItems.length === 0 || submitting || isSafetyBlocked}
+            disabled={saleItems.length === 0 || submitting || isSafetyBlocked || offline}
             style={{
               background: 'linear-gradient(135deg, #22B57F 0%, #0E8A64 100%)',
-              boxShadow: saleItems.length === 0 || submitting || isSafetyBlocked ? 'none' : '0 4px 16px rgba(16,138,100,0.35)',
-              opacity: saleItems.length === 0 || submitting || isSafetyBlocked ? 0.5 : 1
+              boxShadow: saleItems.length === 0 || submitting || isSafetyBlocked || offline ? 'none' : '0 4px 16px rgba(16,138,100,0.35)',
+              opacity: saleItems.length === 0 || submitting || isSafetyBlocked || offline ? 0.5 : 1
             }}
             className="w-full rounded-lg py-3 text-white text-sm font-semibold tracking-tight flex items-center justify-center gap-2 transition-transform active:scale-[0.98] mt-4"
           >
             {submitting && <Loader2 size={14} className="animate-spin" />}
-            Process Sale · {formatCurrency(total, settings)}
+            {offline ? 'Offline — cannot process sale' : `Process Sale · ${formatCurrency(total, settings)}`}
           </button>
         </div>
       </div>

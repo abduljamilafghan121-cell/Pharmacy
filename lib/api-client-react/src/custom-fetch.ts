@@ -19,6 +19,39 @@ let _baseUrl: string | null = null;
 let _authTokenGetter: AuthTokenGetter | null = null;
 
 /**
+ * Optional write-blocking guard. When a getter is registered and returns
+ * true, every mutating (non-GET/HEAD) request is rejected locally *before*
+ * hitting the network — used to fail-fast for offline-capable packs (e.g.
+ * the desktop app when the server is unreachable). Defaults to null, so
+ * clients that never register it (the web app) are completely unaffected.
+ */
+let _writeBlocker: (() => boolean) | null = null;
+
+export function setWriteBlocker(getter: (() => boolean) | null): void {
+  _writeBlocker = getter;
+}
+
+const WRITE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+/**
+ * Thrown when a write is attempted while the registered write blocker is
+ * active. Lets callers distinguish an intentional offline rejection from a
+ * genuine server error.
+ */
+export class OfflineError extends Error {
+  readonly name = "OfflineError";
+  constructor() {
+    super("You're offline — can't reach the server. Reconnect to continue.");
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+export function isOfflineError(err: unknown): boolean {
+  return err instanceof OfflineError;
+}
+
+
+/**
  * Set a base URL that is prepended to every relative request URL
  * (i.e. paths that start with `/`).
  *
@@ -335,6 +368,13 @@ export async function customFetch<T = unknown>(
   const { responseType = "auto", headers: headersInit, ...init } = options;
 
   const method = resolveMethod(input, init.method);
+
+  // Fail-fast for mutating requests while the write blocker is active —
+  // prevents creating/changing anything when the server is unreachable
+  // instead of letting it fail later with a confusing network error.
+  if (WRITE_METHODS.has(method) && _writeBlocker && _writeBlocker()) {
+    throw new OfflineError();
+  }
 
   if (init.body != null && (method === "GET" || method === "HEAD")) {
     throw new TypeError(`customFetch: ${method} requests cannot have a body.`);
