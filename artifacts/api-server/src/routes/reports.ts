@@ -391,4 +391,62 @@ router.get("/reports/insurance-claims", requireAuth, requireRole("admin", "pharm
   });
 });
 
+// Detailed sale report — every individual transaction within the range, with
+// patient, staff, item count, discount/tax breakdown and payment method.
+// Complements the daily-totals "sales" endpoint with line-level detail.
+router.get("/reports/sales-transactions", requireAuth, requireRole("admin", "pharmacist", "viewer"), async (req, res): Promise<void> => {
+  const from = req.query["from"] as string | undefined;
+  const to = req.query["to"] as string | undefined;
+  const conditions = [];
+  if (from) conditions.push(gte(sql`DATE(${ordersTable.createdAt})`, from));
+  if (to) conditions.push(lte(sql`DATE(${ordersTable.createdAt})`, to));
+
+  const rows = await db
+    .select({
+      id: ordersTable.id,
+      createdAt: ordersTable.createdAt,
+      patientName: ordersTable.patientName,
+      servedByName: usersTable.name,
+      status: ordersTable.status,
+      subtotal: ordersTable.subtotal,
+      discountAmount: ordersTable.discountAmount,
+      taxAmount: ordersTable.taxAmount,
+      total: ordersTable.total,
+      paymentStatus: ordersTable.paymentStatus,
+      paymentMethod: sql<string | null>`(
+        SELECT ${paymentsTable.method} FROM ${paymentsTable}
+        WHERE ${paymentsTable.orderId} = ${ordersTable.id} AND ${paymentsTable.status} = 'completed'
+        ORDER BY ${paymentsTable.createdAt} DESC LIMIT 1
+      )`,
+      itemCount: sql<number>`(
+        SELECT COUNT(*)::int FROM ${orderItemsTable}
+        WHERE ${orderItemsTable.orderId} = ${ordersTable.id}
+      )`,
+    })
+    .from(ordersTable)
+    .leftJoin(usersTable, eq(ordersTable.servedBy, usersTable.id))
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(desc(ordersTable.createdAt));
+
+  const totalRevenue = rows
+    .filter((r) => r.status !== "cancelled")
+    .reduce((s, r) => s + parseFloat(r.total ?? "0"), 0);
+  const totalDiscount = rows
+    .filter((r) => r.status !== "cancelled")
+    .reduce((s, r) => s + parseFloat(r.discountAmount ?? "0"), 0);
+  const totalTax = rows
+    .filter((r) => r.status !== "cancelled")
+    .reduce((s, r) => s + parseFloat(r.taxAmount ?? "0"), 0);
+  const cancelledCount = rows.filter((r) => r.status === "cancelled").length;
+
+  res.json({
+    totalSales: rows.filter((r) => r.status !== "cancelled").length,
+    totalRevenue: totalRevenue.toFixed(2),
+    totalDiscount: totalDiscount.toFixed(2),
+    totalTax: totalTax.toFixed(2),
+    cancelledCount,
+    transactions: rows,
+  });
+});
+
 export default router;

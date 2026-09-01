@@ -589,6 +589,40 @@ export function useInsuranceClaimsReport(from?: string, to?: string) {
   })
 }
 
+export interface SaleTransaction {
+  id: number
+  createdAt: string
+  patientName: string | null
+  servedByName: string | null
+  status: string
+  subtotal: string
+  discountAmount: string
+  taxAmount: string
+  total: string
+  paymentStatus: string
+  paymentMethod: string | null
+  itemCount: number
+}
+
+export interface SalesTransactionsReport {
+  totalSales: number
+  totalRevenue: string
+  totalDiscount: string
+  totalTax: string
+  cancelledCount: number
+  transactions: SaleTransaction[]
+}
+
+export function useSalesTransactionsReport(from?: string, to?: string) {
+  return useQuery<SalesTransactionsReport>({
+    queryKey: ['reports-sales-transactions', from, to],
+    queryFn: async () => {
+      const res = await fetch(apiUrl(`reports/sales-transactions${qs({ from, to })}`), { headers: authHeaders() })
+      return jsonOrThrow(res, 'Failed to load sale report')
+    }
+  })
+}
+
 // ── Stocktake ────────────────────────────────────────────────────────────
 
 export interface StocktakeSummary {

@@ -13,7 +13,8 @@ import {
   Truck,
   Timer,
   ShieldAlert,
-  FileText
+  FileText,
+  Receipt
 } from 'lucide-react'
 import { useGetInventoryReport } from '@workspace/api-client-react'
 import {
@@ -25,7 +26,8 @@ import {
   usePurchasesBySupplier,
   useExpiringStock,
   useControlledSubstancesReport,
-  useInsuranceClaimsReport
+  useInsuranceClaimsReport,
+  useSalesTransactionsReport
 } from '../hooks/useExtraQueries'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { useUiStore } from '../store/uiStore'
@@ -34,7 +36,7 @@ import { usePharmacySettings, formatCurrency } from '../hooks/usePharmacySetting
 import { useGetSalesReport } from '@workspace/api-client-react'
 import Loading from '../components/Loading'
 
-type Tab = 'overview' | 'reorder' | 'staff' | 'payments' | 'purchases' | 'expiring' | 'controlled' | 'claims'
+type Tab = 'overview' | 'sales' | 'reorder' | 'staff' | 'payments' | 'purchases' | 'expiring' | 'controlled' | 'claims'
 
 const URGENCY_COLOR: Record<string, 'ok' | 'low' | 'expiring'> = {
   critical: 'expiring',
@@ -140,9 +142,11 @@ export default function Reports(): ReactElement {
   const { data: expiring = [], isLoading: expiringLoading } = useExpiringStock(expiryDays)
   const { data: controlled, isLoading: controlledLoading } = useControlledSubstancesReport(fromDate, toDate)
   const { data: claims, isLoading: claimsLoading } = useInsuranceClaimsReport(fromDate, toDate)
+  const { data: saleReport, isLoading: saleLoading } = useSalesTransactionsReport(fromDate, toDate)
 
   const tabs: { key: Tab; label: string; icon: typeof TrendingUp }[] = [
     { key: 'overview', label: 'Overview', icon: TrendingUp },
+    { key: 'sales', label: 'Sale Report', icon: Receipt },
     { key: 'reorder', label: 'Reorder', icon: Flame },
     { key: 'staff', label: 'Staff', icon: UsersIcon },
     { key: 'payments', label: 'Payments', icon: CreditCard },
@@ -226,6 +230,26 @@ export default function Reports(): ReactElement {
       'insurance-claims',
       ['Status', 'Claims', 'Amount'],
       (claims?.byStatus ?? []).map((s) => [s.status, s.count, s.amount])
+    )
+  }
+
+  const exportSalesTransactionsCsv = (): void => {
+    downloadCsv(
+      'sale-report',
+      ['Sale ID', 'Date', 'Patient', 'Staff', 'Items', 'Subtotal', 'Discount', 'Tax', 'Total', 'Payment', 'Status'],
+      (saleReport?.transactions ?? []).map((t) => [
+        t.id,
+        new Date(t.createdAt).toLocaleString(),
+        t.patientName ?? '',
+        t.servedByName ?? '',
+        t.itemCount,
+        t.subtotal,
+        t.discountAmount,
+        t.taxAmount,
+        t.total,
+        t.paymentMethod ?? t.paymentStatus,
+        t.status
+      ])
     )
   }
 
@@ -462,6 +486,132 @@ export default function Reports(): ReactElement {
                   ))}
                 </tbody>
               </table>
+            )}
+          </div>
+        </div>
+      )}
+
+      {tab === 'sales' && (
+        <div className="space-y-5">
+          <div className="flex gap-4">
+            <GradientStat
+              icon={Receipt}
+              label="Total Sales"
+              value={saleLoading ? '…' : String(saleReport?.totalSales ?? 0)}
+              accent={theme.primary}
+              theme={theme}
+            />
+            <GradientStat
+              icon={TrendingUp}
+              label="Sale Revenue"
+              value={saleLoading ? '…' : formatCurrency(parseFloat(saleReport?.totalRevenue ?? '0'), settings)}
+              accent={theme.green}
+              theme={theme}
+            />
+            <GradientStat
+              icon={AlertTriangle}
+              label="Discounts"
+              value={saleLoading ? '…' : formatCurrency(parseFloat(saleReport?.totalDiscount ?? '0'), settings)}
+              accent={theme.amber}
+              theme={theme}
+              sub={saleLoading ? undefined : `tax ${formatCurrency(parseFloat(saleReport?.totalTax ?? '0'), settings)}`}
+            />
+            <GradientStat
+              icon={Package}
+              label="Cancelled"
+              value={saleLoading ? '…' : String(saleReport?.cancelledCount ?? 0)}
+              accent={theme.red}
+              theme={theme}
+            />
+          </div>
+          <div style={{ background: theme.card, border: `1px solid ${theme.border}` }} className="rounded-2xl overflow-hidden">
+            <div className="px-5 py-3.5 flex items-center justify-between gap-2" style={{ borderBottom: `1px solid ${theme.border}` }}>
+              <div>
+                <h2 style={{ color: theme.text }} className="text-sm font-medium">
+                  Sale Transactions
+                </h2>
+                <p style={{ color: theme.muted }} className="text-xs mt-0.5">
+                  Every sale in this date range
+                </p>
+              </div>
+              {saleReport?.transactions?.length ? (
+                <button onClick={exportSalesTransactionsCsv} className="flex items-center gap-1.5 text-xs font-medium transition-opacity hover:opacity-70" style={{ color: theme.muted }}>
+                  <Download size={13} /> Export CSV
+                </button>
+              ) : null}
+            </div>
+            {saleLoading ? (
+              <Loading label="Loading…" />
+            ) : !saleReport?.transactions?.length ? (
+              <p style={{ color: theme.muted }} className="p-4 text-sm">
+                No sales in this date range.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr style={{ color: theme.muted, borderBottom: `1px solid ${theme.border}` }} className="text-left text-xs uppercase tracking-wide">
+                      <th className="py-2.5 px-5 font-medium">#</th>
+                      <th className="py-2.5 px-5 font-medium">Date</th>
+                      <th className="py-2.5 px-5 font-medium">Patient</th>
+                      <th className="py-2.5 px-5 font-medium">Staff</th>
+                      <th className="py-2.5 px-5 font-medium">Items</th>
+                      <th className="py-2.5 px-5 font-medium">Subtotal</th>
+                      <th className="py-2.5 px-5 font-medium">Disc</th>
+                      <th className="py-2.5 px-5 font-medium">Tax</th>
+                      <th className="py-2.5 px-5 font-medium">Total</th>
+                      <th className="py-2.5 px-5 font-medium">Pay</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {saleReport.transactions.map((t, i) => {
+                      const cancelled = t.status === 'cancelled'
+                      return (
+                        <tr key={t.id} style={{ borderTop: i ? `1px solid ${theme.border}` : 'none', opacity: cancelled ? 0.5 : 1 }}>
+                          <td className="py-2.5 px-5" style={{ ...mono, color: theme.muted }}>
+                            #{t.id}
+                          </td>
+                          <td className="py-2.5 px-5" style={{ ...mono, color: theme.muted }}>
+                            {new Date(t.createdAt).toLocaleDateString()}
+                          </td>
+                          <td className="py-2.5 px-5" style={{ color: theme.text }}>
+                            {t.patientName ?? 'Walk-in'}
+                          </td>
+                          <td className="py-2.5 px-5" style={{ color: theme.muted }}>
+                            {t.servedByName ?? '—'}
+                          </td>
+                          <td className="py-2.5 px-5" style={{ ...mono, color: theme.muted }}>
+                            {t.itemCount}
+                          </td>
+                          <td className="py-2.5 px-5" style={{ ...mono, color: theme.text }}>
+                            {formatCurrency(parseFloat(t.subtotal), settings)}
+                          </td>
+                          <td className="py-2.5 px-5" style={{ ...mono, color: theme.muted }}>
+                            {parseFloat(t.discountAmount) > 0 ? formatCurrency(parseFloat(t.discountAmount), settings) : '—'}
+                          </td>
+                          <td className="py-2.5 px-5" style={{ ...mono, color: theme.muted }}>
+                            {formatCurrency(parseFloat(t.taxAmount), settings)}
+                          </td>
+                          <td className="py-2.5 px-5" style={{ ...mono, color: theme.text }}>
+                            {formatCurrency(parseFloat(t.total), settings)}
+                          </td>
+                          <td className="py-2.5 px-5">
+                            <span
+                              style={{
+                                color: t.paymentStatus === 'unpaid' ? theme.red : theme.primary,
+                                background: t.paymentStatus === 'unpaid' ? theme.redBg : theme.primary + '22'
+                              }}
+                              className="inline-block px-2 py-0.5 rounded-full text-xs capitalize font-medium"
+                            >
+                              {t.paymentMethod ?? t.paymentStatus}
+                            </span>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         </div>
