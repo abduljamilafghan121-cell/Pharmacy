@@ -8,6 +8,7 @@ import TitleBar from './components/TitleBar'
 import Sidebar from './components/Sidebar'
 import CommandPalette from './components/CommandPalette'
 import Toast from './components/Toast'
+import Loading from './components/Loading'
 import Login from './screens/Login'
 import Setup from './screens/Setup'
 import Dashboard from './screens/Dashboard'
@@ -129,8 +130,8 @@ function Gate(): ReactElement {
 
   if (isLoading || (setupLoading && !setupError)) {
     return (
-      <div style={{ background: theme.bg, color: theme.muted }} className="h-screen flex items-center justify-center text-sm">
-        Loading…
+      <div style={{ background: theme.bg }} className="h-screen flex items-center justify-center">
+        <Loading label="Loading…" size="lg" />
       </div>
     )
   }
@@ -140,7 +141,7 @@ function Gate(): ReactElement {
     return (
       <div style={{ background: theme.bg }} className="h-screen">
         <TitleBar />
-        <div style={{ height: 'calc(100% - 44px)' }}>{needsSetup ? <Setup /> : <Login />}</div>
+        <div style={{ height: 'calc(100% - 46px)' }}>{needsSetup ? <Setup /> : <Login />}</div>
       </div>
     )
   }

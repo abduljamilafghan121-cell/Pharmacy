@@ -9,7 +9,13 @@ const api = {
     minimize: (): void => ipcRenderer.send('window:minimize'),
     maximize: (): void => ipcRenderer.send('window:maximize'),
     close: (): void => ipcRenderer.send('window:close'),
-    setBackgroundColor: (color: string): void => ipcRenderer.send('window:set-background', color)
+    setBackgroundColor: (color: string): void => ipcRenderer.send('window:set-background', color),
+    isMaximized: (): boolean => ipcRenderer.sendSync('window:is-maximized'),
+    onMaximizedChange: (cb: (maximized: boolean) => void): (() => void) => {
+      const listener = (_e: Electron.IpcRendererEvent, maximized: boolean): void => cb(maximized)
+      ipcRenderer.on('window:maximized-changed', listener)
+      return () => ipcRenderer.removeListener('window:maximized-changed', listener)
+    }
   },
   printer: {
     test: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('printer:test')

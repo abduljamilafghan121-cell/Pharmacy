@@ -4,6 +4,7 @@ import { Lock, Search, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react
 import { useControlledSubstanceLogs } from '../hooks/useExtraQueries'
 import { useUiStore } from '../store/uiStore'
 import { getTheme, mono, serif } from '../theme'
+import Loading from '../components/Loading'
 
 const SCHEDULES = ['II', 'III', 'IV', 'V'] as const
 const PAGE_SIZE = 50
@@ -108,9 +109,7 @@ export default function ControlledSubstanceLogs(): ReactElement {
 
       <div style={{ background: theme.card, border: `1px solid ${theme.border}` }} className="rounded-xl overflow-hidden">
         {isLoading ? (
-          <p style={{ color: theme.muted }} className="p-4 text-sm">
-            Loading dispensing log…
-          </p>
+          <Loading label="Loading dispensing log…" />
         ) : isError ? (
           <div className="p-4 text-center">
             <p style={{ color: theme.red }} className="text-sm mb-2">Couldn&apos;t load the controlled substance log.</p>

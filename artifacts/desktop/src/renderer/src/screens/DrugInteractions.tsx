@@ -6,6 +6,7 @@ import { useListMedicines } from '@workspace/api-client-react'
 import type { Medicine } from '@workspace/api-client-react'
 import { useListDrugInteractions, type DrugInteraction } from '../hooks/useExtraQueries'
 import { useUiStore } from '../store/uiStore'
+import Loading from '../components/Loading'
 import { getTheme, mono, serif } from '../theme'
 import { apiUrl, authHeaders, jsonOrThrow } from '../lib/apiClient'
 import Modal from '../components/Modal'
@@ -265,7 +266,7 @@ export default function DrugInteractions(): ReactElement {
       </div>
 
       {isLoading ? (
-        <p style={{ color: theme.muted }} className="text-sm">Loading interactions…</p>
+        <Loading label="Loading interactions…" />
       ) : isError ? (
         <div style={{ background: theme.card, border: `1px solid ${theme.border}` }} className="text-center py-16 rounded-xl">
           <p style={{ color: theme.red }} className="text-sm mb-3">Couldn&apos;t load drug interactions.</p>

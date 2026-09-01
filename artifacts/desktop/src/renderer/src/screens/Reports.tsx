@@ -8,22 +8,33 @@ import {
   Users as UsersIcon,
   ArrowUpRight,
   Download,
-  Flame
+  Flame,
+  CreditCard,
+  Truck,
+  Timer,
+  ShieldAlert,
+  FileText
 } from 'lucide-react'
 import { useGetInventoryReport } from '@workspace/api-client-react'
 import {
   useGetProfitReport,
   useTopMedicinesRanged,
   useStaffProductivity,
-  useReorderSuggestions
+  useReorderSuggestions,
+  usePaymentsReport,
+  usePurchasesBySupplier,
+  useExpiringStock,
+  useControlledSubstancesReport,
+  useInsuranceClaimsReport
 } from '../hooks/useExtraQueries'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { useUiStore } from '../store/uiStore'
 import { getTheme, mono, serif } from '../theme'
 import { usePharmacySettings, formatCurrency } from '../hooks/usePharmacySettings'
 import { useGetSalesReport } from '@workspace/api-client-react'
+import Loading from '../components/Loading'
 
-type Tab = 'overview' | 'reorder' | 'staff'
+type Tab = 'overview' | 'reorder' | 'staff' | 'payments' | 'purchases' | 'expiring' | 'controlled' | 'claims'
 
 const URGENCY_COLOR: Record<string, 'ok' | 'low' | 'expiring'> = {
   critical: 'expiring',
@@ -122,10 +133,23 @@ export default function Reports(): ReactElement {
   const { data: reorder = [], isLoading: reorderLoading } = useReorderSuggestions()
   const { data: staff = [], isLoading: staffLoading } = useStaffProductivity(fromDate, toDate)
 
+  const [expiryDays, setExpiryDays] = useState(90)
+
+  const { data: payments, isLoading: paymentsLoading } = usePaymentsReport(fromDate, toDate)
+  const { data: purchases = [], isLoading: purchasesLoading } = usePurchasesBySupplier(fromDate, toDate)
+  const { data: expiring = [], isLoading: expiringLoading } = useExpiringStock(expiryDays)
+  const { data: controlled, isLoading: controlledLoading } = useControlledSubstancesReport(fromDate, toDate)
+  const { data: claims, isLoading: claimsLoading } = useInsuranceClaimsReport(fromDate, toDate)
+
   const tabs: { key: Tab; label: string; icon: typeof TrendingUp }[] = [
     { key: 'overview', label: 'Overview', icon: TrendingUp },
-    { key: 'reorder', label: 'Reorder Suggestions', icon: Flame },
-    { key: 'staff', label: 'Staff Productivity', icon: UsersIcon }
+    { key: 'reorder', label: 'Reorder', icon: Flame },
+    { key: 'staff', label: 'Staff', icon: UsersIcon },
+    { key: 'payments', label: 'Payments', icon: CreditCard },
+    { key: 'purchases', label: 'Purchases', icon: Truck },
+    { key: 'expiring', label: 'Expiring', icon: Timer },
+    { key: 'controlled', label: 'Controlled', icon: ShieldAlert },
+    { key: 'claims', label: 'Claims', icon: FileText }
   ]
 
   const exportSalesCsv = (): void => {
@@ -155,6 +179,56 @@ export default function Reports(): ReactElement {
     URL.revokeObjectURL(url)
   }
 
+  const downloadCsv = (name: string, header: string[], rows: (string | number)[][]): void => {
+    if (!rows.length) return
+    const csv = [header, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${name}-${fromDate}-to-${toDate}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const exportPaymentsCsv = (): void => {
+    const rows: (string | number)[][] = []
+    payments?.byMethod.forEach((m) => rows.push([m.method, m.count, m.amount]))
+    downloadCsv('payments-report', ['Method', 'Transactions', 'Amount'], rows)
+  }
+
+  const exportPurchasesCsv = (): void => {
+    downloadCsv(
+      'purchases-report',
+      ['Supplier', 'POs', 'Purchased', 'Paid', 'Returns', 'Balance'],
+      purchases.map((p) => [p.supplierName, p.purchaseOrders, p.totalPurchased, p.totalPaid, p.totalReturns, p.balance])
+    )
+  }
+
+  const exportExpiringCsv = (): void => {
+    downloadCsv(
+      'expiring-stock',
+      ['Medicine', 'Batch', 'Expiry', 'Qty', 'Supplier'],
+      expiring.map((e) => [e.medicineName ?? '', e.batchNumber ?? '', e.expiryDate ?? '', e.quantity, e.supplierName ?? ''])
+    )
+  }
+
+  const exportControlledCsv = (): void => {
+    downloadCsv(
+      'controlled-substances',
+      ['Schedule', 'Events', 'Units'],
+      (controlled?.bySchedule ?? []).map((s) => [s.schedule, s.count, s.quantity])
+    )
+  }
+
+  const exportClaimsCsv = (): void => {
+    downloadCsv(
+      'insurance-claims',
+      ['Status', 'Claims', 'Amount'],
+      (claims?.byStatus ?? []).map((s) => [s.status, s.count, s.amount])
+    )
+  }
+
   return (
     <div className="p-7">
       <div className="flex items-center justify-between mb-5">
@@ -168,7 +242,7 @@ export default function Reports(): ReactElement {
         </div>
         <div
           style={{ background: theme.card, border: `1px solid ${theme.border}` }}
-          className="flex items-center gap-1 p-1 rounded-xl"
+          className="flex flex-wrap items-center gap-1 p-1 rounded-xl"
         >
           {tabs.map((t) => {
             const active = tab === t.key
@@ -354,9 +428,7 @@ export default function Reports(): ReactElement {
               )}
             </div>
             {topLoading ? (
-              <p style={{ color: theme.muted }} className="p-4 text-sm">
-                Loading…
-              </p>
+              <Loading label="Loading…" />
             ) : topMedicines.length === 0 ? (
               <p style={{ color: theme.muted }} className="p-4 text-sm">
                 No sales data yet.
@@ -398,9 +470,7 @@ export default function Reports(): ReactElement {
       {tab === 'reorder' && (
         <div style={{ background: theme.card, border: `1px solid ${theme.border}` }} className="rounded-2xl overflow-hidden">
           {reorderLoading ? (
-            <p style={{ color: theme.muted }} className="p-4 text-sm">
-              Loading reorder suggestions…
-            </p>
+            <Loading label="Loading reorder suggestions…" />
           ) : reorder.length === 0 ? (
             <p style={{ color: theme.muted }} className="p-4 text-sm">
               Nothing needs reordering right now.
@@ -454,9 +524,7 @@ export default function Reports(): ReactElement {
       {tab === 'staff' && (
         <div style={{ background: theme.card, border: `1px solid ${theme.border}` }} className="rounded-2xl overflow-hidden">
           {staffLoading ? (
-            <p style={{ color: theme.muted }} className="p-4 text-sm">
-              Loading staff productivity…
-            </p>
+            <Loading label="Loading staff productivity…" />
           ) : staff.length === 0 ? (
             <p style={{ color: theme.muted }} className="p-4 text-sm">
               No staff activity yet.
@@ -495,6 +563,432 @@ export default function Reports(): ReactElement {
               </tbody>
             </table>
           )}
+        </div>
+      )}
+
+      {tab === 'payments' && (
+        <div className="space-y-5">
+          <div className="flex gap-4">
+            <GradientStat
+              icon={CreditCard}
+              label="Collected"
+              value={paymentsLoading ? '…' : formatCurrency(parseFloat(payments?.totalCollected ?? '0'), settings)}
+              accent={theme.green}
+              theme={theme}
+            />
+            <GradientStat
+              icon={AlertTriangle}
+              label="Outstanding (unpaid)"
+              value={paymentsLoading ? '…' : formatCurrency(parseFloat(payments?.outstanding.amount ?? '0'), settings)}
+              accent={theme.red}
+              theme={theme}
+              sub={paymentsLoading ? undefined : `${payments?.outstanding.count ?? 0} unpaid orders`}
+            />
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <div style={{ background: theme.card, border: `1px solid ${theme.border}` }} className="rounded-2xl overflow-hidden">
+              <div className="px-5 py-3.5 flex items-center justify-between gap-2" style={{ borderBottom: `1px solid ${theme.border}` }}>
+                <div>
+                  <h2 style={{ color: theme.text }} className="text-sm font-medium">
+                    Payments by Method
+                  </h2>
+                  <p style={{ color: theme.muted }} className="text-xs mt-0.5">
+                    Completed transactions
+                  </p>
+                </div>
+                {payments?.byMethod?.length ? (
+                  <button onClick={exportPaymentsCsv} className="flex items-center gap-1.5 text-xs font-medium transition-opacity hover:opacity-70" style={{ color: theme.muted }}>
+                    <Download size={13} /> Export CSV
+                  </button>
+                ) : null}
+              </div>
+              {paymentsLoading ? (
+                <Loading label="Loading…" />
+              ) : !payments?.byMethod?.length ? (
+                <p style={{ color: theme.muted }} className="p-4 text-sm">
+                  No payments in this date range.
+                </p>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr style={{ color: theme.muted, borderBottom: `1px solid ${theme.border}` }} className="text-left text-xs uppercase tracking-wide">
+                      <th className="py-2.5 px-5 font-medium">Method</th>
+                      <th className="py-2.5 px-5 font-medium">Transactions</th>
+                      <th className="py-2.5 px-5 font-medium">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {payments.byMethod.map((m, i) => (
+                      <tr key={m.method} style={{ borderTop: i ? `1px solid ${theme.border}` : 'none' }}>
+                        <td className="py-2.5 px-5 capitalize" style={{ color: theme.text }}>
+                          {m.method}
+                        </td>
+                        <td className="py-2.5 px-5" style={{ ...mono, color: theme.muted }}>
+                          {m.count}
+                        </td>
+                        <td className="py-2.5 px-5" style={{ ...mono, color: theme.text }}>
+                          {formatCurrency(parseFloat(m.amount), settings)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+            <div style={{ background: theme.card, border: `1px solid ${theme.border}` }} className="rounded-2xl overflow-hidden">
+              <div className="px-5 py-3.5" style={{ borderBottom: `1px solid ${theme.border}` }}>
+                <h2 style={{ color: theme.text }} className="text-sm font-medium">
+                  Orders by Payment Status
+                </h2>
+              </div>
+              {paymentsLoading ? (
+                <Loading label="Loading…" />
+              ) : !payments?.byOrderStatus?.length ? (
+                <p style={{ color: theme.muted }} className="p-4 text-sm">
+                  No orders in this date range.
+                </p>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr style={{ color: theme.muted, borderBottom: `1px solid ${theme.border}` }} className="text-left text-xs uppercase tracking-wide">
+                      <th className="py-2.5 px-5 font-medium">Status</th>
+                      <th className="py-2.5 px-5 font-medium">Orders</th>
+                      <th className="py-2.5 px-5 font-medium">Value</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {payments.byOrderStatus.map((o, i) => (
+                      <tr key={o.paymentStatus} style={{ borderTop: i ? `1px solid ${theme.border}` : 'none' }}>
+                        <td className="py-2.5 px-5 capitalize" style={{ color: o.paymentStatus === 'unpaid' ? theme.red : theme.text }}>
+                          {o.paymentStatus}
+                        </td>
+                        <td className="py-2.5 px-5" style={{ ...mono, color: theme.muted }}>
+                          {o.count}
+                        </td>
+                        <td className="py-2.5 px-5" style={{ ...mono, color: theme.text }}>
+                          {formatCurrency(parseFloat(o.amount), settings)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab === 'purchases' && (
+        <div style={{ background: theme.card, border: `1px solid ${theme.border}` }} className="rounded-2xl overflow-hidden">
+          <div className="px-5 py-3.5 flex items-center justify-between gap-2" style={{ borderBottom: `1px solid ${theme.border}` }}>
+            <div>
+              <h2 style={{ color: theme.text }} className="text-sm font-medium">
+                Purchases by Supplier
+              </h2>
+              <p style={{ color: theme.muted }} className="text-xs mt-0.5">
+                Outstanding balance = purchased − paid − returned
+              </p>
+            </div>
+            {purchases.length ? (
+              <button onClick={exportPurchasesCsv} className="flex items-center gap-1.5 text-xs font-medium transition-opacity hover:opacity-70" style={{ color: theme.muted }}>
+                <Download size={13} /> Export CSV
+              </button>
+            ) : null}
+          </div>
+          {purchasesLoading ? (
+            <Loading label="Loading…" />
+          ) : purchases.length === 0 ? (
+            <p style={{ color: theme.muted }} className="p-4 text-sm">
+              No supplier activity in this date range.
+            </p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr style={{ color: theme.muted, borderBottom: `1px solid ${theme.border}` }} className="text-left text-xs uppercase tracking-wide">
+                  <th className="py-2.5 px-5 font-medium">Supplier</th>
+                  <th className="py-2.5 px-5 font-medium">POs</th>
+                  <th className="py-2.5 px-5 font-medium">Purchased</th>
+                  <th className="py-2.5 px-5 font-medium">Paid</th>
+                  <th className="py-2.5 px-5 font-medium">Returns</th>
+                  <th className="py-2.5 px-5 font-medium">Balance</th>
+                </tr>
+              </thead>
+              <tbody>
+                {purchases.map((p, i) => {
+                  const bal = parseFloat(p.balance)
+                  return (
+                    <tr key={p.supplierId} style={{ borderTop: i ? `1px solid ${theme.border}` : 'none' }}>
+                      <td className="py-2.5 px-5" style={{ color: theme.text }}>
+                        {p.supplierName}
+                      </td>
+                      <td className="py-2.5 px-5" style={{ ...mono, color: theme.muted }}>
+                        {p.purchaseOrders}
+                      </td>
+                      <td className="py-2.5 px-5" style={{ ...mono, color: theme.text }}>
+                        {formatCurrency(parseFloat(p.totalPurchased), settings)}
+                      </td>
+                      <td className="py-2.5 px-5" style={{ ...mono, color: theme.green }}>
+                        {formatCurrency(parseFloat(p.totalPaid), settings)}
+                      </td>
+                      <td className="py-2.5 px-5" style={{ ...mono, color: theme.muted }}>
+                        {formatCurrency(parseFloat(p.totalReturns), settings)}
+                      </td>
+                      <td className="py-2.5 px-5" style={{ ...mono, color: bal > 0 ? theme.red : theme.text }}>
+                        {formatCurrency(bal, settings)}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {tab === 'expiring' && (
+        <div style={{ background: theme.card, border: `1px solid ${theme.border}` }} className="rounded-2xl overflow-hidden">
+          <div className="px-5 py-3.5 flex items-center justify-between gap-2" style={{ borderBottom: `1px solid ${theme.border}` }}>
+            <div>
+              <h2 style={{ color: theme.text }} className="text-sm font-medium">
+                Expiring Stock
+              </h2>
+              <p style={{ color: theme.muted }} className="text-xs mt-0.5">
+                Batches with remaining stock expiring soon
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {[30, 60, 90, 180].map((d) => (
+                <button
+                  key={d}
+                  onClick={() => setExpiryDays(d)}
+                  style={{
+                    background: expiryDays === d ? theme.primary : 'transparent',
+                    color: expiryDays === d ? '#fff' : theme.muted,
+                    border: `1px solid ${theme.borderStrong}`
+                  }}
+                  className="text-xs font-medium px-2.5 py-1 rounded-lg transition-colors"
+                >
+                  {d}d
+                </button>
+              ))}
+              {expiring.length ? (
+                <button onClick={exportExpiringCsv} className="flex items-center gap-1.5 text-xs font-medium transition-opacity hover:opacity-70 ml-2" style={{ color: theme.muted }}>
+                  <Download size={13} /> Export CSV
+                </button>
+              ) : null}
+            </div>
+          </div>
+          {expiringLoading ? (
+            <Loading label="Loading…" />
+          ) : expiring.length === 0 ? (
+            <p style={{ color: theme.muted }} className="p-4 text-sm">
+              No stock expiring within {expiryDays} days.
+            </p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr style={{ color: theme.muted, borderBottom: `1px solid ${theme.border}` }} className="text-left text-xs uppercase tracking-wide">
+                  <th className="py-2.5 px-5 font-medium">Medicine</th>
+                  <th className="py-2.5 px-5 font-medium">Batch</th>
+                  <th className="py-2.5 px-5 font-medium">Expiry</th>
+                  <th className="py-2.5 px-5 font-medium">Qty</th>
+                  <th className="py-2.5 px-5 font-medium">Supplier</th>
+                </tr>
+              </thead>
+              <tbody>
+                {expiring.map((e, i) => (
+                  <tr key={e.batchId} style={{ borderTop: i ? `1px solid ${theme.border}` : 'none' }}>
+                    <td className="py-2.5 px-5" style={{ color: theme.text }}>
+                      {e.medicineName}
+                    </td>
+                    <td className="py-2.5 px-5" style={{ ...mono, color: theme.muted }}>
+                      {e.batchNumber ?? '—'}
+                    </td>
+                    <td className="py-2.5 px-5" style={{ ...mono, color: theme.amber }}>
+                      {e.expiryDate ?? '—'}
+                    </td>
+                    <td className="py-2.5 px-5" style={{ ...mono, color: theme.text }}>
+                      {e.quantity}
+                    </td>
+                    <td className="py-2.5 px-5" style={{ color: theme.muted }}>
+                      {e.supplierName ?? '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {tab === 'controlled' && (
+        <div className="space-y-5">
+          <div className="flex gap-4">
+            <GradientStat
+              icon={ShieldAlert}
+              label="Dispensing Events"
+              value={controlledLoading ? '…' : String(controlled?.totalEvents ?? 0)}
+              accent={theme.red}
+              theme={theme}
+              sub={controlledLoading ? undefined : 'controlled substances'}
+            />
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <div style={{ background: theme.card, border: `1px solid ${theme.border}` }} className="rounded-2xl overflow-hidden">
+              <div className="px-5 py-3.5 flex items-center justify-between gap-2" style={{ borderBottom: `1px solid ${theme.border}` }}>
+                <div>
+                  <h2 style={{ color: theme.text }} className="text-sm font-medium">
+                    By Schedule
+                  </h2>
+                </div>
+                {controlled?.bySchedule?.length ? (
+                  <button onClick={exportControlledCsv} className="flex items-center gap-1.5 text-xs font-medium transition-opacity hover:opacity-70" style={{ color: theme.muted }}>
+                    <Download size={13} /> Export CSV
+                  </button>
+                ) : null}
+              </div>
+              {controlledLoading ? (
+                <Loading label="Loading…" />
+              ) : !controlled?.bySchedule?.length ? (
+                <p style={{ color: theme.muted }} className="p-4 text-sm">
+                  No controlled dispensing in this date range.
+                </p>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr style={{ color: theme.muted, borderBottom: `1px solid ${theme.border}` }} className="text-left text-xs uppercase tracking-wide">
+                      <th className="py-2.5 px-5 font-medium">Schedule</th>
+                      <th className="py-2.5 px-5 font-medium">Events</th>
+                      <th className="py-2.5 px-5 font-medium">Units</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {controlled.bySchedule.map((s, i) => (
+                      <tr key={s.schedule} style={{ borderTop: i ? `1px solid ${theme.border}` : 'none' }}>
+                        <td className="py-2.5 px-5" style={{ ...mono, color: theme.text }}>
+                          Schedule {s.schedule}
+                        </td>
+                        <td className="py-2.5 px-5" style={{ ...mono, color: theme.muted }}>
+                          {s.count}
+                        </td>
+                        <td className="py-2.5 px-5" style={{ ...mono, color: theme.text }}>
+                          {s.quantity}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+            <div style={{ background: theme.card, border: `1px solid ${theme.border}` }} className="rounded-2xl overflow-hidden">
+              <div className="px-5 py-3.5" style={{ borderBottom: `1px solid ${theme.border}` }}>
+                <h2 style={{ color: theme.text }} className="text-sm font-medium">
+                  By Medicine
+                </h2>
+              </div>
+              {controlledLoading ? (
+                <Loading label="Loading…" />
+              ) : !controlled?.byMedicine?.length ? (
+                <p style={{ color: theme.muted }} className="p-4 text-sm">
+                  No controlled dispensing in this date range.
+                </p>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr style={{ color: theme.muted, borderBottom: `1px solid ${theme.border}` }} className="text-left text-xs uppercase tracking-wide">
+                      <th className="py-2.5 px-5 font-medium">Medicine</th>
+                      <th className="py-2.5 px-5 font-medium">Events</th>
+                      <th className="py-2.5 px-5 font-medium">Units</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {controlled.byMedicine.map((m, i) => (
+                      <tr key={m.medicineId} style={{ borderTop: i ? `1px solid ${theme.border}` : 'none' }}>
+                        <td className="py-2.5 px-5" style={{ color: theme.text }}>
+                          {m.medicineName ?? `Medicine #${m.medicineId}`}
+                        </td>
+                        <td className="py-2.5 px-5" style={{ ...mono, color: theme.muted }}>
+                          {m.count}
+                        </td>
+                        <td className="py-2.5 px-5" style={{ ...mono, color: theme.text }}>
+                          {m.quantity}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab === 'claims' && (
+        <div className="space-y-5">
+          <div className="flex gap-4">
+            <GradientStat
+              icon={FileText}
+              label="Total Claims"
+              value={claimsLoading ? '…' : String(claims?.totalClaims ?? 0)}
+              accent={theme.primary}
+              theme={theme}
+              sub={claimsLoading ? undefined : `value ${formatCurrency(parseFloat(claims?.totalAmount ?? '0'), settings)}`}
+            />
+            <GradientStat
+              icon={CreditCard}
+              label="Pending Receivable"
+              value={claimsLoading ? '…' : formatCurrency(parseFloat(claims?.pendingReceivable ?? '0'), settings)}
+              accent={theme.amber}
+              theme={theme}
+              sub="submitted + approved, not yet paid"
+            />
+          </div>
+          <div style={{ background: theme.card, border: `1px solid ${theme.border}` }} className="rounded-2xl overflow-hidden">
+            <div className="px-5 py-3.5 flex items-center justify-between gap-2" style={{ borderBottom: `1px solid ${theme.border}` }}>
+              <div>
+                <h2 style={{ color: theme.text }} className="text-sm font-medium">
+                  Claims by Status
+                </h2>
+              </div>
+              {claims?.byStatus?.length ? (
+                <button onClick={exportClaimsCsv} className="flex items-center gap-1.5 text-xs font-medium transition-opacity hover:opacity-70" style={{ color: theme.muted }}>
+                  <Download size={13} /> Export CSV
+                </button>
+              ) : null}
+            </div>
+            {claimsLoading ? (
+              <Loading label="Loading…" />
+            ) : !claims?.byStatus?.length ? (
+              <p style={{ color: theme.muted }} className="p-4 text-sm">
+                No claims in this date range.
+              </p>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr style={{ color: theme.muted, borderBottom: `1px solid ${theme.border}` }} className="text-left text-xs uppercase tracking-wide">
+                    <th className="py-2.5 px-5 font-medium">Status</th>
+                    <th className="py-2.5 px-5 font-medium">Claims</th>
+                    <th className="py-2.5 px-5 font-medium">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {claims.byStatus.map((s, i) => (
+                    <tr key={s.status} style={{ borderTop: i ? `1px solid ${theme.border}` : 'none' }}>
+                      <td className="py-2.5 px-5 capitalize" style={{ color: s.status === 'rejected' ? theme.red : theme.text }}>
+                        {s.status}
+                      </td>
+                      <td className="py-2.5 px-5" style={{ ...mono, color: theme.muted }}>
+                        {s.count}
+                      </td>
+                      <td className="py-2.5 px-5" style={{ ...mono, color: theme.text }}>
+                        {formatCurrency(parseFloat(s.amount), settings)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
       )}
     </div>

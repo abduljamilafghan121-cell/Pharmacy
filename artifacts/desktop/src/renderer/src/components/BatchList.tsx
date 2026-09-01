@@ -5,6 +5,7 @@ import { useUiStore } from '../store/uiStore'
 import { getTheme, mono } from '../theme'
 import { useAuth } from '../hooks/useAuth'
 import { usePharmacySettings, formatCurrency } from '../hooks/usePharmacySettings'
+import Loading from './Loading'
 import {
   useMedicineBatches,
   useWriteOffBatch,
@@ -92,9 +93,7 @@ export default function BatchList({
 
       <div className="p-5">
         {isLoading ? (
-          <div style={{ color: theme.muted }} className="flex items-center gap-2 text-sm">
-            <Loader2 size={14} className="animate-spin" /> Loading batches…
-          </div>
+          <Loading label="Loading batches…" centered={false} />
         ) : !batches || batches.length === 0 ? (
           <p style={{ color: theme.muted }} className="text-sm italic">
             No batch records yet. Receive a purchase order or add a batch manually to start tracking lots.

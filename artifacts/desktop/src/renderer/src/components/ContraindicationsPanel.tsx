@@ -4,6 +4,7 @@ import { AlertCircle, Loader2, Trash2, Plus } from 'lucide-react'
 import { useUiStore } from '../store/uiStore'
 import { getTheme } from '../theme'
 import { apiUrl, authHeaders, jsonOrThrow } from '../lib/apiClient'
+import Loading from './Loading'
 
 interface Contraindication {
   id: number
@@ -126,9 +127,7 @@ export default function ContraindicationsPanel({ medicineId }: { medicineId: num
 
         {/* Existing rules */}
         {ciLoading ? (
-          <div style={{ color: theme.muted }} className="flex items-center gap-2 text-sm">
-            <Loader2 size={14} className="animate-spin" /> Loading…
-          </div>
+          <Loading label="Loading…" centered={false} />
         ) : contraindications.length === 0 ? (
           <p style={{ color: theme.muted }} className="text-sm italic">
             No contraindications defined.

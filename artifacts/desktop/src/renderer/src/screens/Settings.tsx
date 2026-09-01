@@ -20,6 +20,7 @@ import { useUiStore } from '../store/uiStore'
 import { getTheme, serif } from '../theme'
 import { useAuth } from '../hooks/useAuth'
 import { usePharmacySettings, useUpdatePharmacySettings } from '../hooks/usePharmacySettings'
+import Loading from '../components/Loading'
 
 // Display-only presets — NOT live exchange rates. Picking one just changes
 // the label formatCurrency() uses everywhere; the underlying numbers never
@@ -205,9 +206,7 @@ function PharmacySection({
       </div>
 
       {isLoading ? (
-        <div style={{ color: theme.muted }} className="flex items-center gap-2 py-6 text-sm">
-          <Loader2 size={14} className="animate-spin" /> Loading…
-        </div>
+        <Loading label="Loading…" />
       ) : (
         <form onSubmit={handleSave} className="space-y-4">
           {/* Logo upload */}
@@ -821,9 +820,7 @@ function CategoriesSection({
       </form>
 
       {isLoading ? (
-        <p style={{ color: theme.muted }} className="text-sm">
-          Loading…
-        </p>
+        <Loading label="Loading…" />
       ) : categories.length === 0 ? (
         <p style={{ color: theme.muted }} className="text-sm py-4 text-center">
           No categories yet. Add one above to get started.

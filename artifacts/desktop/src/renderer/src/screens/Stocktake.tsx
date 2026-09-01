@@ -12,6 +12,7 @@ import { useUiStore } from '../store/uiStore'
 import { getTheme, mono, serif } from '../theme'
 import Modal from '../components/Modal'
 import Field from '../components/Field'
+import Loading from '../components/Loading'
 
 function StartStocktakeModal({ onClose, onCreated }: { onClose: () => void; onCreated: (id: number) => void }): ReactElement {
   const { dark, showToast } = useUiStore()
@@ -61,9 +62,7 @@ function StocktakeDetailView({ id, onBack }: { id: number; onBack: () => void })
 
   if (isLoading || !detail) {
     return (
-      <p style={{ color: theme.muted }} className="text-sm">
-        Loading stocktake…
-      </p>
+      <Loading label="Loading stocktake…" />
     )
   }
 
@@ -313,9 +312,7 @@ export default function Stocktake(): ReactElement {
       </div>
 
       {isLoading ? (
-        <p style={{ color: theme.muted }} className="text-sm">
-          Loading stocktakes…
-        </p>
+        <Loading label="Loading stocktakes…" />
       ) : isError ? (
         <p style={{ color: theme.red }} className="text-sm">
           Couldn&apos;t load stocktakes.

@@ -9,6 +9,7 @@ import { getTheme, mono, serif } from '../theme'
 import { useAuth } from '../hooks/useAuth'
 import Modal from '../components/Modal'
 import Field from '../components/Field'
+import Loading from '../components/Loading'
 
 const STATUS_COLOR: Record<string, 'ok' | 'low' | 'expiring'> = {
   approved: 'ok',
@@ -266,9 +267,7 @@ export default function PreAuthorizations(): ReactElement {
 
       <div style={{ background: theme.card, border: `1px solid ${theme.border}` }} className="rounded-xl overflow-hidden">
         {isLoading ? (
-          <p style={{ color: theme.muted }} className="p-4 text-sm">
-            Loading pre-authorizations…
-          </p>
+          <Loading label="Loading pre-authorizations…" />
         ) : isError ? (
           <div className="p-4 text-center">
             <p style={{ color: theme.red }} className="text-sm mb-2">Couldn&apos;t load pre-authorizations.</p>

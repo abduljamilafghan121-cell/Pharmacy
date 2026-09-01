@@ -14,6 +14,7 @@ import { useUiStore } from '../store/uiStore'
 import { getTheme, mono, serif } from '../theme'
 import Modal from '../components/Modal'
 import Field from '../components/Field'
+import Loading from '../components/Loading'
 
 function balanceColor(balance: string, theme: ReturnType<typeof getTheme>): string {
   return parseFloat(balance) > 0 ? theme.red : theme.green
@@ -119,10 +120,7 @@ function LedgerDetailModal({
   return (
     <Modal title={detail?.supplierName ?? 'Supplier ledger'} onClose={onClose} width={640}>
       {isLoading || !detail ? (
-        <p style={{ color: theme.muted }} className="text-sm flex items-center gap-2">
-          <Loader2 size={14} className="animate-spin" />
-          Loading ledger…
-        </p>
+        <Loading label="Loading ledger…" centered={false} />
       ) : (
         <div>
           <div
@@ -325,9 +323,7 @@ export default function SupplierLedger(): ReactElement {
 
       <div style={{ background: theme.card, border: `1px solid ${theme.border}` }} className="rounded-xl overflow-hidden">
         {isLoading ? (
-          <p style={{ color: theme.muted }} className="p-4 text-sm">
-            Loading ledger…
-          </p>
+          <Loading label="Loading ledger…" />
         ) : summaries.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-14 px-4 text-center">
             <div style={{ background: theme.hover, color: theme.muted }} className="w-12 h-12 rounded-xl flex items-center justify-center mb-3">

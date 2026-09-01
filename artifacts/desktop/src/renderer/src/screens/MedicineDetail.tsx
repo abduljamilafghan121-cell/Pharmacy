@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { useUiStore } from '../store/uiStore'
 import { getTheme, mono, serif } from '../theme'
+import Loading from '../components/Loading'
 import { useAuth } from '../hooks/useAuth'
 import { usePharmacySettings, formatCurrency } from '../hooks/usePharmacySettings'
 import { formatStockDisplay } from '../lib/stock-format'
@@ -71,8 +72,8 @@ export default function MedicineDetail(): ReactElement {
 
   if (isLoading) {
     return (
-      <div style={{ color: theme.muted }} className="p-10 text-center text-sm">
-        Loading medicine…
+      <div className="p-10">
+        <Loading label="Loading medicine…" />
       </div>
     )
   }

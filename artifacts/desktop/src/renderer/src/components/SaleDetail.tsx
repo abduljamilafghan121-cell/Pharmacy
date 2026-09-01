@@ -9,6 +9,7 @@ import { getTheme, mono, serif } from '../theme'
 import { usePharmacySettings } from '../hooks/usePharmacySettings'
 import { printReceipt, printDispensingLabel } from '../lib/printing'
 import Modal from './Modal'
+import Loading from './Loading'
 import { Banknote, CreditCard, ShieldCheck, CheckCircle2, RotateCcw, User, Stethoscope, Printer, Package, Loader2, Tag, AlertTriangle } from 'lucide-react'
 
 const PAYMENT_METHODS: [PaymentInputMethod, string, typeof Banknote][] = [
@@ -122,10 +123,7 @@ export default function SaleDetail({ orderId, onClose }: { orderId: number; onCl
   if (isLoading || !order) {
     return (
       <Modal title="Sale" onClose={onClose}>
-        <p style={{ color: theme.muted }} className="text-sm flex items-center gap-2">
-          <Loader2 size={14} className="animate-spin" />
-          Loading sale…
-        </p>
+        <Loading label="Loading sale…" />
       </Modal>
     )
   }

@@ -4,6 +4,7 @@ import { History, Pill, ShoppingCart, FileText, Users, Truck, Settings as Settin
 import { useAuditLog } from '../hooks/useExtraQueries'
 import { useUiStore } from '../store/uiStore'
 import { getTheme, mono, serif } from '../theme'
+import Loading from '../components/Loading'
 
 const ENTITY_TYPES = [
   { value: 'medicine', label: 'Medicine' },
@@ -205,9 +206,7 @@ export default function AuditLog(): ReactElement {
 
       <div style={{ background: theme.card, border: `1px solid ${theme.border}` }} className="rounded-xl overflow-hidden">
         {isLoading ? (
-          <p style={{ color: theme.muted }} className="p-4 text-sm">
-            Loading audit log…
-          </p>
+          <Loading label="Loading audit log…" />
         ) : isError ? (
           <div className="p-4 text-center">
             <p style={{ color: theme.red }} className="text-sm mb-2">Couldn&apos;t load the audit log.</p>

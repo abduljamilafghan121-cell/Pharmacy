@@ -6,6 +6,7 @@ import type { Order } from '@workspace/api-client-react'
 import { useListInsuranceClaims, useCreateInsuranceClaim, useUpdateInsuranceClaim } from '../hooks/useExtraQueries'
 import { useUiStore } from '../store/uiStore'
 import { getTheme, mono, serif } from '../theme'
+import Loading from '../components/Loading'
 import { usePharmacySettings, formatCurrency } from '../hooks/usePharmacySettings'
 import { useAuth } from '../hooks/useAuth'
 import Modal from '../components/Modal'
@@ -188,9 +189,7 @@ export default function InsuranceClaims(): ReactElement {
 
       <div style={{ background: theme.card, border: `1px solid ${theme.border}` }} className="rounded-xl overflow-hidden">
         {isLoading ? (
-          <p style={{ color: theme.muted }} className="p-4 text-sm">
-            Loading claims…
-          </p>
+          <Loading label="Loading claims…" />
         ) : isError ? (
           <div className="p-4 text-center">
             <p style={{ color: theme.red }} className="text-sm mb-2">Couldn&apos;t load insurance claims.</p>

@@ -1,12 +1,13 @@
 import type { ReactElement } from 'react'
 import { useEffect, useRef, useState } from 'react'
-import { Lock, Mail, LogIn, Loader2, Eye, EyeOff, ArrowLeft, MailCheck, CheckCircle2, KeyRound, Clock } from 'lucide-react'
+import { Lock, Mail, LogIn, Loader2, Eye, EyeOff, ArrowLeft, MailCheck, CheckCircle2, KeyRound } from 'lucide-react'
 import { useUiStore } from '../store/uiStore'
 import { getTheme, serif } from '../theme'
 import { useAuth } from '../hooks/useAuth'
 import { apiUrl, jsonOrThrow } from '../lib/apiClient'
 import { getRecallEmails, rememberEmail } from '../lib/emailRecall'
 import appIcon from '../assets/icon.png'
+import loginBg from '../assets/for log.jpg'
 
 type LoginView = 'login' | 'forgot' | 'reset'
 
@@ -29,15 +30,45 @@ export default function Login(): ReactElement {
   const [emailFocus, setEmailFocus] = useState(false)
   const [activeSuggestion, setActiveSuggestion] = useState(-1)
 
-  // Email suggestions — previously signed-in accounts filtered as you type,
-  // like professional platforms' remembered logins.
+  // Email autocomplete — remembered accounts, filtered live as the user types
+  // (case-insensitive substring over the full address). The dropdown only
+  // appears once the user starts typing, never on focus with an empty field.
   const recallEmails = getRecallEmails()
-  const suggestions = email.trim()
-    ? recallEmails.filter((e) => e.includes(email.trim().toLowerCase()))
-    : recallEmails
+  const query = email.trim().toLowerCase()
+  const suggestions = query ? recallEmails.filter((e) => e.toLowerCase().includes(query)) : []
   const showSuggestions =
-    emailFocus && suggestions.length > 0 && !loginError && !submitting
+    emailFocus && query.length > 0 && suggestions.length > 0 && !loginError && !submitting
   const emailRef = useRef<HTMLInputElement>(null)
+  const emailWrapRef = useRef<HTMLDivElement>(null)
+
+  // Close the dropdown when clicking outside the email field. Using a
+  // document-level mousedown makes "click outside to dismiss" immediate and
+  // reliable (no reliance on blur timing races).
+  useEffect(() => {
+    const onMouseDown = (e: MouseEvent): void => {
+      if (emailWrapRef.current && !emailWrapRef.current.contains(e.target as Node)) {
+        setEmailFocus(false)
+        setActiveSuggestion(-1)
+      }
+    }
+    document.addEventListener('mousedown', onMouseDown)
+    return () => document.removeEventListener('mousedown', onMouseDown)
+  }, [])
+
+  // Highlights the part of the email that matches the current query, so the
+  // match is visible at a glance like a browser autocomplete.
+  const renderHighlight = (value: string): ReactElement => {
+    if (!query) return <>{value}</>
+    const idx = value.toLowerCase().indexOf(query)
+    if (idx === -1) return <>{value}</>
+    return (
+      <>
+        {value.slice(0, idx)}
+        <span style={{ color: theme.primary, fontWeight: 600 }}>{value.slice(idx, idx + query.length)}</span>
+        {value.slice(idx + query.length)}
+      </>
+    )
+  }
 
   // forgot
   const [forgotEmail, setForgotEmail] = useState('')
@@ -158,6 +189,16 @@ export default function Login(): ReactElement {
 
   return (
     <div className="h-full flex items-center justify-center relative overflow-hidden">
+      {/* Full-bleed background photo for the login page */}
+      <div
+        aria-hidden
+        style={{
+          backgroundImage: `url(${loginBg})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+        }}
+        className="absolute inset-0 pointer-events-none"
+      />
       {/* Modern ambient background — layered emerald glows + subtle grain/grid */}
       <div
         aria-hidden
@@ -183,7 +224,11 @@ export default function Login(): ReactElement {
       />
       <div
         aria-hidden
-        style={{ background: dark ? theme.gradientAccent : 'transparent', opacity: 0.7 }}
+        style={{
+          background: dark
+            ? 'linear-gradient(180deg, rgba(6,12,10,0.55), rgba(6,12,10,0.72))'
+            : 'linear-gradient(180deg, rgba(6,12,10,0.30), rgba(6,12,10,0.48))'
+        }}
         className="absolute inset-0 pointer-events-none"
       />
 
@@ -225,7 +270,7 @@ export default function Login(): ReactElement {
 
         {view === 'login' && (
           <>
-            <div className="relative">
+            <div className="relative" ref={emailWrapRef}>
               <label className="flex flex-col gap-1.5">
                 <span style={{ color: theme.muted }} className="text-xs font-medium">
                   Email
@@ -245,7 +290,7 @@ export default function Login(): ReactElement {
                     }}
                     onKeyDown={handleEmailKeyDown}
                     onFocus={() => setEmailFocus(true)}
-                    onBlur={() => setTimeout(() => setEmailFocus(false), 150)}
+                    onBlur={() => setEmailFocus(false)}
                     autoFocus
                     autoComplete="off"
                     style={{ color: theme.text }}
@@ -259,17 +304,10 @@ export default function Login(): ReactElement {
                 <div
                   style={{
                     background: theme.card,
-                    border: `1px solid ${theme.borderStrong}`,
-                    boxShadow: theme.shadowLg
+                    border: `1px solid ${theme.borderStrong}`
                   }}
-                  className="absolute z-20 top-full mt-1 left-0 right-0 rounded-xl overflow-hidden animate-scale-in"
+                  className="login-autocomplete absolute z-20 top-full left-0 right-0 animate-scale-in"
                 >
-                  <p
-                    style={{ color: theme.muted }}
-                    className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider px-3 pt-2 pb-1"
-                  >
-                    <Clock size={11} /> Previously used accounts
-                  </p>
                   {suggestions.map((s, idx) => (
                     <button
                       key={s}
@@ -284,19 +322,21 @@ export default function Login(): ReactElement {
                       onMouseEnter={() => setActiveSuggestion(idx)}
                       style={{
                         color: theme.text,
-                        borderTop: `1px solid ${theme.border}`,
                         background: idx === activeSuggestion ? theme.hover : 'transparent',
                         '--row-hover': theme.hover
                       } as React.CSSProperties}
-                      className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left text-sm transition-colors hover:bg-[color:var(--row-hover)]"
+                      className="login-autocomplete-option w-full text-left"
                     >
                       <span
                         style={{ background: theme.primarySoft, color: theme.primary }}
-                        className="w-6 h-6 rounded-md flex items-center justify-center font-semibold text-[11px] shrink-0"
+                        className="login-autocomplete-avatar"
                       >
                         {s.charAt(0).toUpperCase()}
                       </span>
-                      <span className="truncate">{s}</span>
+                      <span className="truncate flex-1">{renderHighlight(s)}</span>
+                      <span style={{ color: theme.muted }} className="login-autocomplete-meta">
+                        Previously used
+                      </span>
                     </button>
                   ))}
                 </div>

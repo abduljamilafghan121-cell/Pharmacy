@@ -15,6 +15,7 @@ import { getTheme, mono, serif } from '../theme'
 import { useAuth } from '../hooks/useAuth'
 import Modal from '../components/Modal'
 import Field from '../components/Field'
+import Loading from '../components/Loading'
 
 interface SupplierFormData {
   name: string
@@ -232,9 +233,7 @@ export default function Suppliers(): ReactElement {
       </div>
       <div style={{ background: theme.card, border: `1px solid ${theme.border}` }} className="rounded-xl overflow-hidden">
         {isLoading ? (
-          <p style={{ color: theme.muted }} className="p-4 text-sm">
-            Loading suppliers…
-          </p>
+          <Loading label="Loading suppliers…" />
         ) : suppliers.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
             <div style={{ background: theme.primarySoft, color: theme.primaryText }} className="w-12 h-12 rounded-xl flex items-center justify-center mb-3">

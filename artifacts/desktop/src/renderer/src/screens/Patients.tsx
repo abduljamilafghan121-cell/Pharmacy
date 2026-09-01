@@ -19,6 +19,7 @@ import { useUiStore } from '../store/uiStore'
 import { getTheme, mono, serif } from '../theme'
 import Modal from '../components/Modal'
 import Field from '../components/Field'
+import Loading from '../components/Loading'
 
 const SEVERITY_COLOR: Record<string, 'ok' | 'low' | 'expiring'> = {
   mild: 'ok',
@@ -233,9 +234,7 @@ function PatientDetailModal({ patient, onClose }: { patient: PatientExtended; on
       {tab === 'allergies' && (
         <div>
           {loadingA ? (
-            <p style={{ color: theme.muted }} className="text-sm">
-              Loading…
-            </p>
+            <Loading label="Loading…" centered={false} />
           ) : allergies.length === 0 ? (
             <p style={{ color: theme.muted }} className="text-sm italic mb-4">
               No allergies recorded.
@@ -311,9 +310,7 @@ function PatientDetailModal({ patient, onClose }: { patient: PatientExtended; on
       {tab === 'conditions' && (
         <div>
           {loadingC ? (
-            <p style={{ color: theme.muted }} className="text-sm">
-              Loading…
-            </p>
+            <Loading label="Loading…" centered={false} />
           ) : conditions.length === 0 ? (
             <p style={{ color: theme.muted }} className="text-sm italic mb-4">
               No conditions recorded.
@@ -383,9 +380,7 @@ function PatientDetailModal({ patient, onClose }: { patient: PatientExtended; on
             </button>
           </div>
           {loadingH ? (
-            <p style={{ color: theme.muted }} className="text-sm">
-              Loading history…
-            </p>
+            <Loading label="Loading history…" centered={false} />
           ) : history.length === 0 ? (
             <p style={{ color: theme.muted }} className="text-sm italic">
               No dispensing history found for this patient.
@@ -564,9 +559,7 @@ export default function Patients(): ReactElement {
       </div>
       <div style={{ background: theme.card, border: `1px solid ${theme.border}` }} className="rounded-xl overflow-hidden">
         {isLoading ? (
-          <p style={{ color: theme.muted }} className="p-4 text-sm">
-            Loading patients…
-          </p>
+          <Loading label="Loading patients…" />
         ) : isError ? (
           <div className="p-4 text-center">
             <p style={{ color: theme.red }} className="text-sm mb-2">Couldn&apos;t load patients.</p>

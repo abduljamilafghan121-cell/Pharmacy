@@ -6,6 +6,7 @@ import { useUiStore } from '../store/uiStore'
 import { getTheme, mono, serif } from '../theme'
 import { usePharmacySettings, formatCurrency } from '../hooks/usePharmacySettings'
 import SaleDetail from '../components/SaleDetail'
+import Loading from '../components/Loading'
 
 // The generated Order type hasn't caught up with the API yet — the server
 // does return patientName (see artifacts/api-server/src/routes/orders.ts).
@@ -184,9 +185,7 @@ export default function Sales(): ReactElement {
 
       <div style={{ background: theme.card, border: `1px solid ${theme.border}` }} className="rounded-xl overflow-hidden">
         {isLoading ? (
-          <p style={{ color: theme.muted }} className="p-4 text-sm">
-            Loading orders…
-          </p>
+          <Loading label="Loading orders…" />
         ) : orders.length === 0 ? (
           <div className="py-12 flex flex-col items-center gap-2">
             <ReceiptIcon size={28} color={theme.muted} />

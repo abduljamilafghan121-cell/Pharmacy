@@ -7,8 +7,8 @@ function createWindow(): void {
   const mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
-    minWidth: 1024,
-    minHeight: 680,
+    minWidth: 800,
+    minHeight: 560,
     show: false,
     frame: false,
     // Matches the renderer's dark-mode canvas (theme.ts) so the startup
@@ -24,7 +24,22 @@ function createWindow(): void {
     }
   })
 
-  mainWindow.on('ready-to-show', () => mainWindow.show())
+  // Start maximized (a normal Windows "maximized" state, NOT fullscreen —
+  // the taskbar stays visible and the window can be restored via the custom
+  // title-bar button or the OS shortcuts). Resize/restore still work because
+  // this is the real maximize() call, not setFullScreen().
+  const notifyMaximized = (): void => {
+    mainWindow.webContents.send('window:maximized-changed', mainWindow.isMaximized())
+  }
+  mainWindow.on('maximize', notifyMaximized)
+  mainWindow.on('unmaximize', notifyMaximized)
+  mainWindow.on('restore', notifyMaximized)
+
+  mainWindow.on('ready-to-show', () => {
+    mainWindow.maximize()
+    mainWindow.show()
+    notifyMaximized()
+  })
 
   // Open real links in the OS browser, not inside the app window.
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -54,6 +69,10 @@ ipcMain.on('window:maximize', (event) => {
   if (!win) return
   if (win.isMaximized()) win.unmaximize()
   else win.maximize()
+})
+ipcMain.on('window:is-maximized', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender)
+  event.returnValue = win ? win.isMaximized() : false
 })
 ipcMain.on('window:close', (event) => {
   BrowserWindow.fromWebContents(event.sender)?.close()

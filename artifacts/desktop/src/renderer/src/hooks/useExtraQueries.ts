@@ -471,6 +471,124 @@ export function useReorderSuggestions() {
   })
 }
 
+// ── Reports (new modules) ──────────────────────────────────────────────────
+
+export interface PaymentMethodRow {
+  method: string
+  count: number
+  amount: string
+}
+
+export interface PaymentsReport {
+  byMethod: PaymentMethodRow[]
+  totalCollected: string
+  byOrderStatus: { paymentStatus: string; count: number; amount: string }[]
+  outstanding: { count: number; amount: string }
+}
+
+export function usePaymentsReport(from?: string, to?: string) {
+  return useQuery<PaymentsReport>({
+    queryKey: ['reports-payments', from, to],
+    queryFn: async () => {
+      const res = await fetch(apiUrl(`reports/payments${qs({ from, to })}`), { headers: authHeaders() })
+      return jsonOrThrow(res, 'Failed to load payment report')
+    }
+  })
+}
+
+export interface PurchaseBySupplierRow {
+  supplierId: number
+  supplierName: string
+  purchaseOrders: number
+  totalPurchased: string
+  totalPaid: string
+  totalReturns: string
+  balance: string
+}
+
+export function usePurchasesBySupplier(from?: string, to?: string) {
+  return useQuery<PurchaseBySupplierRow[]>({
+    queryKey: ['reports-purchases-by-supplier', from, to],
+    queryFn: async () => {
+      const res = await fetch(apiUrl(`reports/purchases-by-supplier${qs({ from, to })}`), { headers: authHeaders() })
+      return jsonOrThrow(res, 'Failed to load purchases by supplier')
+    }
+  })
+}
+
+export interface ExpiringStockRow {
+  medicineId: number
+  medicineName: string | null
+  batchId: number
+  batchNumber: string | null
+  expiryDate: string | null
+  quantity: number
+  supplierId: number | null
+  supplierName: string | null
+}
+
+export function useExpiringStock(days = 90) {
+  return useQuery<ExpiringStockRow[]>({
+    queryKey: ['reports-expiring-stock', days],
+    queryFn: async () => {
+      const res = await fetch(apiUrl(`reports/expiring-stock?days=${days}`), { headers: authHeaders() })
+      return jsonOrThrow(res, 'Failed to load expiring stock')
+    }
+  })
+}
+
+export interface ControlledScheduleRow {
+  schedule: string
+  count: number
+  quantity: number
+}
+
+export interface ControlledByMedicineRow {
+  medicineId: number
+  medicineName: string | null
+  count: number
+  quantity: number
+}
+
+export interface ControlledSubstancesReport {
+  totalEvents: number
+  bySchedule: ControlledScheduleRow[]
+  byMedicine: ControlledByMedicineRow[]
+}
+
+export function useControlledSubstancesReport(from?: string, to?: string) {
+  return useQuery<ControlledSubstancesReport>({
+    queryKey: ['reports-controlled-substances', from, to],
+    queryFn: async () => {
+      const res = await fetch(apiUrl(`reports/controlled-substances${qs({ from, to })}`), { headers: authHeaders() })
+      return jsonOrThrow(res, 'Failed to load controlled substances report')
+    }
+  })
+}
+
+export interface ClaimStatusRow {
+  status: string
+  count: number
+  amount: string
+}
+
+export interface InsuranceClaimsReport {
+  totalClaims: number
+  totalAmount: string
+  pendingReceivable: string
+  byStatus: ClaimStatusRow[]
+}
+
+export function useInsuranceClaimsReport(from?: string, to?: string) {
+  return useQuery<InsuranceClaimsReport>({
+    queryKey: ['reports-insurance-claims', from, to],
+    queryFn: async () => {
+      const res = await fetch(apiUrl(`reports/insurance-claims${qs({ from, to })}`), { headers: authHeaders() })
+      return jsonOrThrow(res, 'Failed to load insurance claims report')
+    }
+  })
+}
+
 // ── Stocktake ────────────────────────────────────────────────────────────
 
 export interface StocktakeSummary {

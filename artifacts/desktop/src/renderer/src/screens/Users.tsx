@@ -8,6 +8,7 @@ import { getTheme, serif } from '../theme'
 import { useAuth } from '../hooks/useAuth'
 import { apiUrl, authHeaders, jsonOrThrow } from '../lib/apiClient'
 import Modal from '../components/Modal'
+import Loading from '../components/Loading'
 
 const ALL_ROLES = ['admin', 'pharmacist', 'cashier', 'viewer'] as const
 type Role = (typeof ALL_ROLES)[number]
@@ -110,9 +111,7 @@ export default function UsersScreen(): ReactElement {
 
         <div className="p-5">
           {isLoading ? (
-            <p style={{ color: theme.muted }} className="py-8 text-center text-sm">
-              Loading accounts…
-            </p>
+            <Loading label="Loading accounts…" />
           ) : isError ? (
             <div className="py-8 text-center">
               <p style={{ color: theme.red }} className="text-sm mb-2">Couldn&apos;t load staff accounts.</p>

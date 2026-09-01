@@ -4,6 +4,7 @@ import { Lock, Unlock, Clock, CheckCircle2, AlertTriangle, DollarSign, Search, X
 import { useUiStore } from '../store/uiStore'
 import { getTheme, mono } from '../theme'
 import { usePharmacySettings, formatCurrency } from '../hooks/usePharmacySettings'
+import Loading from '../components/Loading'
 import {
   useCurrentCashShift,
   useCashShiftHistory,
@@ -117,9 +118,7 @@ export default function CashRegister(): ReactElement {
       </div>
 
       {isLoading ? (
-        <div style={{ color: theme.muted }} className="text-sm">
-          Loading…
-        </div>
+        <Loading label="Loading…" />
       ) : closeResult ? (
         /* ── Reconciliation summary (mirrors web's closeResult card) ── */
         <div style={cardStyle} className="rounded-xl p-5 flex flex-col gap-4">

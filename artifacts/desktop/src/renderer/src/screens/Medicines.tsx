@@ -14,6 +14,7 @@ import {
 import type { Medicine, MedicineUnit } from '@workspace/api-client-react'
 import { Search, Plus, Filter, AlertCircle, CalendarClock, Trash2, Loader2, Lock, Package } from 'lucide-react'
 import { useUiStore } from '../store/uiStore'
+import Loading from '../components/Loading'
 import { getTheme, mono, serif } from '../theme'
 import { useAuth } from '../hooks/useAuth'
 import { usePharmacySettings, formatCurrency } from '../hooks/usePharmacySettings'
@@ -599,9 +600,7 @@ function ManageUnitsModal({
 
         {/* Current units */}
         {unitsLoading ? (
-          <div style={{ color: theme.muted }} className="flex items-center gap-2 text-sm py-2">
-            <Loader2 size={14} className="animate-spin" /> Loading…
-          </div>
+          <Loading label="Loading…" centered={false} />
         ) : sorted.length === 0 ? (
           <p style={{ color: theme.muted }} className="text-sm py-2 italic">
             No packaging units defined yet. Add one below.

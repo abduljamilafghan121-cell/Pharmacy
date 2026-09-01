@@ -14,6 +14,7 @@ import {
 import { useUiStore } from '../store/uiStore'
 import { getTheme, mono, serif } from '../theme'
 import { usePharmacySettings, formatCurrency } from '../hooks/usePharmacySettings'
+import Loading from '../components/Loading'
 import Modal from '../components/Modal'
 import Field from '../components/Field'
 
@@ -56,9 +57,7 @@ function LineItemRow({
         </button>
       </div>
       {isLoading ? (
-        <p style={{ color: theme.muted }} className="text-xs">
-          Loading batches…
-        </p>
+        <Loading label="Loading batches…" centered={false} />
       ) : availableBatches.length === 0 ? (
         <p style={{ color: theme.red }} className="text-xs">
           No received batches with remaining stock for this medicine.
@@ -292,9 +291,7 @@ function ReturnDetailModal({ id, onClose }: { id: number; onClose: () => void })
       width={520}
     >
       {isLoading || !detail ? (
-        <p style={{ color: theme.muted }} className="text-sm py-2">
-          Loading return details…
-        </p>
+        <Loading label="Loading return details…" />
       ) : (
         <div className="space-y-4">
           <div style={{ color: theme.muted }} className="text-sm space-y-1">
@@ -437,9 +434,7 @@ export default function SupplierReturns(): ReactElement {
       </div>
       <div style={{ background: theme.card, border: `1px solid ${theme.border}` }} className="rounded-xl overflow-hidden">
         {isLoading ? (
-          <p style={{ color: theme.muted }} className="p-4 text-sm">
-            Loading returns…
-          </p>
+          <Loading label="Loading returns…" />
         ) : isError ? (
           <p style={{ color: theme.red }} className="p-4 text-sm">
             Couldn&apos;t load supplier returns.

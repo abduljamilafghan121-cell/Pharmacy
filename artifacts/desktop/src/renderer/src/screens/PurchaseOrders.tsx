@@ -21,6 +21,7 @@ import { useBarcodeScanner } from '../hooks/useBarcodeScanner'
 import { useMedicineBatches, type MedicineBatch } from '../hooks/useExtraQueries'
 import { apiUrl, authHeaders, jsonOrThrow } from '../lib/apiClient'
 import Modal from '../components/Modal'
+import Loading from '../components/Loading'
 
 // Matches purchaseOrderStatusEnum in lib/db/src/schema/purchase-orders.ts — a purchase
 // order is only ever "pending", "received", or "cancelled" (no "completed"/"ordered").
@@ -477,9 +478,7 @@ function ReceivePOModal({ poId, onClose }: { poId: number; onClose: () => void }
   return (
     <Modal title={`Receive Purchase Order #${poId}`} onClose={onClose} width={600}>
       {isLoading || !order ? (
-        <div style={{ color: theme.muted }} className="flex items-center gap-2 py-6 text-sm">
-          <Loader2 size={14} className="animate-spin" /> Loading order…
-        </div>
+        <Loading label="Loading order…" centered={false} />
       ) : order.status !== 'pending' ? (
         <p style={{ color: theme.muted }} className="text-sm py-4 text-center">
           This order is already {order.status}.
@@ -612,9 +611,7 @@ function ViewPOModal({
   return (
     <Modal title={`Purchase order #${poId}`} onClose={onClose} width={600}>
       {isLoading && !po ? (
-        <p style={{ color: theme.muted }} className="text-sm py-2">
-          Loading order details…
-        </p>
+        <Loading label="Loading order details…" centered={false} />
       ) : po ? (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
@@ -760,9 +757,7 @@ export default function PurchaseOrders(): ReactElement {
       </div>
       <div style={{ background: theme.card, border: `1px solid ${theme.border}` }} className="rounded-xl overflow-hidden">
         {isLoading ? (
-          <p style={{ color: theme.muted }} className="p-4 text-sm">
-            Loading purchase orders…
-          </p>
+          <Loading label="Loading purchase orders…" />
         ) : purchaseOrders.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
             <div
