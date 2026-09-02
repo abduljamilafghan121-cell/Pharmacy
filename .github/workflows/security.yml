@@ -50,6 +50,35 @@ jobs:
       - name: Build web (matches vercel.json buildCommand)
         run: BASE_PATH=/ PORT=3000 NODE_ENV=production pnpm --filter @workspace/web run build
 
+  mobile:
+    name: Build static Expo export (ios + android)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck mobile
+        run: pnpm --filter @workspace/mobile run typecheck
+      - name: Build static Expo export
+        env:
+          EXPO_PUBLIC_DOMAIN: pharmacy-api-server-beige.vercel.app
+        run: pnpm --filter @workspace/mobile run build
+      - name: Verify bundles and manifests produced
+        run: |
+          BUN_IOS=$(find artifacts/mobile/static-build -path '*/_expo/static/js/ios/bundle.js' | head -1)
+          BUN_AND=$(find artifacts/mobile/static-build -path '*/_expo/static/js/android/bundle.js' | head -1)
+          test -n "$BUN_IOS" && test -s "$BUN_IOS" && echo "PASS: ios bundle ($(wc -c < "$BUN_IOS") bytes)"
+          test -n "$BUN_AND" && test -s "$BUN_AND" && echo "PASS: android bundle ($(wc -c < "$BUN_AND") bytes)"
+          test -s artifacts/mobile/static-build/ios/manifest.json && echo "PASS: ios manifest"
+          test -s artifacts/mobile/static-build/android/manifest.json && echo "PASS: android manifest"
+
   dast:
     name: OWASP ZAP scan against live API
     runs-on: ubuntu-latest
