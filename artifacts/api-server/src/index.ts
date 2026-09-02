@@ -15,6 +15,14 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
+const jwtSecret = process.env["JWT_SECRET"];
+
+if (!jwtSecret) {
+  throw new Error(
+    "JWT_SECRET environment variable is required but was not provided.",
+  );
+}
+
 app.listen(port, (err) => {
   if (err) {
     logger.error({ err }, "Error listening on port");

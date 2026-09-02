@@ -1,6 +1,17 @@
 import { usePharmacySettings } from "@/hooks/use-pharmacy-settings";
 import { formatDate } from "@/lib/utils";
 
+// The label is hand-built as an HTML string and written into a popup window,
+// so every interpolated value must be escaped or a crafted field (e.g. a
+// medicine name containing markup) could inject HTML/scripts into the print
+// document. Mirrors the desktop printing.ts helper.
+function esc(s: string | null | undefined): string {
+  return (s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
 export interface LabelData {
   patientName?: string | null;
   medicineName: string;
@@ -16,12 +27,12 @@ export interface LabelData {
 export function printDispensingLabel(data: LabelData, pharmacyName: string, pharmacyAddress?: string | null) {
   const dispensedDate = data.dispensedDate ?? new Date().toISOString();
   const batchLine = [
-    data.batchNumber ? `Batch: ${data.batchNumber}` : null,
+    data.batchNumber ? `Batch: ${esc(data.batchNumber)}` : null,
     data.expiryDate ? `Exp: ${formatDate(data.expiryDate)}` : null,
   ].filter(Boolean).join("  ·  ");
 
   const qtyLine = data.qty != null
-    ? `Qty: ${data.qty}${data.unitName ? ` ${data.unitName}` : ""}`
+    ? `Qty: ${data.qty}${data.unitName ? ` ${esc(data.unitName)}` : ""}`
     : null;
 
   const html = `<!DOCTYPE html>
@@ -71,12 +82,12 @@ export function printDispensingLabel(data: LabelData, pharmacyName: string, phar
 </head>
 <body>
   <div class="pharmacy">
-    ${pharmacyName}
-    ${pharmacyAddress ? `<span class="pharmacy-addr"> — ${pharmacyAddress}</span>` : ""}
+    ${esc(pharmacyName)}
+    ${pharmacyAddress ? `<span class="pharmacy-addr"> — ${esc(pharmacyAddress)}</span>` : ""}
   </div>
-  <div class="medicine">${data.medicineName}</div>
-  ${data.patientName ? `<div class="patient">Patient: <span>${data.patientName}</span></div>` : ""}
-  ${data.sig ? `<div class="sig">${data.sig}</div>` : ""}
+  <div class="medicine">${esc(data.medicineName)}</div>
+  ${data.patientName ? `<div class="patient">Patient: <span>${esc(data.patientName)}</span></div>` : ""}
+  ${data.sig ? `<div class="sig">${esc(data.sig)}</div>` : ""}
   <div class="meta">
     ${qtyLine ?? ""}${qtyLine && batchLine ? "  ·  " : ""}${batchLine}
   </div>

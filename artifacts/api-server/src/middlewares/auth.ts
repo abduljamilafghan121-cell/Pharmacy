@@ -2,8 +2,19 @@ import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { eq } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
+import { logger } from "../lib/logger";
 
-const JWT_SECRET = process.env["JWT_SECRET"] ?? "pharma-dev-secret-change-in-prod";
+// No hardcoded fallback: if JWT_SECRET isn't set, anyone who reads the source
+// could forge an admin token. Fail fast at boot instead (also enforced in
+// src/index.ts alongside PORT).
+function getJwtSecret(): string {
+  const secret = process.env["JWT_SECRET"];
+  if (!secret) {
+    throw new Error("JWT_SECRET environment variable is required but was not provided.");
+  }
+  return secret;
+}
+const JWT_SECRET = getJwtSecret();
 
 export interface AuthPayload {
   userId: number;
@@ -27,7 +38,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   if (!header || !header.startsWith("Bearer ")) {
     // Log received headers to aid debugging (mask token value for security)
     const allHeaders = Object.keys(req.headers).join(", ");
-    console.warn(`[requireAuth] 401 on ${req.method} ${req.url} — headers present: ${allHeaders}`);
+    logger.warn({ method: req.method, url: req.url }, "[requireAuth] 401 — headers present: " + allHeaders);
     res.status(401).json({ error: "Missing or invalid authorization header" });
     return;
   }

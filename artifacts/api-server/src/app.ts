@@ -26,11 +26,29 @@ app.use(
     },
   }),
 );
+// CORS is locked to an explicit allow-list instead of echoing back whatever
+// Origin a request sends. Requests without an Origin header (same-origin
+// browsers, native/CLI clients) are always allowed — browsers only send
+// Origin on genuinely cross-origin requests, which is exactly what we gate.
+// The desktop app renders from file://, which sends "Origin: null"; that is
+// allowed by default (CORS_ALLOW_NULL_ORIGIN=false to disable). Auth rides
+// on an explicit Authorization header — not cookies — so credentials:false.
+const allowedOrigins = (process.env["CORS_ORIGINS"] ?? "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+const allowNullOrigin = process.env["CORS_ALLOW_NULL_ORIGIN"] !== "false";
+
 app.use(
   cors({
-    origin: true,          // echo back the request Origin (same-origin passes through too)
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true);
+      if (allowNullOrigin && origin === "null") return cb(null, true);
+      if (allowedOrigins.includes(origin)) return cb(null, true);
+      return cb(new Error(`Origin not allowed by CORS policy: ${origin}`), false);
+    },
     allowedHeaders: ["Authorization", "Content-Type", "Accept"],
-    credentials: true,
+    credentials: false,
   }),
 );
 // Raise the JSON body limit to 4 MB so that base64-encoded logo images

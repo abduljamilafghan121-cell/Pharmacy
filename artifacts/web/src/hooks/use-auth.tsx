@@ -14,6 +14,11 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  // Decision (audit #3): the bearer token stays in localStorage for the pilot.
+  // It is XSS-readable, unlike an httpOnly cookie. Accepted for now; if a
+  // future hardening pass switches auth to cookies, start from here — flip the
+  // token lifecycle to a Secure/HttpOnly/SameSite=Strict cookie and stop
+  // persisting it to localStorage.
   const [token, setToken] = useState<string | null>(() => {
     try { return localStorage.getItem("pharma_token"); } catch { return null; }
   });
