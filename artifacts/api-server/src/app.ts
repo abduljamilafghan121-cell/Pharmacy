@@ -45,7 +45,9 @@ app.use(
       if (!origin) return cb(null, true);
       if (allowNullOrigin && origin === "null") return cb(null, true);
       if (allowedOrigins.includes(origin)) return cb(null, true);
-      return cb(new Error(`Origin not allowed by CORS policy: ${origin}`), false);
+      const error = new Error(`Origin not allowed by CORS policy: ${origin}`);
+      (error as { status?: number }).status = 403;
+      return cb(error, false);
     },
     allowedHeaders: ["Authorization", "Content-Type", "Accept"],
     credentials: false,
@@ -80,6 +82,17 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
   // SyntaxError from malformed JSON body
   if (err instanceof SyntaxError && "body" in err) {
     res.status(400).json({ error: "Invalid JSON in request body." });
+    return;
+  }
+
+  // CORS policy rejections are client-configuration errors, not server faults
+  if (
+    err &&
+    typeof err === "object" &&
+    "status" in err &&
+    (err as { status: number }).status === 403
+  ) {
+    res.status(403).json({ error: "Origin not allowed by CORS policy." });
     return;
   }
 

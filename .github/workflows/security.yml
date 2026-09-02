@@ -1,0 +1,126 @@
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+      - name: Gate on production dependency advisories
+        run: pnpm audit --prod --audit-level high
+      - name: Report full dependency audit (informational)
+        run: pnpm audit || true
+
+  build:
+    name: Build and typecheck (api + web)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm run typecheck
+      - name: Build API server
+        run: pnpm --filter @workspace/api-server run build
+      - name: Build web (matches vercel.json buildCommand)
+        run: BASE_PATH=/ PORT=3000 NODE_ENV=production pnpm --filter @workspace/web run build
+
+  dast:
+    name: OWASP ZAP scan against live API
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: pharmacore
+          POSTGRES_PASSWORD: pharmacore
+          POSTGRES_DB: pharmacore
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U pharmacore"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+      - name: Build API server
+        run: pnpm --filter @workspace/api-server run build
+      - name: Start API, probe behavior, run ZAP
+        env:
+          PORT: 3000
+          JWT_SECRET: ci-only-secret-not-for-production
+          DATABASE_URL: postgres://pharmacore:pharmacore@localhost:5432/pharmacore
+          LOG_LEVEL: warn
+        run: |
+          node ./artifacts/api-server/dist/index.mjs > /tmp/api.log 2>&1 &
+          API_PID=$!
+          cleanup() { kill "$API_PID" 2>/dev/null || true; }
+          trap cleanup EXIT
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000/api/healthz >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -sf http://localhost:3000/api/healthz
+          echo "API healthy"
+
+          echo "== no Origin (expect 200) =="
+          curl -s -o /dev/null -w "%{http_code}\n" http://localhost:3000/api/healthz
+          echo "== null Origin, desktop file:// (expect 200) =="
+          curl -s -o /dev/null -w "%{http_code}\n" -H "Origin: null" http://localhost:3000/api/healthz
+          echo "== disallowed Origin (expect 403) =="
+          curl -s -o /dev/null -w "%{http_code}\n" -H "Origin: https://evil.example.com" http://localhost:3000/api/healthz
+          echo "== unauthenticated protected route (expect 401) =="
+          curl -s -o /dev/null -w "%{http_code}\n" http://localhost:3000/api/medicines
+          echo "== malformed JSON login (expect 400) =="
+          curl -s -o /dev/null -w "%{http_code}\n" -X POST -H "Content-Type: application/json" -d "{bad json" http://localhost:3000/api/auth/login
+
+          echo "== ZAP quick scan (unauthenticated) =="
+          docker run --rm --network host \
+            -v "$GITHUB_WORKSPACE/zap-report:/zap/reports" \
+            ghcr.io/zaproxy/zaproxy:2.17.0 zap.sh -cmd \
+            -quickurl http://localhost:3000/api/healthz \
+            -quickout /zap/reports/report.html
+          test -f zap-report/report.html && echo "ZAP report generated"
+          kill "$API_PID" 2>/dev/null || true
+      - name: Upload ZAP report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-report
+          path: zap-report/report.html
+          if-no-files-found: ignore
