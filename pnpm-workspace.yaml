@@ -70,7 +70,7 @@ onlyBuiltDependencies:
 overrides:
   # drizzle-kit uses esbuild internally on an older version that's vulnerable, this overrides it
   "@esbuild-kit/esm-loader": "npm:tsx@^4.21.0"
-  esbuild: "0.27.3"
+  esbuild: "^0.28.2"
   # orval (lib/api-spec devDependency, used only for OpenAPI codegen) pulls in
   # @scalar/openapi-parser, which at the time of writing requests an exact
   # @scalar/openapi-types@0.9.5 that no longer exists on the npm registry —
