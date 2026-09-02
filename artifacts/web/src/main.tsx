@@ -4,8 +4,9 @@ import App from './App';
 
 import './index.css';
 
-// Note: the auth token getter is configured inside AuthProvider (use-auth.tsx)
-// using a React ref so it always has the current in-memory token, even when
-// localStorage is restricted (e.g. in an embedded/sandboxed preview iframe).
+// Session auth is handled entirely via the httpOnly pharma_token cookie: the
+// API sets it on login/register and the browser sends it with same-origin
+// /api calls, so no auth token getter needs to be configured here. The
+// token never touches localStorage (see hooks/use-auth.tsx).
 
 createRoot(document.getElementById('root')!).render(<App />);

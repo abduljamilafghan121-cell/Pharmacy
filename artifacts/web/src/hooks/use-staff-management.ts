@@ -4,13 +4,8 @@ import { getListUsersQueryKey } from "@workspace/api-client-react";
 const BASE_URL = `${import.meta.env.BASE_URL}api/users`.replace(/\/+/g, "/").replace(":/", "://");
 
 function authHeaders(): HeadersInit {
-  let token: string | null = null;
-  try {
-    token = localStorage.getItem("pharma_token");
-  } catch {
-    /* sandboxed */
-  }
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  // Session auth rides on the httpOnly cookie — no Authorization header needed.
+  return {};
 }
 
 async function parseErrorOrThrow(res: Response, fallback: string) {

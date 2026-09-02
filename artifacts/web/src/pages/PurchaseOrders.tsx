@@ -206,10 +206,7 @@ export default function PurchaseOrders() {
     if (priceHistoryMap[medicineId]) return; // already cached
     try {
       const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
-      const token = localStorage.getItem("pharma_token") ?? "";
-      const res = await fetch(`${BASE}/api/purchase-orders/price-history?medicineId=${medicineId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetch(`${BASE}/api/purchase-orders/price-history?medicineId=${medicineId}`);
       if (res.ok) {
         const data: PriceHistoryRow[] = await res.json();
         setPriceHistoryMap((prev) => ({ ...prev, [medicineId]: data }));
@@ -223,13 +220,10 @@ export default function PurchaseOrders() {
     setBatchOptionsLoading(true);
     try {
       const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
-      const token = localStorage.getItem("pharma_token") ?? "";
       const today = new Date().toISOString().slice(0, 10);
       const entries = await Promise.all(missing.map(async (id) => {
         try {
-          const res = await fetch(`${BASE}/api/medicines/${id}/batches`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
+          const res = await fetch(`${BASE}/api/medicines/${id}/batches`);
           if (!res.ok) return [id, []] as const;
           const data: MedicineBatch[] = await res.json();
           // Only non-written-off, non-expired batches are valid top-up targets.

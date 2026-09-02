@@ -12,13 +12,8 @@ export interface AuditLogEntry {
 }
 
 function authHeaders(): HeadersInit {
-  let token: string | null = null;
-  try {
-    token = localStorage.getItem("pharma_token");
-  } catch {
-    /* sandboxed */
-  }
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  // Session auth rides on the httpOnly cookie — no Authorization header needed.
+  return {};
 }
 
 export function useAuditLog(entityType?: string) {

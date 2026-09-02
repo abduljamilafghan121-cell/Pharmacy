@@ -1,12 +1,12 @@
-import { createContext, useContext, useEffect, useRef, useState } from "react";
-import { useGetMe, setAuthTokenGetter, getGetMeQueryKey } from "@workspace/api-client-react";
+import { createContext, useContext, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useGetMe, getGetMeQueryKey } from "@workspace/api-client-react";
 import type { User } from "@workspace/api-client-react";
-import { useLocation } from "wouter";
 
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
-  login: (token: string) => void;
+  login: () => void;
   logout: () => void;
   updateUser: (updated: Partial<User>) => void;
 }
@@ -14,57 +14,41 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  // Decision (audit #3): the bearer token stays in localStorage for the pilot.
-  // It is XSS-readable, unlike an httpOnly cookie. Accepted for now; if a
-  // future hardening pass switches auth to cookies, start from here — flip the
-  // token lifecycle to a Secure/HttpOnly/SameSite=Strict cookie and stop
-  // persisting it to localStorage.
-  const [token, setToken] = useState<string | null>(() => {
-    try { return localStorage.getItem("pharma_token"); } catch { return null; }
-  });
-  // Keep a ref so the auth getter always has the latest token, even if
-  // localStorage is blocked (e.g. an embedded/sandboxed preview iframe).
-  const tokenRef = useRef<string | null>(token);
-  const [, setLocation] = useLocation();
+  // The session is an httpOnly, Secure, SameSite=Lax cookie that the API sets
+  // on register/login (artifacts/api-server/src/lib/auth-cookies.ts). It is
+  // invisible to page JavaScript, so the bearer token never touched
+  // localStorage and no Authorization header is attached from the browser —
+  // the cookie rides along on same-origin /api calls by itself. This removes
+  // the audit finding that an XSS could read the pilot's persisted token.
+  const queryClient = useQueryClient();
+  const [userOverride, setUserOverride] = useState<Partial<User> | null>(null);
 
-  // Wire the API client's bearer-token getter to this ref.
-  // This replaces the localStorage-only getter set in main.tsx so that
-  // freshly-logged-in tokens (held in React state) are always sent.
-  useEffect(() => {
-    setAuthTokenGetter(() => tokenRef.current);
-    return () => setAuthTokenGetter(null);
-  }, []);
-
-  // If we have a token, fetch the user.
-  const { data: user, isLoading: isUserLoading, isError } = useGetMe({
+  // Always enabled: the browser presents the session cookie on /auth/me; a
+  // logged-out visitor simply gets an (unretried) 401 and is shown the login
+  // screen. A cookie-based session can't be detected synchronously, so there
+  // is no token state to gate the query on.
+  const { data: user, isLoading: isUserLoading } = useGetMe({
     query: {
-      enabled: !!token,
+      enabled: true,
       retry: false,
       queryKey: getGetMeQueryKey(),
     }
   });
 
-  useEffect(() => {
-    if (isError) {
-      try { localStorage.removeItem("pharma_token"); } catch { /* sandboxed */ }
-      tokenRef.current = null;
-      setToken(null);
-    }
-  }, [isError]);
-
-  const [userOverride, setUserOverride] = useState<Partial<User> | null>(null);
-
-  const login = (newToken: string) => {
-    try { localStorage.setItem("pharma_token", newToken); } catch { /* sandboxed */ }
-    tokenRef.current = newToken;
-    setToken(newToken);
+  const login = () => {
     setUserOverride(null);
+    // The login/register response just set the httpOnly cookie; refetch the
+    // profile now that the browser holds a session.
+    queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
   };
 
-  const logout = () => {
-    try { localStorage.removeItem("pharma_token"); } catch { /* sandboxed */ }
-    tokenRef.current = null;
-    setToken(null);
+  const logout = async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {
+      // Offline — the cookie is cleared server-side on the next successful
+      // call; the redirect below still leaves the app immediately.
+    }
     setUserOverride(null);
     // Full page redirect clears all in-memory React Query cache and component state
     window.location.replace("/login");
@@ -77,7 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const mergedUser = user ? { ...user, ...userOverride } : null;
 
   return (
-    <AuthContext.Provider value={{ user: mergedUser, isLoading: !!token && isUserLoading, login, logout, updateUser }}>
+    <AuthContext.Provider value={{ user: mergedUser, isLoading: isUserLoading, login, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

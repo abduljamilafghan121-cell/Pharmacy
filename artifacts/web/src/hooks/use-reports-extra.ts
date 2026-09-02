@@ -1,13 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 
 function authHeaders(): HeadersInit {
-  let token: string | null = null;
-  try {
-    token = localStorage.getItem("pharma_token");
-  } catch {
-    /* sandboxed */
-  }
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  // Session auth rides on the httpOnly cookie — no Authorization header needed.
+  return {};
 }
 
 function buildUrl(path: string, params: Record<string, string | undefined>) {

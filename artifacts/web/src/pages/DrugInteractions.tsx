@@ -10,10 +10,8 @@ import { useToast } from "@/components/ui/use-toast";
 import { ErrorState } from "@/components/ui/error-state";
 
 function getAuthHeaders(): HeadersInit {
-  const token = localStorage.getItem("pharma_token");
-  return token
-    ? { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }
-    : { "Content-Type": "application/json" };
+  // Session auth rides on the httpOnly cookie — no Authorization header needed.
+  return { "Content-Type": "application/json" };
 }
 
 async function apiFetch<T>(url: string, init?: RequestInit): Promise<T> {

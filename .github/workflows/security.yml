@@ -85,6 +85,7 @@ jobs:
           PORT: 3000
           JWT_SECRET: ci-only-secret-not-for-production
           DATABASE_URL: postgres://pharmacore:pharmacore@localhost:5432/pharmacore
+          NODE_ENV: production
           LOG_LEVEL: warn
         run: |
           node ./artifacts/api-server/dist/index.mjs > /tmp/api.log 2>&1 &
@@ -108,6 +109,35 @@ jobs:
           curl -s -o /dev/null -w "%{http_code}\n" http://localhost:3000/api/medicines
           echo "== malformed JSON login (expect 400) =="
           curl -s -o /dev/null -w "%{http_code}\n" -X POST -H "Content-Type: application/json" -d "{bad json" http://localhost:3000/api/auth/login
+
+          echo "== cookie auth flow (NODE_ENV=production -> Secure cookie) =="
+          REG=$(curl -s -X POST -H "Content-Type: application/json" \
+            -d '{"name":"CI Probe","email":"ci-probe@example.com","password":"ProbePass123!"}' \
+            -D /tmp/register.headers -c /tmp/cookies.jar -w "\n%{http_code}" \
+            http://localhost:3000/api/auth/register)
+          echo "register status: $(echo "$REG" | tail -n1)"
+          echo "SET-COOKIE (register): $(grep -i '^set-cookie:' /tmp/register.headers)"
+          grep -qi '^set-cookie:.*pharma_token=.*httponly' /tmp/register.headers && echo "PASS: HttpOnly"
+          grep -qi '^set-cookie:.*samesite=lax' /tmp/register.headers && echo "PASS: SameSite=Lax"
+          grep -qi '^set-cookie:.*path=/api' /tmp/register.headers && echo "PASS: Path=/api"
+          grep -qi '^set-cookie:.*secure' /tmp/register.headers && echo "PASS: Secure"
+          echo "== second public register (expect 403) =="
+          curl -s -o /dev/null -w "%{http_code}\n" -X POST -H "Content-Type: application/json" \
+            -d '{"name":"CI Probe 2","email":"ci-probe2@example.com","password":"ProbePass123!"}' \
+            http://localhost:3000/api/auth/register
+          echo "== me via cookie (expect 200) =="
+          curl -s -b /tmp/cookies.jar -o /tmp/me.json -w "me(cookie): %{http_code}\n" http://localhost:3000/api/auth/me
+          grep -q '"ci-probe@example.com"' /tmp/me.json && echo "PASS: cookie-authed /auth/me"
+          echo "== me via Authorization header (expect 200) =="
+          TOKEN=$(echo "$REG" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
+          curl -s -H "Authorization: Bearer $TOKEN" -o /tmp/me2.json -w "me(header): %{http_code}\n" http://localhost:3000/api/auth/me
+          grep -q '"ci-probe@example.com"' /tmp/me2.json && echo "PASS: header-authed /auth/me"
+          echo "== logout via cookie (expect 204 + cleared cookie) =="
+          curl -s -b /tmp/cookies.jar -D /tmp/logout.headers -o /dev/null -w "logout: %{http_code}\n" -X POST http://localhost:3000/api/auth/logout
+          echo "CLEAR COOKIE: $(grep -i '^set-cookie:' /tmp/logout.headers)"
+          grep -qi '^set-cookie:.*pharma_token=;' /tmp/logout.headers && echo "PASS: cookie cleared"
+          echo "== protected route with stale cookie after logout (expect 401) =="
+          curl -s -H "Cookie: pharma_token=stale" -o /dev/null -w "%{http_code}\n" http://localhost:3000/api/medicines
 
           echo "== ZAP quick scan (unauthenticated) =="
           docker run --rm --network host \

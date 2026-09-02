@@ -6,6 +6,7 @@ import { z } from "zod";
 import { db, usersTable } from "@workspace/db";
 import { RegisterUserBody, LoginUserBody } from "@workspace/api-zod";
 import { signToken, requireAuth, requireRole } from "../middlewares/auth";
+import { setAuthCookie, clearAuthCookie } from "../lib/auth-cookies";
 import { logger } from "../lib/logger";
 import { logAudit } from "../lib/audit";
 import { formatZodError, getDbErrorMessage } from "../lib/api-errors";
@@ -45,6 +46,7 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     logger.info({ userId: user.id, email }, "register: user created successfully");
     const token = signToken({ userId: user.id, role: user.role });
     await logAudit(user.id, "register", "user", user.id, `Registered user ${user.name} (${user.role}).`);
+    setAuthCookie(res, token);
     res.status(201).json({
       token,
       user: { id: user.id, name: user.name, email: user.email, phone: user.phone, role: user.role, createdAt: user.createdAt },
@@ -78,6 +80,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
 
     const token = signToken({ userId: user.id, role: user.role });
     await logAudit(user.id, "login", "user", user.id, `${user.name} logged in.`);
+    setAuthCookie(res, token);
     res.json({
       token,
       user: { id: user.id, name: user.name, email: user.email, phone: user.phone, role: user.role, createdAt: user.createdAt },
@@ -94,9 +97,11 @@ router.post("/auth/logout", requireAuth, async (req, res): Promise<void> => {
     if (user) {
       await logAudit(user.id, "logout", "user", user.id, `${user.name} logged out.`);
     }
+    clearAuthCookie(res);
     res.status(204).end();
   } catch (err) {
     logger.error({ err }, "logout: unexpected error");
+    clearAuthCookie(res);
     res.status(204).end();
   }
 });

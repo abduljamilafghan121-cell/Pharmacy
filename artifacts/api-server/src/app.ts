@@ -31,8 +31,11 @@ app.use(
 // browsers, native/CLI clients) are always allowed — browsers only send
 // Origin on genuinely cross-origin requests, which is exactly what we gate.
 // The desktop app renders from file://, which sends "Origin: null"; that is
-// allowed by default (CORS_ALLOW_NULL_ORIGIN=false to disable). Auth rides
-// on an explicit Authorization header — not cookies — so credentials:false.
+// allowed by default (CORS_ALLOW_NULL_ORIGIN=false to disable). The web SPA
+// is same-origin through the root /api rewrites, so its session rides on the
+// httpOnly pharma_token cookie — browsers send same-origin cookies regardless
+// of CORS. Desktop/mobile call cross-origin with an explicit Authorization
+// header — not cookies — so credentials stays false.
 const allowedOrigins = (process.env["CORS_ORIGINS"] ?? "")
   .split(",")
   .map((s) => s.trim())

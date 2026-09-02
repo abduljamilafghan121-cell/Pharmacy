@@ -17,9 +17,8 @@ import { formatCurrency } from "@/lib/utils";
 import { Link } from "wouter";
 
 function authHeaders(): HeadersInit {
-  let token: string | null = null;
-  try { token = localStorage.getItem("pharma_token"); } catch { /* sandboxed */ }
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  // Session auth rides on the httpOnly cookie — no Authorization header needed.
+  return {};
 }
 
 interface Contraindication {
@@ -31,9 +30,8 @@ interface Contraindication {
 }
 
 function authHeadersObj(): HeadersInit {
-  let token: string | null = null;
-  try { token = localStorage.getItem("pharma_token"); } catch { }
-  return token ? { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } : { "Content-Type": "application/json" };
+  // Session auth rides on the httpOnly cookie — no Authorization header needed.
+  return { "Content-Type": "application/json" };
 }
 
 async function safetyFetch<T>(url: string, init?: RequestInit): Promise<T> {

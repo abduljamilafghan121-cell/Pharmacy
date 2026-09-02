@@ -19,8 +19,8 @@ export default function Register() {
   const { toast } = useToast();
   const registerMutation = useRegisterUser({
     mutation: {
-      onSuccess: (data) => {
-        login(data.token);
+      onSuccess: () => {
+        login();
         toast({ title: "Admin account created!", description: "Welcome — you're all set up." });
         setLocation("/dashboard");
       },

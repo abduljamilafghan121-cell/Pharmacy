@@ -29,8 +29,8 @@ export default function Login() {
 
   const loginMutation = useLoginUser({
     mutation: {
-      onSuccess: (data) => {
-        login(data.token);
+      onSuccess: () => {
+        login();
         toast({ title: "Welcome back!", description: "Successfully logged in." });
         setLocation("/dashboard");
       },

@@ -13,9 +13,8 @@ import { useToast } from "@/components/ui/use-toast";
 import { formatCurrency } from "@/lib/utils";
 
 function authHeaders(): HeadersInit {
-  let token: string | null = null;
-  try { token = localStorage.getItem("pharma_token"); } catch { /* sandboxed */ }
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  // Session auth rides on the httpOnly cookie — no Authorization header needed.
+  return {};
 }
 
 function today(): string {

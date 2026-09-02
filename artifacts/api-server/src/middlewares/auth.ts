@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import { eq } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
 import { logger } from "../lib/logger";
+import { readAuthCookie } from "../lib/auth-cookies";
 
 // No hardcoded fallback: if JWT_SECRET isn't set, anyone who reads the source
 // could forge an admin token. Fail fast at boot instead (also enforced in
@@ -34,15 +35,19 @@ export function signToken(payload: AuthPayload): string {
 }
 
 export async function requireAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
+  // Accept a bearer token first (desktop safeStorage / mobile secure store),
+  // then fall back to the httpOnly session cookie used by the web SPA.
   const header = req.headers["authorization"];
-  if (!header || !header.startsWith("Bearer ")) {
-    // Log received headers to aid debugging (mask token value for security)
+  const token = header && header.startsWith("Bearer ")
+    ? header.slice(7)
+    : readAuthCookie(req);
+  if (!token) {
+    // Log received header names to aid debugging (values are never logged).
     const allHeaders = Object.keys(req.headers).join(", ");
     logger.warn({ method: req.method, url: req.url }, "[requireAuth] 401 — headers present: " + allHeaders);
     res.status(401).json({ error: "Missing or invalid authorization header" });
     return;
   }
-  const token = header.slice(7);
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as AuthPayload;
 
