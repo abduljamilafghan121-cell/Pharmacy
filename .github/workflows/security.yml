@@ -64,6 +64,8 @@ jobs:
           cache: pnpm
       - name: Install (frozen lockfile)
         run: pnpm install --frozen-lockfile
+      - name: Build workspace libs referenced by mobile (api-client-react)
+        run: pnpm run typecheck:libs
       - name: Typecheck mobile
         run: pnpm --filter @workspace/mobile run typecheck
       - name: Build static Expo export
