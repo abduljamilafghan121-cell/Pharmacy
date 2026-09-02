@@ -1,0 +1,156 @@
+diff --git a/build/src/api/getNativeModuleVersions.js b/build/src/api/getNativeModuleVersions.js
+index 4c7bc7f5e740de9e85de589cdd37374450ac8d6c..3ff79c035fb0682cc3823a09366913147f5818bf 100644
+--- a/build/src/api/getNativeModuleVersions.js	
++++ b/build/src/api/getNativeModuleVersions.js	
+@@ -14,7 +14,11 @@ async function getNativeModuleVersionsAsync(sdkVersion) {
+     const fetchAsync = (0, _client.createCachedFetch)({
+         cacheDirectory: 'native-modules-cache',
+         // 1 minute cache
+-        ttl: 1000 * 60
++        ttl: 1000 * 60,
++        // Disable the response cache: undici's single-use response body makes the
++        // cached Response un-readable (""Body has already been read"") on Node 22.
++        // (pnpm patch)
++        skipCache: true
+     });
+     const response = await fetchAsync(`sdks/${sdkVersion}/native-modules`);
+     if (!response.ok) {
+diff --git a/build/src/start/server/metro/metroWatchTypeScriptFiles.js b/build/src/start/server/metro/metroWatchTypeScriptFiles.js
+index 3c4e29a3518d0600ab4f9b280aa3d196aa4468a6..0584fb48e2155eb6d598754807d98d5949054eb8 100644
+--- a/build/src/start/server/metro/metroWatchTypeScriptFiles.js	
++++ b/build/src/start/server/metro/metroWatchTypeScriptFiles.js	
+@@ -28,24 +28,59 @@ function metroWatchTypeScriptFiles({ metro, server, projectRoot, callback, tscon
+ ] }) {
+     const watcher = metro.getBundler().getBundler().getWatcher();
+     const tsconfigPath = _path().default.join(projectRoot, 'tsconfig.json');
+-    const listener = ({ eventsQueue })=>{
+-        for (const event of eventsQueue){
+-            var _event_metadata;
+-            if (eventTypes.includes(event.type) && ((_event_metadata = event.metadata) == null ? void 0 : _event_metadata.type) !== 'd' && // We need to ignore node_modules because Metro will add all of the files in node_modules to the watcher.
+-            !/node_modules/.test(event.filePath) && // Ignore declaration files
+-            !/\.d\.ts$/.test(event.filePath)) {
+-                const { filePath } = event;
+-                // Is TypeScript?
+-                if (// If the user adds a TypeScript file to the observable files in their project.
+-                /\.tsx?$/.test(filePath) || // Or if the user adds a tsconfig.json file to the project root.
+-                tsconfig && filePath === tsconfigPath) {
+-                    debug('Detected TypeScript file changed in the project: ', filePath);
+-                    callback(event);
+-                    if (throttle) {
+-                        return;
++    const listener = ({ changes, eventsQueue })=>{
++        // metro-file-map >= 0.83.7 emits `{ changes, logger, rootDir }` instead of
++        // the older `{ eventsQueue }` shape. Handle both. (pnpm patch)
++        if (eventsQueue != null) {
++            for (const event of eventsQueue){
++                var _event_metadata;
++                if (eventTypes.includes(event.type) && ((_event_metadata = event.metadata) == null ? void 0 : _event_metadata.type) !== 'd' && // We need to ignore node_modules because Metro will add all of the files in node_modules to the watcher.
++                !/node_modules/.test(event.filePath) && // Ignore declaration files
++                !/\.d\.ts$/.test(event.filePath)) {
++                    const { filePath } = event;
++                    // Is TypeScript?
++                    if (// If the user adds a TypeScript file to the observable files in their project.
++                    /\.tsx?$/.test(filePath) || // Or if the user adds a tsconfig.json file to the project root.
++                    tsconfig && filePath === tsconfigPath) {
++                        debug('Detected TypeScript file changed in the project: ', filePath);
++                        callback(event);
++                        if (throttle) {
++                            return;
++                        }
+                     }
+                 }
+             }
++        } else if (changes != null) {
++            const check = (type$$1, type, paths)=>{
++                if (!eventTypes.includes(type) || !paths) {
++                    return;
++                }
++                for (const entry of paths){
++                    const filePath = typeof entry === 'string' ? entry : entry[0];
++                    var _event_metadata1;
++                    if (((_event_metadata1 = entry.metadata) == null ? void 0 : _event_metadata1.type) !== 'd' && // We need to ignore node_modules because Metro will add all of the files in node_modules to the watcher.
++                    !/node_modules/.test(filePath) && // Ignore declaration files
++                    !/\.d\.ts$/.test(filePath)) {
++                        // Is TypeScript?
++                        if (// If the user adds a TypeScript file to the observable files in their project.
++                        /\.tsx?$/.test(filePath) || // Or if the user adds a tsconfig.json file to the project root.
++                        tsconfig && filePath === tsconfigPath) {
++                            debug('Detected TypeScript file changed in the project: ', filePath);
++                            callback(Object.assign({}, type$$1, {
++                                type,
++                                filePath
++                            }));
++                            if (throttle) {
++                                return true;
++                            }
++                        }
++                    }
++                }
++                return false;
++            };
++            if (check(changes, 'add', changes.addedFiles) || check(changes, 'change', changes.modifiedFiles) || check(changes, 'delete', changes.removedFiles)) {
++                return;
++            }
+         }
+     };
+     debug('Waiting for TypeScript files to be added to the project...');
+diff --git a/build/src/start/server/metro/waitForMetroToObserveTypeScriptFile.js b/build/src/start/server/metro/waitForMetroToObserveTypeScriptFile.js
+index 87cdf53ef15d6f4d72f4e310aea0a90bfaeda3c4..f5cfda787c5614795220fe8f43c61f7d54702dfe 100644
+--- a/build/src/start/server/metro/waitForMetroToObserveTypeScriptFile.js	
++++ b/build/src/start/server/metro/waitForMetroToObserveTypeScriptFile.js	
+@@ -35,12 +35,15 @@ const debug = require('debug')('expo:start:server:metro:waitForTypescript');
+ function waitForMetroToObserveTypeScriptFile(projectRoot, runner, callback) {
+     const watcher = runner.metro.getBundler().getBundler().getWatcher();
+     const tsconfigPath = _path().default.join(projectRoot, 'tsconfig.json');
+-    const listener = ({ eventsQueue })=>{
+-        for (const event of eventsQueue){
++    const listener = ({ changes, eventsQueue })=>{
++        // metro-file-map >= 0.83.7 emits `{ changes, logger, rootDir }` instead of
++        // the older `{ eventsQueue }` shape. Handle both. (pnpm patch)
++        const events = eventsQueue != null ? eventsQueue : (changes == null ? void 0 : changes.addedFiles) || [];
++        for (const event of events){
++            const filePath = typeof event.filePath === 'string' ? event.filePath : event[0];
+             var _event_metadata;
+-            if (event.type === 'add' && ((_event_metadata = event.metadata) == null ? void 0 : _event_metadata.type) !== 'd' && // We need to ignore node_modules because Metro will add all of the files in node_modules to the watcher.
+-            !/node_modules/.test(event.filePath)) {
+-                const { filePath } = event;
++            if ((eventsQueue != null || event.type === 'add') && ((_event_metadata = event.metadata) == null ? void 0 : _event_metadata.type) !== 'd' && // We need to ignore node_modules because Metro will add all of the files in node_modules to the watcher.
++            !/node_modules/.test(filePath)) {
+                 // Is TypeScript?
+                 if (// If the user adds a TypeScript file to the observable files in their project.
+                 /\.tsx?$/.test(filePath) || // Or if the user adds a tsconfig.json file to the project root.
+@@ -63,13 +66,16 @@ function waitForMetroToObserveTypeScriptFile(projectRoot, runner, callback) {
+ }
+ function observeFileChanges(runner, files, callback) {
+     const watcher = runner.metro.getBundler().getBundler().getWatcher();
+-    const listener = ({ eventsQueue })=>{
+-        for (const event of eventsQueue){
++    const listener = ({ changes, eventsQueue })=>{
++        // metro-file-map >= 0.83.7 emits `{ changes, logger, rootDir }` instead of
++        // the older `{ eventsQueue }` shape. Handle both. (pnpm patch)
++        const events = eventsQueue != null ? eventsQueue : (changes == null ? void 0 : changes.addedFiles) || [];
++        for (const event of events){
++            const filePath = typeof event.filePath === 'string' ? event.filePath : event[0];
+             var // event.type === 'add' &&
+             _event_metadata;
+             if (((_event_metadata = event.metadata) == null ? void 0 : _event_metadata.type) !== 'd' && // We need to ignore node_modules because Metro will add all of the files in node_modules to the watcher.
+-            !/node_modules/.test(event.filePath)) {
+-                const { filePath } = event;
++            !/node_modules/.test(filePath)) {
+                 // Is TypeScript?
+                 if (files.includes(filePath)) {
+                     debug('Observed change:', filePath);
+@@ -89,8 +95,11 @@ function observeFileChanges(runner, files, callback) {
+ }
+ function observeAnyFileChanges(runner, callback) {
+     const watcher = runner.metro.getBundler().getBundler().getWatcher();
+-    const listener = ({ eventsQueue })=>{
+-        callback(eventsQueue);
++    const listener = ({ changes, eventsQueue })=>{
++        // metro-file-map >= 0.83.7 emits `{ changes, logger, rootDir }` instead of
++        // the older `{ eventsQueue }` shape. Handle both. (pnpm patch)
++        const events = eventsQueue != null ? eventsQueue : (changes == null ? void 0 : changes.addedFiles) || [];
++        callback(events);
+     };
+     watcher.addListener('change', listener);
+     const off = ()=>{

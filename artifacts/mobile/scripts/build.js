@@ -131,6 +131,10 @@ async function startMetro(expoPublicDomain) {
     EXPO_PUBLIC_DOMAIN: expoPublicDomain,
   };
 
+  // On Windows `pnpm` resolves to a .cmd shim, which Node can only launch via
+  // a shell — direct spawn is ENOENT (bare name) or EINVAL (.cmd). Unix keeps
+  // shell:false so signal handling stays tight.
+  const isWindows = process.platform === 'win32';
   metroProcess = spawn(
     'pnpm',
     ['exec', 'expo', 'start', '--no-dev', '--minify', '--localhost'],
@@ -139,6 +143,7 @@ async function startMetro(expoPublicDomain) {
       detached: false,
       cwd: projectRoot,
       env,
+      shell: isWindows,
     },
   );
 
@@ -171,8 +176,10 @@ async function startMetro(expoPublicDomain) {
 
 async function downloadFile(url, outputPath) {
   const controller = new AbortController();
-  const fiveMinMS = 5 * 60 * 1_000;
-  const timeoutId = setTimeout(() => controller.abort(), fiveMinMS);
+  // Production bundles with minify + React Compiler can take several minutes to
+  // build on Metro, especially on slower machines. Allow 10 minutes per download.
+  const tenMinMS = 10 * 60 * 1_000;
+  const timeoutId = setTimeout(() => controller.abort(), tenMinMS);
 
   try {
     console.log(`Downloading: ${url}`);
@@ -197,7 +204,7 @@ async function downloadFile(url, outputPath) {
     }
 
     if (error.name === 'AbortError') {
-      throw new Error(`Download timeout after 5m: ${url}`);
+      throw new Error(`Download timeout after 10m: ${url}`);
     }
     throw error;
   } finally {
@@ -518,7 +525,9 @@ async function main() {
 
   await startMetro(domain);
 
-  const downloadTimeout = 600000;
+  // Allow 20 minutes overall: iOS and Android production bundles are built
+  // sequentially by Metro and each can take up to 10 minutes.
+  const downloadTimeout = 1200000;
   const downloadPromise = downloadBundlesAndManifests(timestamp);
   const timeoutPromise = new Promise((_, reject) => {
     setTimeout(() => {
