@@ -11,7 +11,7 @@ import Loading from '../components/Loading'
 // The generated Order type hasn't caught up with the API yet — the server
 // does return patientName (see artifacts/api-server/src/routes/orders.ts).
 // Same gap as Prescription in Prescriptions.tsx.
-type OrderRow = Order & { patientName?: string | null }
+type OrderRow = Order & { patientName?: string | null; servedByName?: string | null }
 
 // Only pending/dispensed/cancelled are real order statuses (see
 // orderStatusEnum in lib/db/src/schema/orders.ts) — 'delivered' and
@@ -71,7 +71,7 @@ export default function Sales(): ReactElement {
       if (toDate && orderDate > toDate) return false
       if (q) {
         const saleNo = `#${order.id.toString().padStart(4, '0')}`.toLowerCase()
-        const haystack = `${saleNo} ${order.id} ${order.patientName ?? ''} ${(order as any).servedByName ?? ''}`.toLowerCase()
+        const haystack = `${saleNo} ${order.id} ${order.patientName ?? ''} ${(order as OrderRow).servedByName ?? ''}`.toLowerCase()
         if (!haystack.includes(q)) return false
       }
       return true
@@ -248,7 +248,7 @@ export default function Sales(): ReactElement {
                     {o.patientName ?? 'Walk-in'}
                   </td>
                   <td className="py-2.5 px-4 text-xs" style={{ color: theme.muted }}>
-                    {(o as any).servedByName ?? '—'}
+                    {(o as OrderRow).servedByName ?? '—'}
                   </td>
                   <td className="py-2.5 px-4" style={{ ...mono, color: theme.text }}>
                     {formatCurrency(parseFloat(o.total), settings)}

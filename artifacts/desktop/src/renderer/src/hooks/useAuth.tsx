@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react'
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
-import { useGetMe, useLoginUser } from '@workspace/api-client-react'
+import { useGetMe, useLoginUser, getGetMeQueryKey } from '@workspace/api-client-react'
 import type { User } from '@workspace/api-client-react'
 import { getToken, setToken as persistToken, notifyLogout } from '../lib/apiClient'
 import { rememberEmail, clearRecallEmails } from '../lib/emailRecall'
@@ -25,8 +25,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
   const [loginError, setLoginError] = useState<string | null>(null)
 
   const { data: user, isLoading: isUserLoading, isError } = useGetMe({
-    query: { enabled: !!token, retry: false }
-  } as any)
+    query: { enabled: !!token, retry: false, queryKey: getGetMeQueryKey() }
+  })
 
   const loginMutation = useLoginUser()
 
@@ -42,8 +42,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
   const login = async (email: string, password: string): Promise<void> => {
     setLoginError(null)
     try {
-      const result = await loginMutation.mutateAsync({ data: { email, password } } as any)
-      const newToken = (result as any).token as string
+      const result = await loginMutation.mutateAsync({ data: { email, password } })
+      const newToken = result.token
       tokenRef.current = newToken
       persistToken(newToken)
       setToken(newToken)

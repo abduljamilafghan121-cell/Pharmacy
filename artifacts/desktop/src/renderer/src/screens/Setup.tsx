@@ -41,7 +41,7 @@ export default function Setup(): ReactElement {
       setError("Passwords don't match")
       return
     }
-    registerMutation.mutate({ data: { name, email, password, role: 'admin' } } as any)
+    registerMutation.mutate({ data: { name, email, password, role: 'admin' } })
   }
 
   const disabled = registerMutation.isPending || !name || !email || !password || !confirm

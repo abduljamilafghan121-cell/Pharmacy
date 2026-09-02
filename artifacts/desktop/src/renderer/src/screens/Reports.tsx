@@ -556,7 +556,7 @@ export default function Reports(): ReactElement {
                       cursor={{ fill: theme.hover }}
                       contentStyle={{ borderRadius: 8, border: `1px solid ${theme.border}`, background: theme.card }}
                       labelStyle={{ color: theme.muted }}
-                      formatter={(value: any) => [formatCurrency(parseFloat(String(value ?? 0)), settings) as any, 'Revenue']}
+                      formatter={(value) => [formatCurrency(parseFloat(String(value ?? 0)), settings), 'Revenue']}
                     />
                     <Bar dataKey="revenue" fill={theme.primary} radius={[4, 4, 0, 0]} />
                   </BarChart>

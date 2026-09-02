@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useRoute } from "wouter";
-import { useGetOrder, useUpdateOrderStatus, useCreatePayment } from "@workspace/api-client-react";
-import type { PaymentInputMethod } from "@workspace/api-client-react";
+import { useGetOrder, useUpdateOrderStatus, useCreatePayment, getGetOrderQueryKey } from "@workspace/api-client-react";
+import type { PaymentInputMethod, OrderDetail, OrderItem } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -34,6 +34,15 @@ const PAYMENT_METHODS: { value: PaymentInputMethod; label: string }[] = [
   { value: "insurance", label: "Insurance" },
 ];
 
+// Extended fields — passed through since they're not in the generated schema yet
+type OrderDetailRow = OrderDetail & {
+  patientName?: string | null;
+  servedByName?: string | null;
+  discountAmount?: string | null;
+  taxAmount?: string | null;
+};
+type OrderItemRow = OrderItem & { sig?: string | null };
+
 export default function SaleDetail() {
   const [, params] = useRoute("/sales/:id");
   const id = Number(params?.id);
@@ -41,7 +50,7 @@ export default function SaleDetail() {
   const queryClient = useQueryClient();
 
   const { data: order, isLoading } = useGetOrder(id, {
-    query: { enabled: !!id } as any,
+    query: { enabled: !!id, queryKey: getGetOrderQueryKey(id) },
   });
   const { data: pharmacy } = usePharmacySettings();
 
@@ -77,6 +86,9 @@ export default function SaleDetail() {
   if (isLoading) return <div className="p-10 text-center text-muted-foreground">Loading sale…</div>;
   if (!order) return <div className="p-10 text-center text-muted-foreground">Sale not found.</div>;
 
+  const o = order as OrderDetailRow;
+  const items = (order.items ?? []) as OrderItemRow[];
+
   const isCancelled = order.status === "cancelled";
   const isDispensed = order.status === "dispensed";
   const isPaid = order.paymentStatus === "paid";
@@ -100,7 +112,7 @@ export default function SaleDetail() {
   const handleReturnRefund = () => {
     updateStatusMutation.mutate(
       // Pass refundNote as extra body field alongside status
-      { id, data: { status: "cancelled", ...(refundNote.trim() ? { refundNote: refundNote.trim() } : {}) } as any },
+      { id, data: { status: "cancelled", ...(refundNote.trim() ? { refundNote: refundNote.trim() } : {}) } },
       {
         onSuccess: () => {
           toast({ title: isPaid ? "Sale cancelled & payment refunded" : "Sale cancelled & stock restored" });
@@ -120,7 +132,7 @@ export default function SaleDetail() {
   return (
     <>
     {/* Hidden receipt — only visible when printing */}
-    <PrintableReceipt order={order as any} />
+    <PrintableReceipt order={order} />
 
     <div className="space-y-6 max-w-5xl mx-auto animate-in fade-in duration-300 print:hidden">
       <Button variant="ghost" className="mb-2 -ml-4" onClick={() => window.history.back()}>
@@ -149,7 +161,7 @@ export default function SaleDetail() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {(order as any).items?.map((item: any) => (
+                {items.map((item) => (
                   <div
                     key={item.id}
                     className="py-3 border-b border-border last:border-0 last:pb-0"
@@ -174,12 +186,12 @@ export default function SaleDetail() {
                           title="Print dispensing label"
                           onClick={() => printDispensingLabel(
                             {
-                              patientName: (order as any).patientName,
-                              medicineName: item.medicineName,
+                              patientName: o.patientName,
+                              medicineName: item.medicineName ?? "",
                               sig: item.sig,
                               qty: item.quantity,
                               unitName: item.unitName,
-                              dispensedDate: (order as any).createdAt,
+                              dispensedDate: o.createdAt,
                             },
                             pharmacy?.name ?? "Pharmacy",
                             pharmacy?.address
@@ -197,18 +209,18 @@ export default function SaleDetail() {
               <div className="mt-6 pt-4 border-t border-border space-y-2">
                 <div className="flex justify-between text-sm text-muted-foreground">
                   <span>Subtotal</span>
-                  <span>{formatCurrency((order as any).subtotal ?? order.total)}</span>
+                  <span>{formatCurrency(o.subtotal ?? order.total)}</span>
                 </div>
-                {!!((order as any).discountAmount) && parseFloat((order as any).discountAmount) > 0 && (
+                {!!(o.discountAmount) && parseFloat(o.discountAmount) > 0 && (
                   <div className="flex justify-between text-sm text-muted-foreground">
                     <span>Discount</span>
-                    <span className="text-green-600">−{formatCurrency((order as any).discountAmount)}</span>
+                    <span className="text-green-600">−{formatCurrency(o.discountAmount)}</span>
                   </div>
                 )}
-                {!!((order as any).taxAmount) && parseFloat((order as any).taxAmount) > 0 && (
+                {!!(o.taxAmount) && parseFloat(o.taxAmount) > 0 && (
                   <div className="flex justify-between text-sm text-muted-foreground">
                     <span>Tax</span>
-                    <span>{formatCurrency((order as any).taxAmount)}</span>
+                    <span>{formatCurrency(o.taxAmount)}</span>
                   </div>
                 )}
                 <div className="flex justify-between font-bold text-xl pt-1 border-t border-border">
@@ -231,12 +243,12 @@ export default function SaleDetail() {
               <div className="flex items-center gap-2">
                 <User size={14} className="text-muted-foreground" />
                 <span className="text-muted-foreground">Patient:</span>
-                <span className="font-medium">{(order as any).patientName || "Walk-in"}</span>
+                <span className="font-medium">{o.patientName || "Walk-in"}</span>
               </div>
               <div className="flex items-center gap-2">
                 <Stethoscope size={14} className="text-muted-foreground" />
                 <span className="text-muted-foreground">Served by:</span>
-                <span className="font-medium">{(order as any).servedByName || "—"}</span>
+                <span className="font-medium">{o.servedByName || "—"}</span>
               </div>
               {order.notes && (
                 <div className="bg-muted/50 rounded-md p-3 mt-2">

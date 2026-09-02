@@ -9,6 +9,7 @@ interface ReceiptItem {
   conversionFactorToBase?: number;
   price: string;
   prescriptionRequired?: boolean | null;
+  sig?: string | null;
 }
 
 interface ReceiptOrder {
@@ -91,11 +92,11 @@ export function PrintableReceipt({ order }: { order: ReceiptOrder }) {
                 <td className="py-1.5 pr-2">
                   <div className="font-semibold">{item.medicineName ?? "Item"}</div>
                   <div className="text-[9.5px] text-gray-600 mt-0.5">{unitPriceLabel(item)}</div>
-                  {(item as any).sig && (
+                  {(item.sig && (
                     <div className="text-[9px] italic text-gray-700 mt-0.5 leading-tight">
-                      ↳ {(item as any).sig}
+                      ↳ {item.sig}
                     </div>
-                  )}
+                  ))}
                 </td>
                 <td className="py-1.5 text-right whitespace-nowrap">{formatCurrency(item.price)}</td>
               </tr>

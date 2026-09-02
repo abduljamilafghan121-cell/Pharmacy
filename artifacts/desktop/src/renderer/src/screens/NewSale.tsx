@@ -6,7 +6,7 @@ import {
   CheckCircle2, Loader2, Receipt, AlertTriangle, ShieldAlert, ShieldCheck, Lock,
   FileText, AlertCircle, X, ArrowRight, Banknote, CreditCard, CalendarClock
 } from 'lucide-react'
-import { useListMedicines, useCreateOrder, useGetMedicine, getListMedicinesQueryKey } from '@workspace/api-client-react'
+import { useListMedicines, useCreateOrder, useGetMedicine, getListMedicinesQueryKey, getGetMedicineQueryKey } from '@workspace/api-client-react'
 import type { Medicine, MedicineUnit, OrderInputPaymentMethod } from '@workspace/api-client-react'
 import { useUiStore } from '../store/uiStore'
 import { getTheme, mono } from '../theme'
@@ -363,7 +363,7 @@ export default function NewSale(): ReactElement {
         const list = await apiFetch<MedicineRow[] | { data: MedicineRow[] }>(
           `medicines?search=${encodeURIComponent(barcode)}`
         )
-        const rows: MedicineRow[] = Array.isArray(list) ? list : (list as any).data ?? []
+        const rows: MedicineRow[] = Array.isArray(list) ? list : list.data ?? []
         const match = rows.find((m) => m.barcode === barcode)
         if (!match) {
           showToast(`Barcode not recognised: ${barcode}`)
@@ -384,7 +384,7 @@ export default function NewSale(): ReactElement {
   // Deep link from MedicineDetail's "Add to Checkout" — desktop's equivalent
   // of web's /new-sale?medicineId=X. Fetch the medicine, add it once, clear.
   const { data: deepLinkMedicine } = useGetMedicine(pendingCheckoutMedicineId ?? 0, {
-    query: { enabled: !!pendingCheckoutMedicineId } as any
+    query: { enabled: !!pendingCheckoutMedicineId, queryKey: getGetMedicineQueryKey(pendingCheckoutMedicineId ?? 0) }
   })
   useEffect(() => {
     if (pendingCheckoutMedicineId && deepLinkMedicine) {
@@ -464,15 +464,6 @@ export default function NewSale(): ReactElement {
 
   const handleProcessSale = async (): Promise<void> => {
     if (saleItems.length === 0 || submitting) return
-    for (const item of saleItems) {
-      const baseUnitsNeeded = item.quantity * item.conversionFactor
-      if (item.medicine.quantity < baseUnitsNeeded) {
-        showToast(
-          `Insufficient stock: ${item.medicine.name} — only ${formatStockDisplay(item.medicine.quantity, getUnits(item.medicine))}`
-        )
-        return
-      }
-    }
     if (isSafetyBlocked) {
       showToast('Safety check failed — resolve warnings before proceeding')
       return
@@ -484,6 +475,43 @@ export default function NewSale(): ReactElement {
 
     setSubmitting(true)
     try {
+      // Snapshot: fetch authoritative stock + prices right before charging.
+      // Each cart row holds the medicine record from when the item was added
+      // (possibly stale), so validate against fresh server data to catch
+      // out-of-stock races and keep the cashier's totals on real prices.
+      // The server still performs its own final stock decrement — this just
+      // closes the client-side TOCTOU window.
+      let freshById: Record<number, MedicineRow> = {}
+      try {
+        const freshList = await apiFetch<MedicineRow[] | { data: MedicineRow[] }>('medicines')
+        const freshRows: MedicineRow[] = Array.isArray(freshList)
+          ? freshList
+          : (freshList as { data: MedicineRow[] }).data ?? []
+        freshById = Object.fromEntries(freshRows.map((m) => [m.id, m]))
+      } catch {
+        showToast('Could not verify stock — try again')
+        return
+      }
+
+      for (const item of saleItems) {
+        const fresh = freshById[item.medicine.id]
+        if (!fresh) {
+          showToast(`${item.medicine.name} is no longer available`)
+          return
+        }
+        const baseUnitsNeeded = item.quantity * item.conversionFactor
+        if (fresh.quantity < baseUnitsNeeded) {
+          showToast(`Insufficient stock: ${fresh.name} — only ${formatStockDisplay(fresh.quantity, getUnits(fresh))}`)
+          return
+        }
+      }
+
+      // Reconcile cart rows to the authoritative snapshot so the on-screen
+      // totals reflect the prices the server will actually charge.
+      setSaleItems((prev) =>
+        prev.map((i) => (freshById[i.medicine.id] ? { ...i, medicine: freshById[i.medicine.id] } : i))
+      )
+
       const result = await createOrder.mutateAsync({
         data: {
           patientName: patientName.trim() || undefined,
@@ -494,10 +522,10 @@ export default function NewSale(): ReactElement {
             quantity: i.quantity,
             ...(i.unitId ? { unitId: i.unitId } : {}),
             ...(i.sig ? { sig: i.sig } : {})
-          })) as any,
-          ...(discountClamped > 0 ? ({ discountAmount: discountClamped } as any) : {}),
-          ...(patientId ? ({ patientId } as any) : {}),
-          ...(prescriptionId ? ({ prescriptionId } as any) : {})
+          })),
+          ...(discountClamped > 0 ? { discountAmount: discountClamped } : {}),
+          ...(patientId ? { patientId } : {}),
+          ...(prescriptionId ? { prescriptionId } : {})
         }
       })
       queryClient.invalidateQueries({ queryKey: getListMedicinesQueryKey(undefined) })

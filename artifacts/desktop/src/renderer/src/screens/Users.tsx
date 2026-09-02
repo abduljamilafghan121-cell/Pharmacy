@@ -1,7 +1,7 @@
 ﻿import type { ReactElement } from 'react'
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useCreateUser, useListUsers, getListUsersQueryKey } from '@workspace/api-client-react'
+import { useCreateUser, useListUsers, getListUsersQueryKey, type UserRegisterInputRole } from '@workspace/api-client-react'
 import { ShieldCheck, UserPlus, Users as UsersIcon, Loader2, Pencil, KeyRound, Power, RefreshCw } from 'lucide-react'
 import { useUiStore } from '../store/uiStore'
 import { getTheme, serif } from '../theme'
@@ -175,13 +175,21 @@ export default function UsersScreen(): ReactElement {
                 showToast('Passwords do not match')
                 return
               }
+              const rawRole = String(fd.get('role') ?? 'pharmacist')
+              const parsedRole =
+                rawRole === 'admin' || rawRole === 'pharmacist' || rawRole === 'cashier' || rawRole === 'viewer'
+                  ? rawRole
+                  : 'pharmacist'
+              // UserRegisterInputRole only models admin/pharmacist; the server
+              // also accepts cashier/viewer (see UserRole in auth schema).
+              const role = parsedRole as UserRegisterInputRole
               createUser.mutate({
                 data: {
                   name: String(fd.get('name') ?? '').trim(),
                   email: String(fd.get('email') ?? '').trim(),
                   password,
                   phone: String(fd.get('phone') ?? '').trim() || undefined,
-                  role: String(fd.get('role') ?? 'pharmacist') as any
+                  role
                 }
               })
             }}

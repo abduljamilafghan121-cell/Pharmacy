@@ -478,7 +478,7 @@ function PatientSafetyDialog({ patient, onClose }: { patient: Patient; onClose: 
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Severity</Label>
-                  <select value={severity} onChange={e => setSeverity(e.target.value as any)}
+                  <select value={severity} onChange={e => setSeverity(e.target.value as typeof severity)}
                     className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
                     <option value="mild">Mild</option>
                     <option value="moderate">Moderate</option>

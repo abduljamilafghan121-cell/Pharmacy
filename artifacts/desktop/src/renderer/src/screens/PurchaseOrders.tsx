@@ -23,6 +23,10 @@ import { apiUrl, authHeaders, jsonOrThrow } from '../lib/apiClient'
 import Modal from '../components/Modal'
 import Loading from '../components/Loading'
 
+// The server computes and returns itemCount on the purchase-order list rows,
+// but the generated PurchaseOrder type doesn't model it yet — declare it here.
+type PurchaseOrderRow = PurchaseOrder & { itemCount?: number }
+
 // Matches purchaseOrderStatusEnum in lib/db/src/schema/purchase-orders.ts — a purchase
 // order is only ever "pending", "received", or "cancelled" (no "completed"/"ordered").
 const STATUS_COLOR: Record<string, 'ok' | 'low' | 'expiring'> = {
@@ -408,7 +412,7 @@ function ReceivePOModal({ poId, onClose }: { poId: number; onClose: () => void }
   // Load sellable batch options for each line and default lines to "new batch"
   useEffect(() => {
     if (!order || order.status !== 'pending' || !order.items?.length) return
-    const ids = Array.from(new Set((order.items as any[]).map((i) => i.medicineId as number)))
+    const ids = Array.from(new Set(order.items.map((i) => i.medicineId)))
     const today = new Date().toISOString().slice(0, 10)
     const load = async (): Promise<void> => {
       const entries = await Promise.all(
@@ -453,8 +457,8 @@ function ReceivePOModal({ poId, onClose }: { poId: number; onClose: () => void }
   const handleReceive = (): void => {
     if (!order) return
     if (!window.confirm('Receive this purchase and add its quantities to inventory?')) return
-    const items = ((order.items ?? []) as any[]).map((item) => {
-      const line = receiveLines[item.medicineId as number]
+    const items = (order.items ?? []).map((item) => {
+      const line = receiveLines[item.medicineId]
       if (line && typeof line.choice === 'number') {
         return { medicineId: item.medicineId, batchId: line.choice }
       }
@@ -505,8 +509,8 @@ function ReceivePOModal({ poId, onClose }: { poId: number; onClose: () => void }
             )}
           </div>
 
-          {((order.items ?? []) as any[]).map((item) => {
-            const mid = item.medicineId as number
+          {(order.items ?? []).map((item) => {
+            const mid = item.medicineId
             const line = receiveLines[mid] ?? { choice: 'new' as const, batchNumber: '', expiryDate: '' }
             const options = batchOptions[mid] ?? []
             const scanned = scannedCounts[mid] ?? 0
@@ -915,7 +919,7 @@ export default function PurchaseOrders(): ReactElement {
                     {po.supplierName ?? '—'}
                   </td>
                   <td className="py-2.5 px-4 text-center" style={{ ...mono, color: theme.muted }}>
-                    {(po as any).itemCount ?? po.items?.length ?? 0}
+                    {(po as PurchaseOrderRow).itemCount ?? po.items?.length ?? 0}
                   </td>
                   <td className="py-2.5 px-4 text-right" style={{ ...mono, color: theme.text, fontWeight: 600 }}>
                     {formatCurrency(parseFloat(po.total), settings)}

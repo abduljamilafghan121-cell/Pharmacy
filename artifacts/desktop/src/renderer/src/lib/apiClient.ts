@@ -17,13 +17,50 @@ import { useUiStore } from '../store/uiStore'
 
 const TOKEN_KEY = 'pharma_token'
 
-let tokenCache: string | null = (() => {
+let tokenCache: string | null = null
+
+interface TokenStorage {
+  load: () => Promise<string | null>
+  save: (token: string | null) => Promise<void>
+}
+
+// Desktop persists the session token through the preload bridge into the
+// main process, which stores it with Electron safeStorage (OS keychain /
+// DPAPI on Windows). localStorage is deliberately not used for the token —
+// any injected script could trivially read it there. The localStorage
+// fallback below only exists for running the renderer outside Electron (no
+// window.api bridge) and the one-time migration of legacy tokens.
+function tokenStorage(): TokenStorage | undefined {
+  const bridge = window.api?.token
+  if (bridge) return { load: () => bridge.load(), save: (t) => bridge.save(t) }
+  return undefined
+}
+
+async function loadInitialToken(): Promise<string | null> {
+  const storage = tokenStorage()
+  if (storage) {
+    const stored = await storage.load()
+    if (stored) return stored
+    // One-time migration: older builds kept the token in localStorage, so
+    // move it into the secure store on first run and drop the plaintext copy.
+    try {
+      const legacy = localStorage.getItem(TOKEN_KEY)
+      if (legacy) {
+        localStorage.removeItem(TOKEN_KEY)
+        void storage.save(legacy)
+        return legacy
+      }
+    } catch {
+      // ignore — secure store is the source of truth from here on
+    }
+    return null
+  }
   try {
     return localStorage.getItem(TOKEN_KEY)
   } catch {
     return null
   }
-})()
+}
 
 export function getToken(): string | null {
   return tokenCache
@@ -31,11 +68,21 @@ export function getToken(): string | null {
 
 export function setToken(token: string | null): void {
   tokenCache = token
-  try {
-    if (token) localStorage.setItem(TOKEN_KEY, token)
-    else localStorage.removeItem(TOKEN_KEY)
-  } catch {
-    // sandboxed / storage unavailable — token still lives in memory for this session
+  const storage = tokenStorage()
+  if (storage) {
+    void storage.save(token)
+    try {
+      if (!token) localStorage.removeItem(TOKEN_KEY)
+    } catch {
+      // ignore — secure store is authoritative
+    }
+  } else {
+    try {
+      if (token) localStorage.setItem(TOKEN_KEY, token)
+      else localStorage.removeItem(TOKEN_KEY)
+    } catch {
+      // storage unavailable — token still lives in memory for this session
+    }
   }
 }
 
@@ -52,9 +99,12 @@ function resolveOrigin(): string {
   return configured.replace(/\/+$/, '').replace(/\/api$/, '')
 }
 
-// Called once, before the app renders (see main.tsx).
-export function initApiClient(): void {
+// Called once, before the app renders (see main.tsx). Async because the
+// saved token has to be read back from the OS secure store via IPC before
+// the first authenticated request.
+export async function initApiClient(): Promise<void> {
   setBaseUrl(resolveOrigin())
+  tokenCache = await loadInitialToken()
   setAuthTokenGetter(() => tokenCache)
   // Block all mutating API calls while the app is offline, so users can't
   // create/change data (sales, edits, deletes) against an unreachable server.

@@ -111,10 +111,12 @@ function MedicineCard({ medicine, isAdmin }: { medicine: Medicine, isAdmin: bool
     medicine.expiryDate <= new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10),
   );
 
-  const units = (medicine as any).units as MedicineUnit[] | undefined;
+  const units = medicine.units;
   const stockDisplay = formatStockDisplay(medicine.quantity, units);
   const hasUnits = units && units.length > 0;
-  const controlledSchedule = (medicine as any).controlledSchedule as string | null;
+  // The generated Medicine type doesn't model controlledSchedule yet — the
+  // server returns it, so read it through this extended-card type instead of `as any`.
+  const controlledSchedule = (medicine as Medicine & { controlledSchedule?: string | null }).controlledSchedule ?? null;
 
   return (
     <Card className="flex flex-col overflow-hidden hover-elevate transition-all group">
@@ -365,10 +367,10 @@ function MedicineFormDialog() {
         expiryDate: fd.get("expiryDate") as string,
         prescriptionRequired: fd.get("prescriptionRequired") === "on",
         description: (fd.get("description") as string) || undefined,
-        // Extended fields — passed through as any since they're not in the generated schema yet
+        // Extended fields — passed through since they're not in the generated schema yet
         ...(fd.get("controlledSchedule") ? { controlledSchedule: fd.get("controlledSchedule") } : {}),
         ...(fd.get("drugClass") ? { drugClass: fd.get("drugClass") } : {}),
-      } as any,
+      },
     });
   };
 

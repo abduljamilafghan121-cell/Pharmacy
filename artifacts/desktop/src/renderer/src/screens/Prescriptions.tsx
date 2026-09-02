@@ -330,9 +330,9 @@ function NewPrescriptionModal({ onClose }: { onClose: () => void }): ReactElemen
         patientName: patientName.trim() || undefined,
         doctorName: doctorName.trim() || undefined,
         notes: notes.trim() || undefined,
-        maxRefills,
-        ...(attachmentUrl ? ({ attachmentUrl } as any) : {})
-      } as any
+        ...(maxRefills > 0 ? { maxRefills } : {}),
+        ...(attachmentUrl ? { attachmentUrl } : {})
+      }
     })
   }
 

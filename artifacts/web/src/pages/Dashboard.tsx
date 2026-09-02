@@ -102,7 +102,7 @@ function StaffDashboard() {
                 ))
               ) : (
                 <>
-                  {(topMedicines as any)?.slice(0, 5).map((item: any) => (
+                  {(topMedicines)?.slice(0, 5).map((item) => (
                 <div key={item.medicineId} className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/20">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-md bg-primary/10 text-primary flex items-center justify-center">

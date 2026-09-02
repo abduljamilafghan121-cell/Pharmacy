@@ -103,8 +103,16 @@ async function apiFetch<T>(url: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+// The generated Medicine type doesn't model a few fields the server returns
+// (barcode, controlledSchedule, drugClass) — extend it here instead of `as any`.
+type MedicineRow = Medicine & {
+  barcode?: string | null;
+  controlledSchedule?: string | null;
+  drugClass?: string | null;
+};
+
 function getUnits(medicine: Medicine): MedicineUnit[] {
-  return ((medicine as any).units as MedicineUnit[]) ?? [];
+  return medicine.units ?? [];
 }
 
 function defaultUnit(medicine: Medicine): { unitId?: number; unitName?: string; conversionFactor: number } {
@@ -232,10 +240,10 @@ export default function NewSale() {
   // ── Barcode scan handler ──────────────────────────────────────────────────
   const handleBarcodeScan = useCallback(async (barcode: string) => {
     try {
-      const results = await apiFetch<Medicine[]>(`/api/medicines?search=${encodeURIComponent(barcode)}`);
+      const results = await apiFetch<MedicineRow[] | { data: MedicineRow[] }>(`/api/medicines?search=${encodeURIComponent(barcode)}`);
       // apiFetch may return paginated {data,[]} or a plain array depending on query params
-      const list: Medicine[] = Array.isArray(results) ? results : (results as any).data ?? [];
-      const match = list.find((m: any) => m.barcode === barcode);
+      const list: MedicineRow[] = Array.isArray(results) ? results : results.data ?? [];
+      const match = list.find(m => m.barcode === barcode);
       if (!match) {
         toast({ title: "Barcode not recognised", description: `No medicine found for: ${barcode}`, variant: "destructive" });
         return;
@@ -261,8 +269,8 @@ export default function NewSale() {
         const hits = items.filter(i =>
           allergenNames.some(a =>
             i.medicine.name.toLowerCase().includes(a) ||
-            ((i.medicine as any).genericName ?? "").toLowerCase().includes(a) ||
-            ((i.medicine as any).drugClass ?? "").toLowerCase().includes(a)
+            (i.medicine.genericName ?? "").toLowerCase().includes(a) ||
+            ((i.medicine as MedicineRow).drugClass ?? "").toLowerCase().includes(a)
           )
         ).map(i => i.medicine.name);
         setAllergyHits(hits);
@@ -316,7 +324,7 @@ export default function NewSale() {
     });
     setSearch("");
     searchRef.current?.focus();
-    if ((medicine as any).genericName) {
+    if (medicine.genericName) {
       checkGenericAlternatives(medicine.id, medicine.name);
     }
   };
@@ -355,7 +363,7 @@ export default function NewSale() {
   const grandTotal = afterDiscount + taxAmount;
 
   // Controlled substances in cart
-  const controlledItems = saleItems.filter(i => (i.medicine as any).controlledSchedule);
+  const controlledItems = saleItems.filter(i => (i.medicine as MedicineRow).controlledSchedule);
 
   // Hard block conditions
   const contraindicatedPairs = interactions.filter(i => i.severity === "contraindicated");
@@ -405,10 +413,10 @@ export default function NewSale() {
             quantity: i.quantity,
             ...(i.unitId ? { unitId: i.unitId } : {}),
             ...(i.sig ? { sig: i.sig } : {}),
-          })) as any,
-          ...(discountClamped > 0 ? { discountAmount: discountClamped } as any : {}),
-          ...(patientId ? { patientId } as any : {}),
-          ...(prescriptionId ? { prescriptionId } as any : {}),
+          })),
+          ...(discountClamped > 0 ? { discountAmount: discountClamped } : {}),
+          ...(patientId ? { patientId } : {}),
+          ...(prescriptionId ? { prescriptionId } : {}),
         },
       });
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
@@ -558,7 +566,7 @@ export default function NewSale() {
                     filteredMedicines.map(med => {
                       const units = getUnits(med);
                       const stockLabel = med.quantity === 0 ? "Out of stock" : units.length > 0 ? formatStockDisplay(med.quantity, units) : `${med.quantity} in stock`;
-                      const cs = (med as any).controlledSchedule as string | null;
+                      const cs = (med as MedicineRow).controlledSchedule as string | null;
                       return (
                         <button
                           key={med.id}
@@ -691,7 +699,7 @@ export default function NewSale() {
                   <div>
                     <p className="font-semibold">Controlled substance{controlledItems.length > 1 ? "s" : ""} — prescription required</p>
                     <p className="mt-0.5 opacity-90">
-                      {controlledItems.map(i => `${i.medicine.name} (Schedule ${(i.medicine as any).controlledSchedule})`).join(", ")} — a verified prescription must be attached and will be auto-logged.
+                      {controlledItems.map(i => `${i.medicine.name} (Schedule ${(i.medicine as MedicineRow).controlledSchedule})`).join(", ")} — a verified prescription must be attached and will be auto-logged.
                     </p>
                   </div>
                 </div>
@@ -750,7 +758,7 @@ export default function NewSale() {
                     const lineTotal = unitPrice * item.quantity;
                     const baseUnitsUsed = item.quantity * item.conversionFactor;
                     const maxQty = Math.floor(liveMedicine.quantity / item.conversionFactor);
-                    const cs = (item.medicine as any).controlledSchedule as string | null;
+                    const cs = (item.medicine as MedicineRow).controlledSchedule as string | null;
                     const isContraindicated = contraindicatedPairs.some(p =>
                       p.medicine1Id === item.medicine.id || p.medicine2Id === item.medicine.id
                     );

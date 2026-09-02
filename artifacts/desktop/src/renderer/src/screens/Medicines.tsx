@@ -22,7 +22,8 @@ import { formatStockDisplay } from '../lib/stock-format'
 import Modal from '../components/Modal'
 
 // The server returns controlledSchedule/drugClass but the generated Medicine
-// type is stale — read them defensively (web does the same via `as any`).
+// type hasn't caught up — extend it here so we read them defensively without
+// `as any`.
 type MedicineRow = Medicine & {
   controlledSchedule?: string | null
   drugClass?: string | null
@@ -347,9 +348,9 @@ function AddMedicineModal({ onClose }: { onClose: () => void }): ReactElement {
         prescriptionRequired,
         description: description.trim() || undefined,
         // Extended fields — passed through since they're not in the generated schema yet
-        ...(controlledSchedule ? ({ controlledSchedule } as any) : {}),
-        ...(drugClass.trim() ? ({ drugClass: drugClass.trim() } as any) : {})
-      } as any
+        ...(controlledSchedule ? { controlledSchedule } : {}),
+        ...(drugClass.trim() ? { drugClass: drugClass.trim() } : {})
+      }
     })
   }
 

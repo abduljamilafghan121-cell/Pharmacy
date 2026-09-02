@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRoute } from "wouter";
-import { useGetMedicine, useDeleteMedicine } from "@workspace/api-client-react";
+import { useGetMedicine, useDeleteMedicine, getGetMedicineQueryKey } from "@workspace/api-client-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
@@ -114,7 +114,7 @@ export default function MedicineDetail() {
   };
 
   const { data: medicine, isLoading } = useGetMedicine(id, {
-    query: { enabled: !!id } as any
+    query: { enabled: !!id, queryKey: getGetMedicineQueryKey(id) }
   });
 
   const deleteMutation = useDeleteMedicine({
@@ -376,7 +376,7 @@ export default function MedicineDetail() {
                   <Label className="text-xs">Type</Label>
                   <select
                     value={ciType}
-                    onChange={e => { setCiType(e.target.value as any); setCiValue(""); }}
+                    onChange={e => { setCiType(e.target.value as "condition" | "min_age" | "max_age" | "gender"); setCiValue(""); }}
                     className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   >
                     <option value="condition">Medical Condition</option>

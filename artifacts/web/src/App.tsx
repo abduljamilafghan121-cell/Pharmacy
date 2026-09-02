@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -12,32 +12,35 @@ import { Loader2 } from 'lucide-react';
 import { usePharmacySettings } from '@/hooks/use-pharmacy-settings';
 import { setCurrencyDisplay } from '@/lib/utils';
 
-import Login from '@/pages/Login';
-import Register from '@/pages/Register';
-import Dashboard from '@/pages/Dashboard';
-import NewSale from '@/pages/NewSale';
-import Sales from '@/pages/Orders';
-import SaleDetail from '@/pages/OrderDetail';
-import Prescriptions from '@/pages/Prescriptions';
-import Medicines from '@/pages/Medicines';
-import MedicineDetail from '@/pages/MedicineDetail';
-import Patients from '@/pages/Patients';
-import Suppliers from '@/pages/Suppliers';
-import PurchaseOrders from '@/pages/PurchaseOrders';
-import Reports from '@/pages/Reports';
-import Settings from '@/pages/Settings';
-import Users from '@/pages/Users';
-import SupplierLedger from '@/pages/SupplierLedger';
-import ForgotPassword from '@/pages/ForgotPassword';
-import ResetPassword from '@/pages/ResetPassword';
-import AuditLog from '@/pages/AuditLog';
-import CashRegister from '@/pages/CashRegister';
-import InsuranceClaims from '@/pages/InsuranceClaims';
-import PreAuthorizations from '@/pages/PreAuthorizations';
-import SupplierReturns from '@/pages/SupplierReturns';
-import ControlledSubstanceLogs from '@/pages/ControlledSubstanceLogs';
-import Stocktake from '@/pages/Stocktake';
-import DrugInteractions from '@/pages/DrugInteractions';
+// Pages are lazy-loaded so Vite code-splits the bundle: the browser only
+// downloads the chunk for the route the user actually opens, instead of
+// shipping every screen (Reports, PurchaseOrders, …) in the first load.
+const Login = lazy(() => import('@/pages/Login'));
+const Register = lazy(() => import('@/pages/Register'));
+const Dashboard = lazy(() => import('@/pages/Dashboard'));
+const NewSale = lazy(() => import('@/pages/NewSale'));
+const Sales = lazy(() => import('@/pages/Orders'));
+const SaleDetail = lazy(() => import('@/pages/OrderDetail'));
+const Prescriptions = lazy(() => import('@/pages/Prescriptions'));
+const Medicines = lazy(() => import('@/pages/Medicines'));
+const MedicineDetail = lazy(() => import('@/pages/MedicineDetail'));
+const Patients = lazy(() => import('@/pages/Patients'));
+const Suppliers = lazy(() => import('@/pages/Suppliers'));
+const PurchaseOrders = lazy(() => import('@/pages/PurchaseOrders'));
+const Reports = lazy(() => import('@/pages/Reports'));
+const Settings = lazy(() => import('@/pages/Settings'));
+const Users = lazy(() => import('@/pages/Users'));
+const SupplierLedger = lazy(() => import('@/pages/SupplierLedger'));
+const ForgotPassword = lazy(() => import('@/pages/ForgotPassword'));
+const ResetPassword = lazy(() => import('@/pages/ResetPassword'));
+const AuditLog = lazy(() => import('@/pages/AuditLog'));
+const CashRegister = lazy(() => import('@/pages/CashRegister'));
+const InsuranceClaims = lazy(() => import('@/pages/InsuranceClaims'));
+const PreAuthorizations = lazy(() => import('@/pages/PreAuthorizations'));
+const SupplierReturns = lazy(() => import('@/pages/SupplierReturns'));
+const ControlledSubstanceLogs = lazy(() => import('@/pages/ControlledSubstanceLogs'));
+const Stocktake = lazy(() => import('@/pages/Stocktake'));
+const DrugInteractions = lazy(() => import('@/pages/DrugInteractions'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -107,12 +110,21 @@ function SetupGate({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function RouteFallback() {
+  return (
+    <div className="flex items-center justify-center min-h-screen">
+      <Loader2 className="animate-spin w-8 h-8 text-primary" />
+    </div>
+  );
+}
+
 function Router() {
   const { user } = useAuth();
 
   return (
     <SetupGate>
-      <Switch>
+      <Suspense fallback={<RouteFallback />}>
+        <Switch>
         <Route path="/setup" component={Register} />
         <Route path="/login">
           {user ? <Redirect to="/dashboard" /> : <Login />}
@@ -189,7 +201,8 @@ function Router() {
         <Route path="/forgot-password" component={ForgotPassword} />
         <Route path="/reset-password" component={ResetPassword} />
         <Route component={NotFound} />
-      </Switch>
+        </Switch>
+      </Suspense>
     </SetupGate>
   );
 }

@@ -112,9 +112,9 @@ function NewPrescriptionDialog({ onClose }: { onClose: () => void }) {
         patientName: patientName.trim() || undefined,
         doctorName: doctorName.trim() || undefined,
         notes: notes.trim() || undefined,
-        maxRefills,
+        ...(maxRefills > 0 ? { maxRefills } : {}),
         ...(attachmentUrl ? { attachmentUrl } : {}),
-      } as any,
+      },
     });
   };
 

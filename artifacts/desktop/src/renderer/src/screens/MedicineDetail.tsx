@@ -31,7 +31,7 @@ export default function MedicineDetail(): ReactElement {
   const [writeOffReason, setWriteOffReason] = useState('')
 
   const { data: medicine, isLoading } = useGetMedicine(id ?? 0, {
-    query: { enabled: !!id } as any
+    query: { enabled: !!id, queryKey: getGetMedicineQueryKey(id ?? 0) }
   })
 
   const writeOff = useWriteOffStock(id ?? 0)
@@ -98,7 +98,7 @@ export default function MedicineDetail(): ReactElement {
   const isLowStock = medicine.quantity > 0 && medicine.quantity <= 10
   const isExpired = Boolean(medicine.expiryDate && medicine.expiryDate < new Date().toISOString().slice(0, 10))
   const canEdit = user?.role === 'admin' || user?.role === 'pharmacist'
-  const units = (medicine as any).units as typeof medicine.units | undefined
+  const units = medicine.units
 
   const cardStyle = {
     background: theme.card,

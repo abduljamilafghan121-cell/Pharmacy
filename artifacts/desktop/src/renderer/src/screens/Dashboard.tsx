@@ -12,10 +12,14 @@ import {
   PackagePlus,
   Loader2
 } from 'lucide-react'
-import { useGetSalesReport, useGetTopMedicines, useListOrders } from '@workspace/api-client-react'
+import { useGetSalesReport, useGetTopMedicines, useListOrders, type Order } from '@workspace/api-client-react'
 import { useUiStore } from '../store/uiStore'
 import { getTheme, mono, serif } from '../theme'
 import { useInventory } from '../hooks/useInventory'
+
+// The generated Order type hasn't caught up with the API yet — the server does
+// return patientName on order rows (see artifacts/api-server/src/routes/orders.ts).
+type RecentOrderRow = Order & { patientName?: string | null }
 import { useAuth } from '../hooks/useAuth'
 import { usePharmacySettings, formatCurrency } from '../hooks/usePharmacySettings'
 import { useSendDigest } from '../hooks/useNotifications'
@@ -387,7 +391,7 @@ export default function Dashboard(): ReactElement {
             </div>
           ) : (
             <div className="space-y-0">
-              {(recentOrders as any[]).slice(0, 5).map((order, idx) => (
+              {(recentOrders as RecentOrderRow[]).slice(0, 5).map((order, idx) => (
                 <button
                   key={order.id}
                   onClick={() => openSale(order.id)}

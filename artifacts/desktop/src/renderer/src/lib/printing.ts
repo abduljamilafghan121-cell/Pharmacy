@@ -157,6 +157,15 @@ function esc(s: string | null | undefined): string {
     .replace(/>/g, '&gt;')
 }
 
+// For double-quoted HTML attribute values: in addition to & < > we must also
+// escape quotes so a crafted value can't break out of the attribute to inject
+// markup/attributes.
+function escAttr(s: string | null | undefined): string {
+  return esc(s)
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 export function printReceipt(order: ReceiptOrder, pharmacy: PharmacySettings | undefined): void {
   const items = order.items ?? []
   const hasRxItem = items.some((i) => i.prescriptionRequired)
@@ -218,7 +227,7 @@ export function printReceipt(order: ReceiptOrder, pharmacy: PharmacySettings | u
   </style>
 </head>
 <body>
-  ${pharmacy?.logoUrl ? `<img class="logo" src="${pharmacy.logoUrl}" alt="" />` : '<div class="cross"><div class="h"></div><div class="v"></div></div>'}
+  ${pharmacy?.logoUrl?.startsWith('data:image') ? `<img class="logo" src="${escAttr(pharmacy.logoUrl)}" alt="" />` : '<div class="cross"><div class="h"></div><div class="v"></div></div>'}
   <div class="center">
     <div class="name">${esc((pharmacy?.name ?? 'My Pharmacy').toUpperCase())}</div>
     <div class="addr">

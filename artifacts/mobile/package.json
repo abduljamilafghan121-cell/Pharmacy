@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "main": "expo-router/entry",
+  "author": "Abdul Jamil <abduljamil.afghan121@gmail.com>",
   "scripts": {
     "dev": "pnpm exec expo start",
     "build": "node scripts/build.js",

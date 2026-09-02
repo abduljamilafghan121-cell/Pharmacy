@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState } from "react";
-import { useGetMe, setAuthTokenGetter } from "@workspace/api-client-react";
+import { useGetMe, setAuthTokenGetter, getGetMeQueryKey } from "@workspace/api-client-react";
 import type { User } from "@workspace/api-client-react";
 import { useLocation } from "wouter";
 
@@ -35,7 +35,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     query: {
       enabled: !!token,
       retry: false,
-    } as any
+      queryKey: getGetMeQueryKey(),
+    }
   });
 
   useEffect(() => {

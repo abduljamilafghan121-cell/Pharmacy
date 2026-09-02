@@ -43,9 +43,10 @@ function Pill({ label, kind, theme }: { label: string; kind: 'ok' | 'low' | 'exp
   )
 }
 
-// The API returns a couple of fields (servedByName, sig, discountAmount,
-// taxAmount) that aren't in the generated OpenAPI schema yet — web reads
-// them via `as any` too. Read them the same defensive way here.
+// The server returns a few fields (servedByName, discountAmount, taxAmount,
+// patientName) that aren't in the generated OpenAPI schema yet — web reads
+// them via `as any`. Here we extend the generated OrderDetail type with just
+// those fields instead of erasing the surrounding type.
 interface ExtraOrderFields {
   servedByName?: string | null
   discountAmount?: string | null
@@ -108,8 +109,7 @@ export default function SaleDetail({ orderId, onClose }: { orderId: number; onCl
     try {
       await updateStatus.mutateAsync({
         id: orderId,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        data: { status: 'cancelled', ...(refundNote.trim() ? { refundNote: refundNote.trim() } : {}) } as any
+        data: { status: 'cancelled', ...(refundNote.trim() ? { refundNote: refundNote.trim() } : {}) }
       })
       showToast(isPaid ? 'Sale cancelled & payment refunded' : 'Sale cancelled & stock restored')
       setRefundOpen(false)
@@ -155,7 +155,7 @@ export default function SaleDetail({ orderId, onClose }: { orderId: number; onCl
                 discountAmount: extra.discountAmount ?? undefined,
                 taxAmount: extra.taxAmount ?? undefined,
                 notes: extra.notes ?? order.notes ?? undefined
-              } as any,
+              },
               settings
             )
           }

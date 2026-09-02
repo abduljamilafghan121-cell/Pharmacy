@@ -44,9 +44,9 @@ src/
     src/
       components/   Shared UI: TitleBar, Sidebar, CommandPalette, Toast...
       screens/      Dashboard, Inventory, Checkout, Receipts, Hardware
-      store/        Zustand: uiStore (nav/theme/toast), cartStore
-      lib/          api.ts (fetch client), pricing.ts (business logic)
-      hooks/        useInventory (TanStack Query + mock fallback)
+      store/        Zustand: uiStore (nav, theme, toast, offline)
+      lib/          apiClient.ts (fetch client), printing.ts, stock-format.ts, emailRecall.ts
+      hooks/        useAuth, usePharmacySettings (TanStack Query)
 ```
 
 ## Connecting to your real backend

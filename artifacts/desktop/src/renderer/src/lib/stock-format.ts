@@ -58,5 +58,7 @@ export function getBaseUnit(units: MedicineUnit[]): MedicineUnit | undefined {
  * e.g. $0.50/tablet → strip (10 tablets) = $5.00
  */
 export function priceForUnit(basePriceStr: string, conversionFactor: number): number {
-  return parseFloat(basePriceStr) * conversionFactor
+  const base = parseFloat(basePriceStr)
+  if (!Number.isFinite(base) || !Number.isFinite(conversionFactor)) return 0
+  return base * conversionFactor
 }

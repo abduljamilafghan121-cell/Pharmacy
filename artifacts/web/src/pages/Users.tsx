@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCreateUser, useListUsers, getListUsersQueryKey } from "@workspace/api-client-react";
+import { useCreateUser, useListUsers, getListUsersQueryKey, type UserRegisterInputRole } from "@workspace/api-client-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -56,13 +56,21 @@ export default function Users() {
       toast({ title: "Passwords do not match", variant: "destructive" });
       return;
     }
+    const rawRole = String(form.get("role") ?? "pharmacist");
+    const parsedRole =
+      rawRole === "admin" || rawRole === "pharmacist" || rawRole === "cashier" || rawRole === "viewer"
+        ? rawRole
+        : "pharmacist";
+    // UserRegisterInputRole only models admin/pharmacist; the server also
+    // accepts cashier/viewer (see UserRole in the auth schema).
+    const role = parsedRole as UserRegisterInputRole;
     createUser.mutate({
       data: {
         name: String(form.get("name") ?? "").trim(),
         email: String(form.get("email") ?? "").trim(),
         password,
         phone: String(form.get("phone") ?? "").trim() || undefined,
-        role: String(form.get("role") ?? "pharmacist") as any,
+        role,
       },
     });
   }

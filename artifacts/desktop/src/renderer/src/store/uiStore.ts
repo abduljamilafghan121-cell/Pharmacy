@@ -80,6 +80,10 @@ export function canAccessScreen(screen: Screen, role?: string | null): boolean {
   return !!role && allowed.includes(role)
 }
 
+// Tracked at module scope (not in the store) so the auto-dismiss timer isn't
+// persisted and can be cleared before the next toast replaces the current one.
+let toastTimer: ReturnType<typeof setTimeout> | undefined
+
 export const useUiStore = create<UiState>()(
   persist(
     (set) => ({
@@ -97,7 +101,10 @@ export const useUiStore = create<UiState>()(
       setOffline: (offline) => set({ offline }),
       showToast: (toast) => {
         set({ toast })
-        setTimeout(() => set({ toast: null }), 3000)
+        // Clear any pending timer so a rapid second toast isn't hidden by the
+        // first one's stale timeout — otherwise consecutive toasts flicker out.
+        if (toastTimer) clearTimeout(toastTimer)
+        toastTimer = setTimeout(() => set({ toast: null }), 3000)
       },
       setPendingSaleDetailId: (pendingSaleDetailId) => set({ pendingSaleDetailId }),
       setPendingMedicineDetailId: (pendingMedicineDetailId) => set({ pendingMedicineDetailId }),

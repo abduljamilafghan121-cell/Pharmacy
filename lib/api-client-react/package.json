@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "author": "Abdul Jamil <abduljamil.afghan121@gmail.com>",
   "exports": {
     ".": "./src/index.ts"
   },

@@ -1,4 +1,7 @@
-import { useGetInventoryReport, useListPrescriptions } from "@workspace/api-client-react";
+import {
+  useGetInventoryReport, useListPrescriptions,
+  getGetInventoryReportQueryKey, getListPrescriptionsQueryKey,
+} from "@workspace/api-client-react";
 import { useAuth } from "@/hooks/use-auth";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator,
@@ -12,8 +15,8 @@ export function NotificationBell() {
   const canSeeInventoryAlerts = user && ["admin", "pharmacist", "viewer"].includes(user.role);
   const canSeePrescriptionAlerts = user && ["admin", "pharmacist", "cashier", "viewer"].includes(user.role);
 
-  const { data: inventory } = useGetInventoryReport({ query: { enabled: !!canSeeInventoryAlerts } } as any);
-  const { data: prescriptions } = useListPrescriptions({ query: { enabled: !!canSeePrescriptionAlerts } } as any);
+  const { data: inventory } = useGetInventoryReport({ query: { enabled: !!canSeeInventoryAlerts, queryKey: getGetInventoryReportQueryKey() } });
+  const { data: prescriptions } = useListPrescriptions({ query: { enabled: !!canSeePrescriptionAlerts, queryKey: getListPrescriptionsQueryKey() } });
 
   const lowStockCount = canSeeInventoryAlerts ? (inventory?.lowStockCount ?? 0) : 0;
   const expiringCount = canSeeInventoryAlerts ? (inventory?.expiringCount ?? 0) : 0;

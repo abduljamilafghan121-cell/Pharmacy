@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react'
 import { useEffect, useRef, useState } from 'react'
 import { Bell, AlertTriangle, Clock, FileText } from 'lucide-react'
-import { useGetInventoryReport, useListPrescriptions } from '@workspace/api-client-react'
+import { useGetInventoryReport, useListPrescriptions, getGetInventoryReportQueryKey, getListPrescriptionsQueryKey } from '@workspace/api-client-react'
 import { useUiStore } from '../store/uiStore'
 import { getTheme } from '../theme'
 import { useAuth } from '../hooks/useAuth'
@@ -22,13 +22,13 @@ export default function NotificationBell(): ReactElement | null {
   const canSeeInventoryAlerts = !!user && ['admin', 'pharmacist', 'viewer'].includes(user.role)
   const canSeePrescriptionAlerts = !!user && ['admin', 'pharmacist', 'cashier', 'viewer'].includes(user.role)
 
-  const { data: inventory } = useGetInventoryReport({ query: { enabled: isAuthenticated && canSeeInventoryAlerts } } as any)
-  const { data: prescriptions } = useListPrescriptions({ query: { enabled: isAuthenticated && canSeePrescriptionAlerts } } as any)
+  const { data: inventory } = useGetInventoryReport({ query: { enabled: isAuthenticated && canSeeInventoryAlerts, queryKey: getGetInventoryReportQueryKey() } })
+  const { data: prescriptions } = useListPrescriptions({ query: { enabled: isAuthenticated && canSeePrescriptionAlerts, queryKey: getListPrescriptionsQueryKey() } })
 
   const lowStockCount = canSeeInventoryAlerts ? (inventory?.lowStockCount ?? 0) : 0
   const expiringCount = canSeeInventoryAlerts ? (inventory?.expiringCount ?? 0) : 0
   const pendingRxCount = canSeePrescriptionAlerts
-    ? (prescriptions ?? []).filter((p: any) => p.status === 'pending').length
+    ? (prescriptions ?? []).filter((p) => p.status === 'pending').length
     : 0
 
   const total = lowStockCount + expiringCount + pendingRxCount

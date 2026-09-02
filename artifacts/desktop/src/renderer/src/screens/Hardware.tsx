@@ -3,8 +3,6 @@ import { useState } from 'react'
 import { Circle, RefreshCw, Printer, Loader2, CheckCircle } from 'lucide-react'
 import { useUiStore } from '../store/uiStore'
 import { getTheme, mono, serif } from '../theme'
-import { useCartStore } from '../store/cartStore'
-import { calcTotals } from '../lib/pricing'
 import { usePharmacySettings } from '../hooks/usePharmacySettings'
 
 // Hardware auto-detection isn't implemented yet — see src/main/index.ts's
@@ -19,6 +17,18 @@ const DEVICES = [
   { name: 'Barcode Scanner', detail: 'e.g. Honeywell Voyager 1200g · keyboard wedge', testable: false },
   { name: 'Cash Drawer', detail: 'Typically triggered via printer kick cable', testable: false }
 ]
+
+// Sample lines for the receipt preview. This is a device test page, so it
+// deliberately shows canned products instead of depending on the real New
+// Sale cart (which lives in that screen's local state). The old cartStore
+// was seeded demo data + a hardcoded 8% tax rate that never matched the
+// configured pharmacy rate — removed as dead code.
+const SAMPLE_ITEMS = [
+  { id: '1', name: 'Amoxicillin 500mg', qty: 1, price: 8.4 },
+  { id: '4', name: 'Salbutamol Inhaler', qty: 2, price: 14.9 },
+  { id: '6', name: 'Vitamin D3 1000IU', qty: 1, price: 6.75 }
+]
+const SAMPLE_DISCOUNT_PERCENT = 0
 
 // Jagged tear-off edge used on the receipt preview (top and bottom).
 function jagged(bg: string, card: string, flip: boolean): CSSProperties {
@@ -40,10 +50,15 @@ export default function Hardware(): ReactElement {
   // entirely and just hardcoded every device's status.
   const [lastResult, setLastResult] = useState<Record<string, boolean>>({})
 
-  // Receipt preview state (moved here from the removed Receipts page).
-  const { items, discountPercent } = useCartStore()
-  const { subtotal, discount, tax, total } = calcTotals(items, discountPercent)
+  // Receipt preview totals — computed from the sample cart and the
+  // pharmacy's own configured tax rate (taxRatePercent), not a hardcoded
+  // rate, so the preview matches real business rules.
   const { data: settings } = usePharmacySettings()
+  const subtotal = SAMPLE_ITEMS.reduce((sum, i) => sum + i.qty * i.price, 0)
+  const discount = subtotal * (SAMPLE_DISCOUNT_PERCENT / 100)
+  const taxable = subtotal - discount
+  const tax = taxable * ((parseFloat(settings?.taxRatePercent ?? '0') || 0) / 100)
+  const total = taxable + tax
   const [printing, setPrinting] = useState(false)
   const [paperWidth, setPaperWidth] = useState<'58' | '80'>('80')
 
@@ -133,20 +148,14 @@ export default function Hardware(): ReactElement {
                     {[settings?.address, settings?.phone].filter(Boolean).join(' · ') || ' '}
                   </div>
                   <div style={{ ...mono, color: theme.text }} className="text-[11px] space-y-1">
-                    {items.length === 0 ? (
-                      <div style={{ color: theme.muted }} className="text-center leading-relaxed">
-                        Cart is empty. Add items in New Sale to preview a receipt.
+                    {SAMPLE_ITEMS.map((i) => (
+                      <div key={i.id} className="flex justify-between">
+                        <span>
+                          {i.qty}× {i.name.slice(0, 16)}
+                        </span>
+                        <span>${(i.qty * i.price).toFixed(2)}</span>
                       </div>
-                    ) : (
-                      items.map((i) => (
-                        <div key={i.id} className="flex justify-between">
-                          <span>
-                            {i.qty}× {i.name.slice(0, 16)}
-                          </span>
-                          <span>${(i.qty * i.price).toFixed(2)}</span>
-                        </div>
-                      ))
-                    )}
+                    ))}
                     <div style={{ borderTop: `1px dashed ${theme.border}` }} className="pt-1 mt-1 space-y-0.5">
                       <div className="flex justify-between">
                         <span>Subtotal</span>
@@ -154,7 +163,7 @@ export default function Hardware(): ReactElement {
                       </div>
                       {discount > 0 && (
                         <div className="flex justify-between">
-                          <span>Discount ({discountPercent}%)</span>
+                          <span>Discount ({SAMPLE_DISCOUNT_PERCENT}%)</span>
                           <span>−${discount.toFixed(2)}</span>
                         </div>
                       )}

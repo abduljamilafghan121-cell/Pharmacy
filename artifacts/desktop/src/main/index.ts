@@ -1,5 +1,6 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
-import { join } from 'path'
+import { app, shell, BrowserWindow, ipcMain, safeStorage } from 'electron'
+import { readFile, writeFile, unlink, mkdir } from 'fs/promises'
+import { join, dirname } from 'path'
 
 const isDev = !app.isPackaged
 
@@ -18,7 +19,7 @@ function createWindow(): void {
     icon: join(__dirname, '../../resources/icon.png'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
+      sandbox: true,
       contextIsolation: true,
       nodeIntegration: false
     }
@@ -96,6 +97,46 @@ ipcMain.handle('printer:test', async () => {
   await new Promise((resolve) => setTimeout(resolve, 600))
   return { ok: true }
 })
+
+// Session token persistence via the OS keychain. On Windows this uses DPAPI
+// (safeStorage), on macOS the Keychain, and on Linux a secret store when
+// available — so the token never sits in plaintext in the renderer's
+// localStorage where any XSS could read it. Falls back to a plain file only
+// if no secure store exists (e.g. headless Linux), still outside the
+// renderer's reach.
+function tokenFilePath(): string {
+  return join(app.getPath('userData'), 'pharma_token.bin')
+}
+
+async function readTokenFile(): Promise<string | null> {
+  try {
+    const raw = await readFile(tokenFilePath())
+    if (raw.length === 0) return null
+    return safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(raw) : raw.toString('utf8')
+  } catch {
+    return null
+  }
+}
+
+async function writeTokenFile(token: string | null): Promise<void> {
+  const file = tokenFilePath()
+  try {
+    if (!token) {
+      await unlink(file).catch(() => {})
+      return
+    }
+    const data = safeStorage.isEncryptionAvailable() ? safeStorage.encryptString(token) : Buffer.from(token, 'utf8')
+    await mkdir(dirname(file), { recursive: true })
+    await writeFile(file, data, { mode: 0o600 })
+  } catch {
+    // best-effort — the token still lives in the renderer's memory for this run
+  }
+}
+
+ipcMain.handle('token:load', () => readTokenFile())
+ipcMain.handle('token:save', (_event, token: string | null) =>
+  writeTokenFile(typeof token === 'string' && token.length > 0 ? token : null)
+)
 
 // Only allow one running instance. If the user launches the app again (e.g.
 // from the shortcut or a second double-click), the new copy exits immediately

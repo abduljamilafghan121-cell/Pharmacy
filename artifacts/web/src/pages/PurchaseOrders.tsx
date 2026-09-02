@@ -55,7 +55,7 @@ import {
 } from "lucide-react";
 
 function getMedicineUnits(medicine: Medicine): MedicineUnit[] {
-  return ((medicine as any).units as MedicineUnit[]) ?? [];
+  return medicine.units ?? [];
 }
 
 interface PriceHistoryRow {
@@ -350,7 +350,7 @@ export default function PurchaseOrders() {
     createMutation.mutate({
       data: {
         supplierId: Number(draftSupplierId),
-        items: items as any,
+        items,
       },
     });
   }
@@ -360,8 +360,8 @@ export default function PurchaseOrders() {
     if (!order) return;
     if (!window.confirm("Receive this purchase and add its quantities to inventory?")) return;
 
-    const items = (order.items ?? []).map((item: any) => {
-      const line = receiveLines[item.medicineId as number];
+    const items = (order.items ?? []).map((item) => {
+      const line = receiveLines[item.medicineId];
       // Chose an existing batch from the dropdown — top it up directly.
       if (line && typeof line.choice === "number") {
         return { medicineId: item.medicineId, batchId: line.choice };
@@ -760,11 +760,11 @@ export default function PurchaseOrders() {
 
               <div className="space-y-2">
                 {selectedOrder.data.items?.map((item) => {
-                  const unitLabel = (item as any).unitName
-                    ? `${item.quantity} ${(item as any).unitName}${item.quantity !== 1 ? "s" : ""}`
+                  const unitLabel = item.unitName
+                    ? `${item.quantity} ${item.unitName}${item.quantity !== 1 ? "s" : ""}`
                     : `${item.quantity} units`;
-                  const factor = (item as any).conversionFactorToBase ?? 1;
-                  const medicineId = (item as any).medicineId as number;
+                  const factor = item.conversionFactorToBase ?? 1;
+                  const medicineId = item.medicineId;
                   const scanned = scannedCounts[medicineId] ?? 0;
                   const isPending = selectedOrder.data!.status === "pending";
                   const batchOptions = medicineBatchOptions[medicineId] ?? [];

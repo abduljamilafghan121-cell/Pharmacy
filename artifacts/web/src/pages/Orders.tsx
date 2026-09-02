@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useListOrders } from "@workspace/api-client-react";
+import { useListOrders, type Order } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -9,6 +9,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { Receipt, ArrowRight, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+
+// Extended fields — passed through since they're not in the generated schema yet
+type OrderRow = Order & {
+  patientName?: string | null;
+  servedByName?: string | null;
+};
 
 export default function Sales() {
   const { data: orders, isLoading } = useListOrders();
@@ -24,7 +30,7 @@ export default function Sales() {
   const filteredOrders = useMemo(() => {
     if (!orders) return orders;
     const q = search.trim().toLowerCase();
-    return orders.filter((order: any) => {
+    return orders.filter((order: OrderRow) => {
       if (statusFilter !== "all" && order.status !== statusFilter) return false;
       if (paymentFilter !== "all" && order.paymentStatus !== paymentFilter) return false;
       const orderDate = order.createdAt?.slice(0, 10);
@@ -146,7 +152,7 @@ export default function Sales() {
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredOrders?.map((order) => (
+                filteredOrders?.map((order: OrderRow) => (
                   <TableRow key={order.id} className="hover:bg-muted/30 transition-colors">
                     <TableCell className="font-medium text-foreground">
                       <Link href={`/sales/${order.id}`} className="hover:underline">
@@ -154,8 +160,8 @@ export default function Sales() {
                       </Link>
                     </TableCell>
                     <TableCell>{formatDate(order.createdAt)}</TableCell>
-                    <TableCell>{(order as any).patientName || <span className="text-muted-foreground/60 text-sm">Walk-in</span>}</TableCell>
-                    <TableCell className="text-muted-foreground text-sm">{(order as any).servedByName || "—"}</TableCell>
+                    <TableCell>{order.patientName || <span className="text-muted-foreground/60 text-sm">Walk-in</span>}</TableCell>
+                    <TableCell className="text-muted-foreground text-sm">{order.servedByName || "—"}</TableCell>
                     <TableCell className="font-medium">{formatCurrency(order.total)}</TableCell>
                     <TableCell><SaleStatusBadge status={order.status} /></TableCell>
                     <TableCell><PaymentStatusBadge status={order.paymentStatus} /></TableCell>

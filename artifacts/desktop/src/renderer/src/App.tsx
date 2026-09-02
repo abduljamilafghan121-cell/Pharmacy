@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react'
-import { useEffect } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { useUiStore, canAccessScreen } from './store/uiStore'
 import { getTheme } from './theme'
 import { AuthProvider, useAuth } from './hooks/useAuth'
@@ -12,31 +12,36 @@ import SplashScreen from './components/SplashScreen'
 import OfflineBanner from './components/OfflineBanner'
 import ErrorBoundary from './components/ErrorBoundary'
 import { useConnectivity } from './hooks/useConnectivity'
-import Login from './screens/Login'
-import Setup from './screens/Setup'
-import Dashboard from './screens/Dashboard'
-import Inventory from './screens/Inventory'
-import NewSale from './screens/NewSale'
-import Sales from './screens/Sales'
-import Medicines from './screens/Medicines'
-import Patients from './screens/Patients'
-import Suppliers from './screens/Suppliers'
-import Prescriptions from './screens/Prescriptions'
-import PurchaseOrders from './screens/PurchaseOrders'
-import SupplierLedger from './screens/SupplierLedger'
-import SupplierReturns from './screens/SupplierReturns'
-import InsuranceClaims from './screens/InsuranceClaims'
-import PreAuthorizations from './screens/PreAuthorizations'
-import AuditLog from './screens/AuditLog'
-import Reports from './screens/Reports'
-import Stocktake from './screens/Stocktake'
-import DrugInteractions from './screens/DrugInteractions'
-import ControlledSubstanceLogs from './screens/ControlledSubstanceLogs'
-import UsersScreen from './screens/Users'
-import CashRegister from './screens/CashRegister'
-import Hardware from './screens/Hardware'
-import SettingsScreen from './screens/Settings'
-import MedicineDetail from './screens/MedicineDetail'
+
+// Screens are lazy-loaded so electron-vite code-splits the renderer bundle —
+// the app no longer ships every screen's code in the initial chunk. Chunks
+// are tiny local files in Electron, so the brief Suspense fallback is
+// imperceptible after first load.
+const Login = lazy(() => import('./screens/Login'))
+const Setup = lazy(() => import('./screens/Setup'))
+const Dashboard = lazy(() => import('./screens/Dashboard'))
+const Inventory = lazy(() => import('./screens/Inventory'))
+const NewSale = lazy(() => import('./screens/NewSale'))
+const Sales = lazy(() => import('./screens/Sales'))
+const Medicines = lazy(() => import('./screens/Medicines'))
+const Patients = lazy(() => import('./screens/Patients'))
+const Suppliers = lazy(() => import('./screens/Suppliers'))
+const Prescriptions = lazy(() => import('./screens/Prescriptions'))
+const PurchaseOrders = lazy(() => import('./screens/PurchaseOrders'))
+const SupplierLedger = lazy(() => import('./screens/SupplierLedger'))
+const SupplierReturns = lazy(() => import('./screens/SupplierReturns'))
+const InsuranceClaims = lazy(() => import('./screens/InsuranceClaims'))
+const PreAuthorizations = lazy(() => import('./screens/PreAuthorizations'))
+const AuditLog = lazy(() => import('./screens/AuditLog'))
+const Reports = lazy(() => import('./screens/Reports'))
+const Stocktake = lazy(() => import('./screens/Stocktake'))
+const DrugInteractions = lazy(() => import('./screens/DrugInteractions'))
+const ControlledSubstanceLogs = lazy(() => import('./screens/ControlledSubstanceLogs'))
+const UsersScreen = lazy(() => import('./screens/Users'))
+const CashRegister = lazy(() => import('./screens/CashRegister'))
+const Hardware = lazy(() => import('./screens/Hardware'))
+const SettingsScreen = lazy(() => import('./screens/Settings'))
+const MedicineDetail = lazy(() => import('./screens/MedicineDetail'))
 
 const SCREENS = {
   dashboard: Dashboard,
@@ -99,7 +104,9 @@ function AuthedApp(): ReactElement {
         <div className="flex-1 overflow-y-auto">
           {screenAllowed ? (
             <ErrorBoundary>
-              <ActiveScreen />
+              <Suspense fallback={null}>
+                <ActiveScreen />
+              </Suspense>
             </ErrorBoundary>
           ) : null}
         </div>
@@ -150,7 +157,9 @@ function Gate(): ReactElement {
     return (
       <div style={{ background: theme.bg }} className="h-screen">
         <TitleBar />
-        <div style={{ height: 'calc(100% - 46px)' }}>{needsSetup ? <Setup /> : <Login />}</div>
+        <div style={{ height: 'calc(100% - 46px)' }}>
+          <Suspense fallback={null}>{needsSetup ? <Setup /> : <Login />}</Suspense>
+        </div>
         <OfflineBanner />
       </div>
     )

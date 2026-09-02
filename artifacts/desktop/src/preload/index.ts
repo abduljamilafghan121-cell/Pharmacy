@@ -19,6 +19,13 @@ const api = {
   },
   printer: {
     test: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('printer:test')
+  },
+  token: {
+    // Loads the saved session token from the OS secure store (safeStorage in
+    // the main process — DPAPI on Windows). Never stored in localStorage.
+    load: (): Promise<string | null> => ipcRenderer.invoke('token:load'),
+    // Saves or clears it; null deletes the stored token.
+    save: (token: string | null): Promise<void> => ipcRenderer.invoke('token:save', token)
   }
 }
 
