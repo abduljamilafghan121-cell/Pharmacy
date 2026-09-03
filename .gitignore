@@ -66,3 +66,6 @@ artifacts/api-server/dist/
 # ============================
 coverage/
 .turbo/
+
+.vercel
+.env*
