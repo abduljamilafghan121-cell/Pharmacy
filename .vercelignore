@@ -1,0 +1,21 @@
+# Dependencies (installed server-side via vercel.json installCommand)
+node_modules/
+
+# Local environment / secrets
+.env
+.env.local
+.env.*.local
+
+# Build outputs (rebuilt by vercel.json buildCommand)
+dist/
+out/
+build/
+static-build/
+*.tsbuildinfo
+
+# Local Vercel link / tooling state
+.vercel/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
