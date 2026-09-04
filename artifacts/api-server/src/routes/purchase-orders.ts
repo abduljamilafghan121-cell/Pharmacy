@@ -326,11 +326,10 @@ router.patch("/purchase-orders/:id/receive", requireAuth, requireRole("admin", "
 // POST /purchase-orders/:id/reverse — undo a mistakenly-received purchase order.
 //
 // Receiving adds stock to medicine_batches (a new lot per PO item, OR a merge
-// into an existing lot by batch number). Reversing is only safe when the stock
-// has NOT been touched since (no sales, returns, or write-offs against it), and
-// only when the received items landed in NEW batch rows owned by this PO.
-// Merged lots can't be cleanly split back out, so those are rejected with a
-// message (they should be corrected via stock adjustments / returns instead).
+// into an existing lot by batch number). Reversing uses FIFO removal: it walks
+// each medicine's batches oldest-first and deducts stock until the full received
+// quantity has been removed. Blocked only when the stock has been partially or
+// fully consumed (not enough left across all batches).
 router.post(
   "/purchase-orders/:id/reverse",
   requireAuth,
@@ -360,64 +359,63 @@ router.post(
         .from(purchaseOrderItemsTable)
         .where(eq(purchaseOrderItemsTable.purchaseOrderId, poId));
 
-      // Find every batch lot that was created by this receive.
-      const created = await tx
-        .select()
-        .from(medicineBatchesTable)
-        .where(and(eq(medicineBatchesTable.purchaseOrderId, poId), isNull(medicineBatchesTable.writeOffAt)));
-
-      // The total base units this receive added per PO item.
-      const addedByItem = new Map<number, number>();
+      // Total base units this receive added per medicine.
+      const toRemove = new Map<number, number>();
       for (const item of items) {
-        addedByItem.set(item.medicineId, item.quantity * (item.conversionFactorToBase ?? 1));
+        const base = item.quantity * (item.conversionFactorToBase ?? 1);
+        toRemove.set(item.medicineId, (toRemove.get(item.medicineId) ?? 0) + base);
       }
 
-      // Group created lots by medicine.
-      const createdByMedicine = new Map<number, typeof created>();
-      for (const b of created) {
-        if (!createdByMedicine.has(b.medicineId)) createdByMedicine.set(b.medicineId, []);
-        createdByMedicine.get(b.medicineId)!.push(b);
-      }
+      // For each medicine, find batches oldest-first (FIFO) and deduct stock.
+      const batchesTouched: { id: number; medicineId: number; removed: number }[] = [];
 
-      // Safety: every item must have landed in a created (non-merged) lot, and
-      // every created lot must still hold its full received quantity with no
-      // write-off. If any was consumed or merged, refuse to reverse.
-      for (const item of items) {
-        const lots = createdByMedicine.get(item.medicineId) ?? [];
-        const expected = addedByItem.get(item.medicineId) ?? 0;
-        if (lots.length === 0) {
+      for (const [medicineId, needed] of toRemove) {
+        const batches = await tx
+          .select()
+          .from(medicineBatchesTable)
+          .where(and(
+            eq(medicineBatchesTable.medicineId, medicineId),
+            isNull(medicineBatchesTable.writeOffAt),
+          ))
+          .orderBy(medicineBatchesTable.createdAt);
+
+        let remaining = needed;
+        for (const batch of batches) {
+          if (remaining <= 0) break;
+          const take = Math.min(batch.quantity, remaining);
+          if (take > 0) {
+            await tx
+              .update(medicineBatchesTable)
+              .set({ quantity: sql`${medicineBatchesTable.quantity} - ${take}` })
+              .where(and(
+                eq(medicineBatchesTable.id, batch.id),
+                sql`${medicineBatchesTable.quantity} >= ${take}`,
+              ));
+            batchesTouched.push({ id: batch.id, medicineId, removed: take });
+            remaining -= take;
+          }
+        }
+
+        if (remaining > 0) {
           return fail(
             409,
-            `Item "${item.medicineId}" was received into a lot that was already combined with existing stock — it can't be cleanly reversed. Correct it with a stock adjustment or supplier return instead.`
+            `Not enough stock left to reverse medicine ${medicineId}: ${remaining} unit(s) were already sold, returned, or written off. Use a supplier return instead.`
           );
-        }
-        const totalOnLots = lots.reduce((s, l) => s + l.quantity, 0);
-        if (totalOnLots < expected) {
-          return fail(
-            409,
-            "This purchase order's stock has already been sold, returned, or written off. Reversing the receipt now would corrupt stock counts — use the supplier return or write-off flows instead."
-          );
-        }
-        if (lots.some((l) => l.writeOffAt)) {
-          return fail(409, "One of this purchase order's lots has been written off and can't be reversed.");
         }
       }
 
-      // All safe: remove the created lots and restore the PO to pending.
-      const createdIds = created.map((b) => b.id);
-      if (createdIds.length) {
-        await tx.delete(medicineBatchesTable).where(inArray(medicineBatchesTable.id, createdIds));
-      }
+      // Remove empty batches (quantity = 0) and restore PO to pending.
+      await tx.delete(medicineBatchesTable).where(sql`${medicineBatchesTable.quantity} <= 0`);
       await tx
         .update(purchaseOrdersTable)
         .set({ status: "pending" })
         .where(eq(purchaseOrdersTable.id, poId));
 
-      for (const item of items) {
-        await refreshMedicineAggregate(tx, item.medicineId);
+      for (const [medicineId] of toRemove) {
+        await refreshMedicineAggregate(tx, medicineId);
       }
 
-      return { ok: true as const, removedLots: createdIds.length };
+      return { ok: true as const, batchesAdjusted: batchesTouched.length };
     });
 
     if (!result.ok) {
@@ -430,9 +428,9 @@ router.post(
       "receive.reverse",
       "purchase_order",
       poId,
-      `Reversed receipt of purchase order #${poId}; removed ${result.removedLots} stock lot(s) and restored it to pending.`
+      `Reversed receipt of purchase order #${poId}; adjusted ${result.batchesAdjusted} batch(es) and restored it to pending.`
     );
-    res.json({ id: poId, status: "pending", removedLots: result.removedLots });
+    res.json({ id: poId, status: "pending", batchesAdjusted: result.batchesAdjusted });
   }
 );
 
