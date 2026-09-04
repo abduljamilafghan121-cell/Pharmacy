@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
-import { db, purchaseOrdersTable, purchaseOrderItemsTable, medicinesTable, suppliersTable, medicineUnitsTable, medicineBatchesTable } from "@workspace/db";
+import { db, purchaseOrdersTable, purchaseOrderItemsTable, medicinesTable, suppliersTable, medicineUnitsTable, medicineBatchesTable, orderItemBatchAllocationsTable } from "@workspace/db";
 import { refreshMedicineAggregate } from "../lib/batch-helpers";
 import { z } from "zod";
 import {
@@ -440,8 +440,25 @@ router.post(
         }
       }
 
-      // Remove empty batches (quantity <= 0) and restore PO to pending.
-      await tx.delete(medicineBatchesTable).where(sql`${medicineBatchesTable.quantity} <= 0`);
+      // Clean up empty batches (quantity <= 0) — but only ones that have no
+      // sale allocations referencing them. A batch that ever sold stock keeps
+      // its row (FK RESTRICT) so order history / cancellation still resolves;
+      // those are left at 0 and simply filtered out of stock queries.
+      const emptyBatches = await tx
+        .select({ id: medicineBatchesTable.id })
+        .from(medicineBatchesTable)
+        .where(sql`${medicineBatchesTable.quantity} <= 0`);
+      if (emptyBatches.length) {
+        const emptyIds = emptyBatches.map((b) => b.id);
+        const allocated = await tx
+          .select({ id: orderItemBatchAllocationsTable.id })
+          .from(orderItemBatchAllocationsTable)
+          .where(inArray(orderItemBatchAllocationsTable.medicineBatchId, emptyIds))
+          .limit(1);
+        if (allocated.length === 0) {
+          await tx.delete(medicineBatchesTable).where(inArray(medicineBatchesTable.id, emptyIds));
+        }
+      }
       await tx
         .update(purchaseOrdersTable)
         .set({ status: "pending" })
