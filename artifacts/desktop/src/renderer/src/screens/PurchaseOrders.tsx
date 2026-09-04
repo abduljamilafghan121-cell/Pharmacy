@@ -626,7 +626,7 @@ function ViewPOModal({
         headers: { 'Content-Type': 'application/json', ...authHeaders() }
       })
       const body = await jsonOrThrow(res, "Couldn't reverse receipt")
-      showToast(`Receipt reversed — ${body.removedLots} lot(s) removed, PO set back to pending`)
+      showToast(`Receipt reversed — ${body.batchesAdjusted ?? body.removedLots ?? 0} batch(es) adjusted, PO set back to pending`)
       queryClient.invalidateQueries({
         predicate: (q) =>
           typeof q.queryKey[0] === 'string' && q.queryKey[0].startsWith('/api/purchase-orders')
