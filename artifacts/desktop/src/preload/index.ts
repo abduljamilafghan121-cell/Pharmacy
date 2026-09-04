@@ -18,7 +18,12 @@ const api = {
     }
   },
   printer: {
-    test: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('printer:test')
+    test: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('printer:test'),
+    // Opens a dedicated (hidden-to-human) print window in the main process,
+    // loads the supplied HTML, triggers the native print dialog, then closes.
+    // This avoids window.open(), which Electron's setWindowOpenHandler denies.
+    print: (html: string, title = 'Print'): Promise<void> =>
+      ipcRenderer.invoke('printer:print', html, title)
   },
   token: {
     // Loads the saved session token from the OS secure store (safeStorage in

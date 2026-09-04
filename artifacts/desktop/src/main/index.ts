@@ -98,6 +98,50 @@ ipcMain.handle('printer:test', async () => {
   return { ok: true }
 })
 
+// Printing previously used window.open() in the renderer, but the app's
+// setWindowOpenHandler denies all window creation (external links go to the
+// OS browser), so it returned null and showed a misleading "pop-up blocked"
+// notice with no way to allow it. Printing is instead driven here in the main
+// process: we create a small dedicated window, load the receipt/label HTML,
+// fire the native print dialog via webContents.print(), then close it.
+ipcMain.handle(
+  'printer:print',
+  async (_event, html: string, title: string = 'Print'): Promise<void> => {
+    if (typeof html !== 'string' || html.length === 0) {
+      throw new Error('printer:print received no HTML to print.')
+    }
+
+    const printWindow = new BrowserWindow({
+      title,
+      show: false, // hidden while loading; the dialog is what the user sees
+      autoHideMenuBar: true,
+      webPreferences: {
+        sandbox: true,
+        contextIsolation: true,
+        nodeIntegration: false
+      }
+    })
+
+    await printWindow.loadURL(
+      `data:text/html;charset=utf-8,${encodeURIComponent(html)}`
+    )
+
+    const done = new Promise<void>((resolve) => {
+      // webContents.print() fires "did-stop-loading"'s print callback when the
+      // native print dialog is closed (cancel or OK). Use it to signal finish.
+      printWindow.webContents.print(
+        { silent: false, printBackground: true },
+        () => {
+          resolve()
+        }
+      )
+    })
+
+    await done
+    if (!printWindow.isDestroyed()) printWindow.destroy()
+  }
+)
+
 // Session token persistence via the OS keychain. On Windows this uses DPAPI
 // (safeStorage), on macOS the Keychain, and on Linux a secret store when
 // available — so the token never sits in plaintext in the renderer's

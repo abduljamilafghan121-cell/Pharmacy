@@ -1,8 +1,8 @@
 import type { PharmacySettings } from '../hooks/usePharmacySettings'
 
 // Ported from artifacts/web's PrintableReceipt.tsx / PrintableLabel.tsx.
-// Web renders a hidden DOM node and uses print CSS; in Electron the cleaner
-// equivalent is a popup window containing just the document, auto-printed.
+// In Electron we hand the HTML to the main process, which prints it through
+// the native dialog (window.open would be denied by setWindowOpenHandler).
 
 function formatDate(dateStr: string | Date): string {
   return new Date(dateStr).toLocaleDateString('en-US', {
@@ -12,31 +12,8 @@ function formatDate(dateStr: string | Date): string {
   })
 }
 
-function openPrintWindow(html: string, title: string, w = 420, h = 600): void {
-  const win = window.open('', '_blank', `width=${w},height=${h}`)
-  if (!win) {
-    window.alert('Pop-up blocked — please allow pop-ups to print.')
-    return
-  }
-  win.document.open()
-  win.document.write(html)
-  win.document.close()
-  win.onload = () => {
-    win.focus()
-    win.print()
-    setTimeout(() => win.close(), 500)
-  }
-  // Fallback for cases where onload already fired before we attached
-  setTimeout(() => {
-    try {
-      if (!win.closed) {
-        win.focus()
-        win.print()
-      }
-    } catch {
-      /* window already closed */
-    }
-  }, 400)
+function openPrintWindow(html: string, title: string): void {
+  void window.api.printer.print(html, title)
 }
 
 // ── Dispensing label (90mm × 50mm) ──────────────────────────────────────────
@@ -114,7 +91,7 @@ export function printDispensingLabel(
 </body>
 </html>`
 
-  openPrintWindow(html, 'Dispensing Label', 450, 320)
+  openPrintWindow(html, 'Dispensing Label')
 }
 
 // ── Thermal receipt (80mm) ──────────────────────────────────────────────────

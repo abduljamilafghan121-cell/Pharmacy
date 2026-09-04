@@ -10,13 +10,16 @@ import { z } from "zod";
 
 // Extend generated bodies with new schema fields not yet in openapi.yaml
 const CONTROLLED_SCHEDULE = z.enum(["II", "III", "IV", "V"]).optional().nullable();
+const BARCODE = z.string().trim().max(100).optional().nullable();
 const CreateMedicineBodyExt = CreateMedicineBody.extend({
   controlledSchedule: CONTROLLED_SCHEDULE,
   drugClass: z.string().optional().nullable(),
+  barcode: BARCODE,
 });
 const UpdateMedicineBodyExt = UpdateMedicineBody.extend({
   controlledSchedule: CONTROLLED_SCHEDULE,
   drugClass: z.string().optional().nullable(),
+  barcode: BARCODE,
 });
 import { requireAuth, requireRole } from "../middlewares/auth";
 import { formatZodError, getDbErrorMessage } from "../lib/api-errors";

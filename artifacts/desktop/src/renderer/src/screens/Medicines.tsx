@@ -318,6 +318,7 @@ function AddMedicineModal({ onClose }: { onClose: () => void }): ReactElement {
   const [description, setDescription] = useState('')
   const [controlledSchedule, setControlledSchedule] = useState('')
   const [drugClass, setDrugClass] = useState('')
+  const [barcode, setBarcode] = useState('')
   const [prescriptionRequired, setPrescriptionRequired] = useState(false)
 
   const createMutation = useCreateMedicine({
@@ -349,7 +350,8 @@ function AddMedicineModal({ onClose }: { onClose: () => void }): ReactElement {
         description: description.trim() || undefined,
         // Extended fields — passed through since they're not in the generated schema yet
         ...(controlledSchedule ? { controlledSchedule } : {}),
-        ...(drugClass.trim() ? { drugClass: drugClass.trim() } : {})
+        ...(drugClass.trim() ? { drugClass: drugClass.trim() } : {}),
+        ...(barcode.trim() ? { barcode: barcode.trim() } : {})
       }
     })
   }
@@ -377,6 +379,21 @@ function AddMedicineModal({ onClose }: { onClose: () => void }): ReactElement {
             Generic Name
           </span>
           <input value={genericName} onChange={(e) => setGenericName(e.target.value)} placeholder="Amoxicillin" style={inputStyle} className={inputCls} />
+        </label>
+        <label className="block">
+          <span style={{ color: theme.muted }} className={labelCls}>
+            Barcode / SKU
+          </span>
+          <input
+            value={barcode}
+            onChange={(e) => setBarcode(e.target.value)}
+            placeholder="e.g. 6291041500213 (scannable in New Sale and Checkout)"
+            style={inputStyle}
+            className={inputCls}
+          />
+          <span style={{ color: theme.muted }} className="text-[11px] mt-1 block">
+            Enter the EAN/UPC barcode printed on the product so the scanner can look it up at checkout.
+          </span>
         </label>
         <div className="grid grid-cols-2 gap-4">
           <label className="block">
