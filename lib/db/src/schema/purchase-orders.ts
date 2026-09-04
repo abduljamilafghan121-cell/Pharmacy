@@ -24,6 +24,7 @@ export const purchaseOrderItemsTable = pgTable("purchase_order_items", {
   unitName: text("unit_name"),
   conversionFactorToBase: integer("conversion_factor_to_base").notNull().default(1),
   unitPrice: numeric("unit_price", { precision: 10, scale: 2 }).notNull(),
+  receivedBatchId: integer("received_batch_id"),
 });
 
 export const insertPurchaseOrderSchema = createInsertSchema(purchaseOrdersTable).omit({ id: true, createdAt: true, updatedAt: true });

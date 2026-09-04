@@ -265,12 +265,15 @@ router.patch("/purchase-orders/:id/receive", requireAuth, requireRole("admin", "
         targetBatch = byNumber ?? null;
       }
 
+      let finalBatchId: number;
+
       if (targetBatch) {
         // Merge into the existing lot: add to its remaining quantity and
         // roll the cost into a quantity-weighted average so per-unit cost
         // (and therefore margin/COGS reporting) stays accurate across
         // multiple deliveries of the same batch. Its expiry date is left
         // alone unless this receipt explicitly supplies a different one.
+        finalBatchId = targetBatch.id;
         const existingQty = targetBatch.quantity;
         const existingCost = targetBatch.costPrice ? parseFloat(targetBatch.costPrice) : null;
         const newQty = existingQty + baseUnitsToAdd;
@@ -291,7 +294,7 @@ router.patch("/purchase-orders/:id/receive", requireAuth, requireRole("admin", "
           .where(eq(medicineBatchesTable.id, targetBatch.id));
       } else {
         // No matching batch — this is a genuinely new lot.
-        await tx.insert(medicineBatchesTable).values({
+        const [inserted] = await tx.insert(medicineBatchesTable).values({
           medicineId: item.medicineId,
           batchNumber: override?.batchNumber ?? null,
           expiryDate: override?.expiryDate ?? null,
@@ -299,8 +302,15 @@ router.patch("/purchase-orders/:id/receive", requireAuth, requireRole("admin", "
           costPrice: costPerBaseUnit,
           supplierId: po.supplierId,
           purchaseOrderId: po.id,
-        });
+        }).returning({ id: medicineBatchesTable.id });
+        finalBatchId = inserted.id;
       }
+
+      // Link this PO item to the batch it was received into (for clean reversal).
+      await tx
+        .update(purchaseOrderItemsTable)
+        .set({ receivedBatchId: finalBatchId })
+        .where(eq(purchaseOrderItemsTable.id, item.id));
 
       // Recompute the medicine aggregate from all batch rows.
       await refreshMedicineAggregate(tx, item.medicineId);
@@ -325,11 +335,13 @@ router.patch("/purchase-orders/:id/receive", requireAuth, requireRole("admin", "
 
 // POST /purchase-orders/:id/reverse — undo a mistakenly-received purchase order.
 //
-// Receiving adds stock to medicine_batches (a new lot per PO item, OR a merge
-// into an existing lot by batch number). Reversing uses FIFO removal: it walks
-// each medicine's batches oldest-first and deducts stock until the full received
-// quantity has been removed. Blocked only when the stock has been partially or
-// fully consumed (not enough left across all batches).
+// Each PO item records the specific batch (receivedBatchId) it was received
+// into, whether that batch was newly created or an existing lot topped up.
+// Reversing deducts exactly from that recorded batch for each item — no FIFO
+// guessing. Blocked only when a batch no longer has enough stock left (i.e.
+// some of the received stock has since been sold, returned, or written off).
+// Written-off batches and legacy items with no recorded batch are handled by
+// falling back to FIFO across the medicine's batches.
 router.post(
   "/purchase-orders/:id/reverse",
   requireAuth,
@@ -359,63 +371,88 @@ router.post(
         .from(purchaseOrderItemsTable)
         .where(eq(purchaseOrderItemsTable.purchaseOrderId, poId));
 
-      // Total base units this receive added per medicine.
-      const toRemove = new Map<number, number>();
+      let adjusted = 0;
+
       for (const item of items) {
-        const base = item.quantity * (item.conversionFactorToBase ?? 1);
-        toRemove.set(item.medicineId, (toRemove.get(item.medicineId) ?? 0) + base);
-      }
+        const baseUnits = item.quantity * (item.conversionFactorToBase ?? 1);
 
-      // For each medicine, find batches oldest-first (FIFO) and deduct stock.
-      const batchesTouched: { id: number; medicineId: number; removed: number }[] = [];
+        let batchId: number | null = item.receivedBatchId;
 
-      for (const [medicineId, needed] of toRemove) {
-        const batches = await tx
+        // Legacy items (received before this column existed) have no recorded
+        // batch. Fall back to the PO's own created lot if one still exists,
+        // otherwise FIFO across the medicine's batches.
+        if (batchId == null) {
+          const [ownLot] = await tx
+            .select({ id: medicineBatchesTable.id })
+            .from(medicineBatchesTable)
+            .where(and(
+              eq(medicineBatchesTable.purchaseOrderId, poId),
+              eq(medicineBatchesTable.medicineId, item.medicineId),
+            ))
+            .orderBy(medicineBatchesTable.createdAt)
+            .limit(1);
+          batchId = ownLot?.id ?? null;
+        }
+
+        // Deduct from the recorded batch; if its quantity is too low, walk
+        // outward with FIFO across the medicine's remaining batches.
+        let remaining = baseUnits;
+        const targetIds: number[] = [];
+        if (batchId != null) targetIds.push(batchId);
+
+        const fifoBatches = await tx
           .select()
           .from(medicineBatchesTable)
           .where(and(
-            eq(medicineBatchesTable.medicineId, medicineId),
+            eq(medicineBatchesTable.medicineId, item.medicineId),
             isNull(medicineBatchesTable.writeOffAt),
           ))
           .orderBy(medicineBatchesTable.createdAt);
 
-        let remaining = needed;
-        for (const batch of batches) {
+        for (const batch of fifoBatches) {
           if (remaining <= 0) break;
-          const take = Math.min(batch.quantity, remaining);
-          if (take > 0) {
-            await tx
-              .update(medicineBatchesTable)
-              .set({ quantity: sql`${medicineBatchesTable.quantity} - ${take}` })
-              .where(and(
-                eq(medicineBatchesTable.id, batch.id),
-                sql`${medicineBatchesTable.quantity} >= ${take}`,
-              ));
-            batchesTouched.push({ id: batch.id, medicineId, removed: take });
-            remaining -= take;
-          }
+          if (batch.id === batchId) continue; // already consumed first
+          if (batch.quantity <= 0) continue;
+          targetIds.push(batch.id);
+        }
+
+        for (const id of targetIds) {
+          if (remaining <= 0) break;
+          const [b] = await tx
+            .select({ quantity: medicineBatchesTable.quantity })
+            .from(medicineBatchesTable)
+            .where(eq(medicineBatchesTable.id, id));
+          if (!b || b.quantity <= 0) continue;
+          const take = Math.min(b.quantity, remaining);
+          await tx
+            .update(medicineBatchesTable)
+            .set({ quantity: sql`${medicineBatchesTable.quantity} - ${take}` })
+            .where(eq(medicineBatchesTable.id, id));
+          remaining -= take;
+          adjusted += 1;
         }
 
         if (remaining > 0) {
           return fail(
             409,
-            `Not enough stock left to reverse medicine ${medicineId}: ${remaining} unit(s) were already sold, returned, or written off. Use a supplier return instead.`
+            `Not enough stock left to reverse this purchase order: ${remaining} unit(s) of medicine #${item.medicineId} were already sold, returned, or written off. Use a supplier return instead.`
           );
         }
       }
 
-      // Remove empty batches (quantity = 0) and restore PO to pending.
+      // Remove empty batches (quantity <= 0) and restore PO to pending.
       await tx.delete(medicineBatchesTable).where(sql`${medicineBatchesTable.quantity} <= 0`);
       await tx
         .update(purchaseOrdersTable)
         .set({ status: "pending" })
         .where(eq(purchaseOrdersTable.id, poId));
 
-      for (const [medicineId] of toRemove) {
-        await refreshMedicineAggregate(tx, medicineId);
+      const medicineIds = [...new Set(items.map((i) => i.medicineId))];
+      for (const id of medicineIds) {
+        await refreshMedicineAggregate(tx, id);
       }
 
-      return { ok: true as const, batchesAdjusted: batchesTouched.length };
+      return { ok: true as const, batchesAdjusted: adjusted };
     });
 
     if (!result.ok) {
