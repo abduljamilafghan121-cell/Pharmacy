@@ -138,7 +138,7 @@ function VoidPaymentModal({
     }
     setSaving(true)
     try {
-      const res = await fetch(apiUrl(`/api/supplier-payments/${paymentId}/void`), {
+      const res = await fetch(apiUrl(`supplier-payments/${paymentId}/void`), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ reason: reason.trim() })

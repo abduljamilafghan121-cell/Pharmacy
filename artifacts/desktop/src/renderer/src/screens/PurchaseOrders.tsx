@@ -621,7 +621,7 @@ function ViewPOModal({
     if (!window.confirm('Reverse this receipt? This will remove the stock lot(s) this receipt created and set the PO back to pending.')) return
     setReversing(true)
     try {
-      const res = await fetch(apiUrl(`/api/purchase-orders/${poId}/reverse`), {
+      const res = await fetch(apiUrl(`purchase-orders/${poId}/reverse`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders() }
       })
