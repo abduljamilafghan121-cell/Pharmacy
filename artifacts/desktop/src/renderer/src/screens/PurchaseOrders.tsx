@@ -1,6 +1,6 @@
 ﻿import type { ReactElement } from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Plus, Loader2, Trash2, Search, PackageCheck, Scan, X, Eye, PackagePlus, PackageSearch } from 'lucide-react'
+import { Plus, Loader2, Trash2, Search, PackageCheck, Scan, X, Eye, PackagePlus, PackageSearch, Undo2 } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   useListPurchaseOrders,
@@ -15,6 +15,7 @@ import {
 } from '@workspace/api-client-react'
 import type { Medicine, Supplier, PurchaseOrder } from '@workspace/api-client-react'
 import { useUiStore } from '../store/uiStore'
+import { useAuth } from '../hooks/useAuth'
 import { getTheme, mono, serif } from '../theme'
 import { usePharmacySettings, formatCurrency } from '../hooks/usePharmacySettings'
 import { useBarcodeScanner } from '../hooks/useBarcodeScanner'
@@ -604,13 +605,43 @@ function ViewPOModal({
   preview: PurchaseOrder | undefined
   onClose: () => void
 }): ReactElement {
-  const { dark } = useUiStore()
+  const { dark, showToast } = useUiStore()
   const theme = getTheme(dark)
+  const queryClient = useQueryClient()
+  const { user } = useAuth()
+  const canReverse = user?.role === 'admin'
   const { data: settings } = usePharmacySettings()
   const { data: full, isLoading } = useGetPurchaseOrder(poId)
   const po = full ?? preview
   const items = po?.items ?? []
   const total = po?.total
+  const [reversing, setReversing] = useState(false)
+
+  const handleReverse = async (): Promise<void> => {
+    if (!window.confirm('Reverse this receipt? This will remove the stock lot(s) this receipt created and set the PO back to pending.')) return
+    setReversing(true)
+    try {
+      const res = await fetch(apiUrl(`/api/purchase-orders/${poId}/reverse`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() }
+      })
+      const body = await jsonOrThrow(res, "Couldn't reverse receipt")
+      showToast(`Receipt reversed — ${body.removedLots} lot(s) removed, PO set back to pending`)
+      queryClient.invalidateQueries({
+        predicate: (q) =>
+          typeof q.queryKey[0] === 'string' && q.queryKey[0].startsWith('/api/purchase-orders')
+      })
+      queryClient.invalidateQueries({
+        predicate: (q) =>
+          typeof q.queryKey[0] === 'string' && q.queryKey[0].startsWith('/api/medicines')
+      })
+      onClose()
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Couldn't reverse receipt")
+    } finally {
+      setReversing(false)
+    }
+  }
 
   return (
     <Modal title={`Purchase order #${poId}`} onClose={onClose} width={600}>
@@ -670,6 +701,17 @@ function ViewPOModal({
                 {formatCurrency(parseFloat(total), settings)}
               </span>
             </div>
+          )}
+          {canReverse && po?.status === 'received' && (
+            <button
+              onClick={handleReverse}
+              disabled={reversing}
+              style={{ border: `1px solid ${theme.red}55`, color: theme.red }}
+              className="flex items-center justify-center gap-2 rounded-lg py-2 text-sm font-medium transition-colors hover:bg-[color:var(--row-hover)] disabled:opacity-60"
+            >
+              {reversing ? <Loader2 size={14} className="animate-spin" /> : <Undo2 size={14} />}
+              {reversing ? 'Reversing…' : 'Reverse Receive'}
+            </button>
           )}
         </div>
       ) : null}

@@ -14,6 +14,11 @@ export const supplierPaymentsTable = pgTable("supplier_payments", {
   method: supplierPaymentMethodEnum("method").notNull().default("cash"),
   note: text("note"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  // Set when this payment was recorded by mistake and later voided. Voided
+  // payments are excluded from the supplier ledger balance so the wrong
+  // entry no longer affects the running total (reversal-by-void).
+  voidedAt: timestamp("voided_at", { withTimezone: true }),
+  voidReason: text("void_reason"),
 });
 
 export const insertSupplierPaymentSchema = createInsertSchema(supplierPaymentsTable).omit({ id: true, createdAt: true });

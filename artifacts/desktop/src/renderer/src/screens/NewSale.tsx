@@ -576,6 +576,9 @@ export default function NewSale(): ReactElement {
       } else if (e.key === 'F9') {
         e.preventDefault()
         chargeRef.current()
+      } else if (e.key === 'F8') {
+        e.preventDefault()
+        setScanMode(true)
       }
     }
     window.addEventListener('keydown', onKey)
@@ -761,7 +764,16 @@ export default function NewSale(): ReactElement {
               <span style={{ color: theme.muted }} className="font-normal normal-case">
                 name or generic name
               </span>
-              <span className="ml-auto">
+              <span className="ml-auto flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setScanMode(true)}
+                  style={{ background: theme.hover, color: theme.primaryText, border: `1px solid ${theme.primary}44` }}
+                  className="flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-lg transition-colors hover:opacity-80"
+                >
+                  <Scan size={12} /> Scan
+                  <Kbd>F8</Kbd>
+                </button>
                 <Kbd>F2</Kbd>
               </span>
             </label>

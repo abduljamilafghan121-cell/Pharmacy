@@ -1,6 +1,6 @@
 ﻿import type { ReactElement } from 'react'
 import { useMemo, useState } from 'react'
-import { CreditCard, ChevronRight, Loader2, TrendingUp, Wallet, Search, X } from 'lucide-react'
+import { CreditCard, ChevronRight, Loader2, TrendingUp, Wallet, Search, X, Undo2 } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   useListSupplierLedger,
@@ -12,9 +12,20 @@ import {
 } from '@workspace/api-client-react'
 import { useUiStore } from '../store/uiStore'
 import { getTheme, mono, serif } from '../theme'
+import { useAuth } from '../hooks/useAuth'
 import Modal from '../components/Modal'
 import Field from '../components/Field'
 import Loading from '../components/Loading'
+import { apiUrl, authHeaders, jsonOrThrow } from '../lib/apiClient'
+
+// The generated SupplierLedgerEntry type hasn't caught up with the API — the
+// server also returns voided/voidReason/method on payment entries. Same
+// defensive pattern as NewSale's MedicineRow.
+type LedgerEntryRow = import('@workspace/api-client-react').SupplierLedgerEntry & {
+  voided?: boolean
+  voidReason?: string | null
+  method?: string | null
+}
 
 function balanceColor(balance: string, theme: ReturnType<typeof getTheme>): string {
   return parseFloat(balance) > 0 ? theme.red : theme.green
@@ -102,6 +113,85 @@ function RecordPaymentModal({
   )
 }
 
+function VoidPaymentModal({
+  paymentId,
+  amount,
+  supplierName,
+  onClose,
+  onVoided
+}: {
+  paymentId: number
+  amount: string
+  supplierName: string
+  onClose: () => void
+  onVoided: () => void
+}): ReactElement {
+  const { dark, showToast } = useUiStore()
+  const theme = getTheme(dark)
+  const [reason, setReason] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const submit = async (): Promise<void> => {
+    if (!reason.trim()) {
+      showToast('A void reason is required')
+      return
+    }
+    setSaving(true)
+    try {
+      const res = await fetch(apiUrl(`/api/supplier-payments/${paymentId}/void`), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({ reason: reason.trim() })
+      })
+      await jsonOrThrow(res, "Couldn't void payment")
+      showToast(`Payment of ${amount} voided`)
+      onVoided()
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Couldn't void payment")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal title={`Void payment — ${supplierName}`} onClose={onClose} width={440}>
+      <div style={{ background: theme.amberBg, color: theme.amber }} className="rounded-lg p-3 text-sm mb-4">
+        <p className="font-medium mb-1">You're about to void a payment of {amount}.</p>
+        <p className="opacity-80 text-xs">
+          The payment will be marked as voided and excluded from the supplier ledger balance. This can't be
+          undone — please confirm this payment was recorded by mistake.
+        </p>
+      </div>
+      <Field
+        label="Void reason"
+        value={reason}
+        onChange={setReason}
+        placeholder="e.g. Wrong amount entered, duplicate payment…"
+        textarea
+      />
+      <div className="flex gap-2 mt-2">
+        <button
+          onClick={onClose}
+          disabled={saving}
+          style={{ border: `1px solid ${theme.borderStrong}`, color: theme.text }}
+          className="flex-1 rounded-lg py-2 text-sm font-medium disabled:opacity-60"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={submit}
+          disabled={saving}
+          style={{ background: theme.amber, color: '#fff' }}
+          className="flex-1 rounded-lg py-2 text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-60"
+        >
+          {saving && <Loader2 size={13} className="animate-spin" />}
+          Void payment
+        </button>
+      </div>
+    </Modal>
+  )
+}
+
 function LedgerDetailModal({
   supplierId,
   onClose,
@@ -113,9 +203,18 @@ function LedgerDetailModal({
 }): ReactElement {
   const { dark } = useUiStore()
   const theme = getTheme(dark)
+  const queryClient = useQueryClient()
+  const { user } = useAuth()
+  const canVoid = user?.role === 'admin'
+  const [voidTarget, setVoidTarget] = useState<{ id: number; amount: string } | null>(null)
   const { data: detail, isLoading } = useGetSupplierLedger(supplierId, {
     query: { queryKey: getGetSupplierLedgerQueryKey(supplierId) }
   })
+
+  const refresh = (): void => {
+    queryClient.invalidateQueries({ queryKey: getListSupplierLedgerQueryKey() })
+    queryClient.invalidateQueries({ queryKey: getGetSupplierLedgerQueryKey(supplierId) })
+  }
 
   return (
     <Modal title={detail?.supplierName ?? 'Supplier ledger'} onClose={onClose} width={640}>
@@ -183,8 +282,13 @@ function LedgerDetailModal({
                     </td>
                   </tr>
                 ) : (
-                  detail.entries.map((entry) => (
-                    <tr key={`${entry.entryType}-${entry.id}`} style={{ borderTop: `1px solid ${theme.border}` }}>
+                  detail.entries.map((rawEntry) => {
+                    const entry = rawEntry as LedgerEntryRow
+                    return (
+                    <tr
+                      key={`${entry.entryType}-${entry.id}`}
+                      style={{ borderTop: `1px solid ${theme.border}`, opacity: entry.voided ? 0.55 : 1 }}
+                    >
                       <td className="px-3 py-2 text-xs" style={{ ...mono, color: theme.muted }}>
                         {new Date(entry.date).toLocaleDateString()}
                       </td>
@@ -192,16 +296,42 @@ function LedgerDetailModal({
                         <div className="flex items-center gap-2">
                           <span
                             style={{
-                              background: entry.entryType === 'purchase_order' ? theme.amberBg : theme.greenBg,
-                              color: entry.entryType === 'purchase_order' ? theme.amber : theme.green
+                              background: entry.voided
+                                ? theme.hover
+                                : entry.entryType === 'purchase_order'
+                                ? theme.amberBg
+                                : theme.greenBg,
+                              color: entry.voided
+                                ? theme.muted
+                                : entry.entryType === 'purchase_order'
+                                ? theme.amber
+                                : theme.green
                             }}
                             className="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase"
                           >
-                            {entry.entryType === 'purchase_order' ? 'PO' : 'PMT'}
+                            {entry.entryType === 'purchase_order' ? 'PO' : entry.voided ? 'VOID' : 'PMT'}
                           </span>
-                          <span style={{ color: theme.text }} className="text-sm">
+                          <span
+                            style={{ color: entry.voided ? theme.muted : theme.text, textDecoration: entry.voided ? 'line-through' : 'none' }}
+                            className="text-sm"
+                          >
                             {entry.description}
                           </span>
+                          {entry.voided && entry.voidReason && (
+                            <span style={{ color: theme.muted }} className="text-xs italic">
+                              — {entry.voidReason}
+                            </span>
+                          )}
+                          {canVoid && entry.entryType === 'payment' && !entry.voided && entry.method !== 'credit' && (
+                            <button
+                              onClick={() => setVoidTarget({ id: entry.paymentId!, amount: entry.credit })}
+                              title="Void this payment"
+                              style={{ color: theme.amber, border: `1px solid ${theme.amber}55` }}
+                              className="ml-auto flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold hover:bg-[color:var(--row-hover)]"
+                            >
+                              <Undo2 size={11} /> Void
+                            </button>
+                          )}
                         </div>
                       </td>
                       <td className="px-3 py-2 text-right text-sm" style={{ ...mono, color: theme.red }}>
@@ -217,7 +347,8 @@ function LedgerDetailModal({
                         {entry.runningBalance}
                       </td>
                     </tr>
-                  ))
+                    )
+                  })
                 )}
               </tbody>
             </table>
@@ -233,6 +364,19 @@ function LedgerDetailModal({
               Record payment
             </button>
           </div>
+
+          {voidTarget && (
+            <VoidPaymentModal
+              paymentId={voidTarget.id}
+              amount={voidTarget.amount}
+              supplierName={detail.supplierName}
+              onClose={() => setVoidTarget(null)}
+              onVoided={() => {
+                setVoidTarget(null)
+                refresh()
+              }}
+            />
+          )}
         </div>
       )}
     </Modal>
