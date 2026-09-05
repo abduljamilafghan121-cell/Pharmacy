@@ -446,8 +446,7 @@ export default function Login(): ReactElement {
                     Check your email
                   </p>
                   <p style={{ color: theme.muted }} className="text-xs">
-                    If an account exists for <strong>{forgotEmail}</strong>, a reset link has been
-                    sent. The link expires in 1 hour.
+                    A password reset link has been sent to <strong>{forgotEmail}</strong>. The link expires in 1 hour.
                   </p>
                   <p style={{ color: theme.muted }} className="text-xs mt-1">
                     The email opens the web app — here, use the link's token directly.

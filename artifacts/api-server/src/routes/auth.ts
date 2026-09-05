@@ -296,10 +296,14 @@ router.post("/auth/forgot-password", async (req, res): Promise<void> => {
       .from(usersTable)
       .where(eq(usersTable.email, parsed.data.email));
 
-    // Always respond the same way regardless of whether the email exists —
-    // this avoids leaking which email addresses are registered.
-    if (!user || !user.isActive) {
-      res.json({ message: "If an account exists for that email, a reset link has been sent." });
+    // Reject the request when the email doesn't belong to an account — don't
+    // spend a reset token or fire an email to arbitrary addresses.
+    if (!user) {
+      res.status(404).json({ error: "No account found for this email address. Please check the spelling and try again." });
+      return;
+    }
+    if (!user.isActive) {
+      res.status(400).json({ error: "This account has been deactivated. Please contact an administrator." });
       return;
     }
 
@@ -327,18 +331,16 @@ router.post("/auth/forgot-password", async (req, res): Promise<void> => {
 
     logger.info({ userId: user.id }, "forgot-password: reset token issued, sending email");
 
-    // Send the reset email. If the mailer throws (e.g. bad credentials, SMTP
-    // timeout) we log the failure but still return the standard success message
-    // — the token is already stored so the user can retry the request.
+    // If the mailer throws (e.g. bad credentials, SMTP timeout) we log the
+    // failure but still confirm receipt — the token is already stored so the
+    // user can retry the request.
     try {
       await sendPasswordResetEmail(user.email, resetLink);
     } catch (mailErr) {
       logger.error({ err: mailErr, userId: user.id }, "forgot-password: email delivery failed");
     }
 
-    // Always return the same message regardless of outcome — prevents leaking
-    // whether an email was sent or which address is registered.
-    res.json({ message: "If an account exists for that email, a reset link has been sent." });
+    res.json({ message: "A password reset link has been sent. It expires in 1 hour." });
   } catch (err) {
     logger.error({ err }, "forgot-password: failed");
     res.status(500).json({ error: "Failed to process request.", detail: getDbErrorMessage(err) });

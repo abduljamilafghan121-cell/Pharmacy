@@ -50,7 +50,7 @@ export default function ForgotPassword() {
               <MailCheck className="w-10 h-10 text-primary mx-auto" />
               <h1 className="text-xl font-bold">Check your email</h1>
               <p className="text-sm text-muted-foreground">
-                If an account exists for <span className="font-medium">{email}</span>, a password reset link has been sent. The link expires in 30 minutes.
+                A password reset link has been sent to <span className="font-medium">{email}</span>. The link expires in 1 hour.
               </p>
               {devResetLink && (
                 <div className="text-left mt-4 p-3 rounded-lg bg-amber-500/10 border border-amber-400/30 text-xs">
