@@ -25,7 +25,7 @@ import Modal from '../components/Modal'
 // The server returns controlledSchedule/drugClass but the generated Medicine
 // type hasn't caught up — extend it here so we read them defensively without
 // `as any`.
-type MedicineRow = Medicine & {
+export type MedicineRow = Medicine & {
   controlledSchedule?: string | null
   drugClass?: string | null
   barcode?: string | null
@@ -198,6 +198,8 @@ function MedicineCard({
   const stockDisplay = formatStockDisplay(medicine.quantity, units)
   const hasUnits = units && units.length > 0
   const controlledSchedule = medicine.controlledSchedule
+  const [unitsHover, setUnitsHover] = useState(false)
+  const [detailsHover, setDetailsHover] = useState(false)
 
   return (
     <div
@@ -291,9 +293,25 @@ function MedicineCard({
                     e.stopPropagation()
                     onManageUnits()
                   }}
-                  title="Manage packaging units"
-                  style={{ color: theme.muted }}
-                  className="flex items-center gap-1 text-xs px-2 py-1.5 rounded-lg transition-colors hover:bg-[color:var(--row-hover)]"
+                  onMouseEnter={() => setUnitsHover(true)}
+                  onMouseLeave={() => setUnitsHover(false)}
+                  title="Manage packaging units — add pack sizes, barcodes, and per-pack prices"
+                  style={
+                    unitsHover
+                      ? {
+                          background: 'linear-gradient(135deg, #22B57F 0%, #0E8A64 100%)',
+                          border: '1px solid transparent',
+                          color: '#FFFFFF',
+                          boxShadow: theme.shadowLg,
+                          transform: 'translateY(-1px) scale(1.04)'
+                        }
+                      : {
+                          border: `1px solid ${theme.primary}55`,
+                          background: theme.primarySoft,
+                          color: theme.primaryText
+                        }
+                  }
+                  className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg transition-all duration-150 active:scale-[0.97]"
                 >
                   <Package size={12} /> Units
                 </button>
@@ -303,8 +321,20 @@ function MedicineCard({
                   e.stopPropagation()
                   onOpen()
                 }}
-                style={{ border: `1px solid ${theme.borderStrong}`, color: theme.text }}
-                className="shrink-0 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors hover:bg-[color:var(--row-hover)]"
+                onMouseEnter={() => setDetailsHover(true)}
+                onMouseLeave={() => setDetailsHover(false)}
+                style={
+                  detailsHover
+                    ? {
+                        border: `1px solid ${theme.primary}`,
+                        background: theme.primarySoft,
+                        color: theme.primaryText,
+                        transform: 'translateY(-1px) scale(1.04)',
+                        boxShadow: theme.shadowLg
+                      }
+                    : { border: `1px solid ${theme.borderStrong}`, color: theme.text }
+                }
+                className="shrink-0 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-all duration-150 active:scale-[0.97]"
               >
                 Details
               </button>
@@ -535,7 +565,7 @@ function AddMedicineModal({ onClose }: { onClose: () => void }): ReactElement {
 
 // ── Manage packaging units modal ────────────────────────────────────────────
 
-function ManageUnitsModal({
+export function ManageUnitsModal({
   medicine,
   onClose
 }: {

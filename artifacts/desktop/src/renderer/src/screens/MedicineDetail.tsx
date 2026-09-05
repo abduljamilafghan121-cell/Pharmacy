@@ -5,7 +5,7 @@ import { useGetMedicine, useUpdateMedicine, useDeleteMedicine, getGetMedicineQue
 import type { Medicine } from '@workspace/api-client-react'
 import {
   Pill, ArrowLeft, Trash2, Info, AlertTriangle, CalendarClock, PackageX,
-  Loader2, AlertCircle, ShoppingCart, Pencil, ScanLine, Save
+  Loader2, AlertCircle, ShoppingCart, Pencil, ScanLine, Save, Package
 } from 'lucide-react'
 import { useUiStore } from '../store/uiStore'
 import { getTheme, mono, serif } from '../theme'
@@ -18,6 +18,7 @@ import Modal from '../components/Modal'
 import { apiUrl, authHeaders, jsonOrThrow } from '../lib/apiClient'
 import BatchList from '../components/BatchList'
 import ContraindicationsPanel from '../components/ContraindicationsPanel'
+import { ManageUnitsModal, type MedicineRow } from './Medicines'
 
 // The generated Medicine type hasn't caught up with the API — the server also
 // returns barcode/controlledSchedule/drugClass. Same defensive pattern as
@@ -40,6 +41,7 @@ export default function MedicineDetail(): ReactElement {
   const [writeOffQty, setWriteOffQty] = useState(1)
   const [writeOffReason, setWriteOffReason] = useState('')
   const [editOpen, setEditOpen] = useState(false)
+  const [unitsModalOpen, setUnitsModalOpen] = useState(false)
 
   const { data: medicine, isLoading } = useGetMedicine(id ?? 0, {
     query: { enabled: !!id, queryKey: getGetMedicineQueryKey(id ?? 0) }
@@ -137,7 +139,7 @@ export default function MedicineDetail(): ReactElement {
       <button
         onClick={() => setScreen('medicines')}
         style={{ color: theme.muted }}
-        className="flex items-center gap-1.5 text-xs font-medium hover:opacity-80"
+        className="-ml-2 flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium transition-all duration-150 hover:bg-[color:var(--row-hover)] active:scale-[0.97]"
       >
         <ArrowLeft size={13} /> Back to Medicines
       </button>
@@ -249,7 +251,7 @@ export default function MedicineDetail(): ReactElement {
               setScreen('new-sale')
             }}
             style={{ background: 'linear-gradient(135deg, #22B57F 0%, #0E8A64 100%)', opacity: isExpired || isOutOfStock ? 0.5 : 1 }}
-            className="flex items-center justify-center gap-2 rounded-lg py-2.5 text-white text-sm font-semibold mb-3 transition-transform active:scale-[0.98] disabled:active:scale-100"
+            className="flex items-center justify-center gap-2 rounded-lg py-2.5 text-white text-sm font-semibold mb-3 transition-all duration-150 hover:brightness-110 hover:shadow-lg active:scale-[0.98] disabled:active:scale-100 disabled:hover:scale-100 disabled:hover:brightness-100"
           >
             <ShoppingCart size={15} /> Add to Checkout
           </button>
@@ -258,9 +260,16 @@ export default function MedicineDetail(): ReactElement {
           {canEdit && (
             <div className="flex flex-col gap-2">
               <button
+                onClick={() => setUnitsModalOpen(true)}
+                style={{ background: 'linear-gradient(135deg, #22B57F 0%, #0E8A64 100%)', color: '#FFFFFF' }}
+                className="flex items-center justify-center gap-2 rounded-lg py-2 text-sm font-semibold transition-all duration-150 hover:brightness-110 hover:shadow-lg active:scale-[0.98]"
+              >
+                <Package size={14} /> Packaging Units
+              </button>
+              <button
                 onClick={() => setEditOpen(true)}
                 style={{ border: `1px solid ${theme.primary}55`, color: theme.primaryText }}
-                className="flex items-center justify-center gap-2 rounded-lg py-2 text-sm font-medium transition-colors hover:bg-[color:var(--row-hover)]"
+                className="flex items-center justify-center gap-2 rounded-lg py-2 text-sm font-medium transition-all duration-150 hover:-translate-y-px hover:bg-[color:var(--row-hover)] hover:shadow-md active:scale-[0.98]"
               >
                 <Pencil size={14} /> Edit Medicine
               </button>
@@ -268,7 +277,7 @@ export default function MedicineDetail(): ReactElement {
                 <button
                   onClick={() => setWriteOffOpen(true)}
                   style={{ border: `1px solid ${theme.amber}55`, color: theme.amber }}
-                  className="flex items-center justify-center gap-2 rounded-lg py-2 text-sm font-medium transition-colors hover:bg-[color:var(--row-hover)]"
+                  className="flex items-center justify-center gap-2 rounded-lg py-2 text-sm font-medium transition-all duration-150 hover:-translate-y-px hover:bg-[color:var(--row-hover)] hover:shadow-md active:scale-[0.98]"
                 >
                   <PackageX size={14} /> Write Off Stock
                 </button>
@@ -281,7 +290,7 @@ export default function MedicineDetail(): ReactElement {
                 }}
                 disabled={deleteMutation.isPending}
                 style={{ border: `1px solid ${theme.red}55`, color: theme.red }}
-                className="flex items-center justify-center gap-2 rounded-lg py-2 text-sm font-medium transition-colors hover:bg-[color:var(--row-hover)] disabled:opacity-40"
+                className="flex items-center justify-center gap-2 rounded-lg py-2 text-sm font-medium transition-all duration-150 hover:-translate-y-px hover:bg-[color:var(--row-hover)] hover:shadow-md active:scale-[0.98] disabled:opacity-40"
               >
                 <Trash2 size={14} /> Delete Medicine
               </button>
@@ -365,6 +374,14 @@ export default function MedicineDetail(): ReactElement {
 
       {/* Drug-patient contraindications */}
       {canEdit && <ContraindicationsPanel medicineId={medicine.id} />}
+
+      {/* Packaging units dialog */}
+      {unitsModalOpen && (
+        <ManageUnitsModal
+          medicine={medicine as unknown as MedicineRow}
+          onClose={() => setUnitsModalOpen(false)}
+        />
+      )}
 
       {/* Write-off dialog */}
       {writeOffOpen && (

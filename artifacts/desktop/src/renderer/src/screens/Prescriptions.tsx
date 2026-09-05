@@ -536,7 +536,7 @@ function PrescriptionCard({ rx }: { rx: PrescriptionRow }): ReactElement {
           <button
             onClick={() => setDetailOpen(true)}
             style={{ border: `1px solid ${theme.border}`, color: theme.muted }}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors hover:border-emerald-500/50 hover:text-emerald-500"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all duration-150 hover:-translate-y-px hover:border-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-500 hover:shadow-md active:scale-[0.97]"
           >
             <Eye size={12} /> View
           </button>
