@@ -145,7 +145,7 @@ export default function Sidebar(): ReactElement {
                           }
                         : { color: theme.onSidebarMuted }
                     }
-                    className={`group w-full flex items-center gap-2.5 pl-3 pr-3 py-[7px] rounded-lg text-[13px] font-medium relative transition-colors ${chromeHover}`}
+                    className={`group w-full flex items-center gap-2.5 pl-3 pr-3 py-[7px] rounded-lg text-[13px] font-medium relative transition-all duration-150 hover:translate-x-[2px] hover:shadow-md active:scale-[0.98] ${chromeHover}`}
                   >
                     {active && (
                       <span
@@ -183,9 +183,9 @@ export default function Sidebar(): ReactElement {
                 }
               : { color: theme.onSidebarMuted }
           }
-          className={`w-full flex items-center gap-2.5 pl-3 pr-3 py-[7px] rounded-lg text-[13px] font-medium transition-colors ${chromeHover}`}
+          className={`group w-full flex items-center gap-2.5 pl-3 pr-3 py-[7px] rounded-lg text-[13px] font-medium transition-all duration-150 hover:translate-x-[2px] hover:shadow-md active:scale-[0.98] ${chromeHover}`}
         >
-          <Settings size={15} strokeWidth={screen === 'settings' ? 2.2 : 1.9} color={screen === 'settings' ? (dark ? '#7BE3BC' : theme.primaryText) : undefined} />
+          <Settings size={15} className="shrink-0 transition-transform group-hover:scale-110" strokeWidth={screen === 'settings' ? 2.2 : 1.9} color={screen === 'settings' ? (dark ? '#7BE3BC' : theme.primaryText) : undefined} />
           <span className="truncate">Settings</span>
         </button>
       </div>
@@ -216,9 +216,13 @@ export default function Sidebar(): ReactElement {
         <button
           onClick={logout}
           title="Sign out"
-          className={`p-1.5 rounded-lg transition-colors ${chromeHover}`}
+          className="group p-1.5 rounded-lg transition-all duration-150 hover:-translate-y-px hover:bg-red-500/15 hover:shadow-md active:scale-[0.92]"
         >
-          <LogOut size={13} color={theme.onSidebarMuted} />
+          <LogOut
+            size={13}
+            color={theme.onSidebarMuted}
+            className="transition-colors duration-150 group-hover:text-red-400"
+          />
         </button>
       </div>
     </div>
