@@ -42,11 +42,25 @@ const allowedOrigins = (process.env["CORS_ORIGINS"] ?? "")
   .filter(Boolean);
 const allowNullOrigin = process.env["CORS_ALLOW_NULL_ORIGIN"] !== "false";
 
+const isLocalhost = (origin: string): boolean => {
+  try {
+    const host = new URL(origin).hostname;
+    return host === "localhost" || host === "127.0.0.1" || host.endsWith(".localhost");
+  } catch {
+    return false;
+  }
+};
+
 app.use(
   cors({
     origin: (origin, cb) => {
       if (!origin) return cb(null, true);
       if (allowNullOrigin && origin === "null") return cb(null, true);
+      // http://localhost:* / http://127.0.0.1:* are dev renderers running on
+      // the user's own machine (electron-vite dev server, vite dev server).
+      // A browser can only send this Origin from a page actually served from
+      // localhost, so it is not an open proxy risk.
+      if (isLocalhost(origin)) return cb(null, true);
       if (allowedOrigins.includes(origin)) return cb(null, true);
       const error = new Error(`Origin not allowed by CORS policy: ${origin}`);
       (error as { status?: number }).status = 403;
