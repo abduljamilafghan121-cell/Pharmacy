@@ -1,6 +1,6 @@
 ﻿import type { ReactElement } from 'react'
 import { useMemo, useState } from 'react'
-import { CreditCard, ChevronRight, Loader2, TrendingUp, Wallet, Search, X, Undo2 } from 'lucide-react'
+import { CreditCard, ChevronRight, Loader2, TrendingUp, Wallet, Search, X, Undo2, Download } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   useListSupplierLedger,
@@ -17,6 +17,8 @@ import Modal from '../components/Modal'
 import Field from '../components/Field'
 import Loading from '../components/Loading'
 import { apiUrl, authHeaders, jsonOrThrow } from '../lib/apiClient'
+import { exportReportAsPdf, type ReportColumn } from '../lib/exportReport'
+import { usePharmacySettings, formatCurrency } from '../hooks/usePharmacySettings'
 
 // The generated SupplierLedgerEntry type hasn't caught up with the API — the
 // server also returns voided/voidReason/method on payment entries. Same
@@ -207,9 +209,48 @@ function LedgerDetailModal({
   const { user } = useAuth()
   const canVoid = user?.role === 'admin'
   const [voidTarget, setVoidTarget] = useState<{ id: number; amount: string } | null>(null)
+  const [exporting, setExporting] = useState(false)
+  const { data: settings } = usePharmacySettings()
   const { data: detail, isLoading } = useGetSupplierLedger(supplierId, {
     query: { queryKey: getGetSupplierLedgerQueryKey(supplierId) }
   })
+
+  const exportPdf = async (): Promise<void> => {
+    if (!detail) return
+    setExporting(true)
+    try {
+      const columns: ReportColumn[] = [
+        { header: 'Date', key: 'date' },
+        { header: 'Description', key: 'description' },
+        { header: 'Debit', key: 'debit', align: 'right' },
+        { header: 'Credit', key: 'credit', align: 'right' },
+        { header: 'Balance', key: 'balance', align: 'right' }
+      ]
+      const rows = detail.entries.map((e) => ({
+        date: new Date(e.date).toLocaleDateString(),
+        description: e.description,
+        debit: parseFloat(e.debit) > 0 ? formatCurrency(parseFloat(e.debit), settings) : null,
+        credit: parseFloat(e.credit) > 0 ? formatCurrency(parseFloat(e.credit), settings) : null,
+        balance: formatCurrency(parseFloat(e.runningBalance), settings)
+      }))
+      const summary = [
+        { label: 'Total Ordered', value: formatCurrency(parseFloat(detail.totalOrdered), settings) },
+        { label: 'Total Paid', value: formatCurrency(parseFloat(detail.totalPaid), settings) },
+        { label: 'Balance', value: formatCurrency(parseFloat(detail.balance), settings) }
+      ]
+      const safeName = detail.supplierName.replace(/[^a-z0-9]+/gi, '_')
+      await exportReportAsPdf({
+        fileName: `supplier-ledger-${safeName}`,
+        title: `${detail.supplierName} — Supplier Ledger`,
+        pharmacy: settings,
+        columns,
+        rows,
+        summary
+      })
+    } finally {
+      setExporting(false)
+    }
+  }
 
   const refresh = (): void => {
     queryClient.invalidateQueries({ queryKey: getListSupplierLedgerQueryKey() })
@@ -354,7 +395,16 @@ function LedgerDetailModal({
             </table>
           </div>
 
-          <div className="flex justify-end mt-3">
+          <div className="flex justify-end mt-3 gap-2">
+            <button
+              onClick={exportPdf}
+              disabled={exporting}
+              style={{ color: theme.primaryText, background: theme.primarySoft, border: `1px solid ${theme.border}` }}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-medium disabled:opacity-60"
+            >
+              {exporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+              {exporting ? 'Exporting…' : 'Export PDF'}
+            </button>
             <button
               onClick={() => onPay(detail.supplierId, detail.supplierName)}
               style={{ background: theme.primary, color: '#fff' }}
