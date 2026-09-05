@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, ilike, or, and, sql, gte, asc, isNull } from "drizzle-orm";
+import { eq, ilike, or, and, sql, gte, asc, isNull, ne } from "drizzle-orm";
 import { db, medicinesTable, categoriesTable, medicineUnitsTable, ordersTable, orderItemsTable, medicineBatchesTable } from "@workspace/db";
 import {
   CreateMedicineBody, UpdateMedicineBody,
@@ -247,12 +247,20 @@ router.get("/medicines", requireAuth, async (req, res): Promise<void> => {
 
     const conditions = [];
     if (search) {
-      // Search by name, generic name, or barcode (barcode allows exact scan-to-search)
+      // Search by name, generic name, or barcode (barcode allows exact scan-to-search).
+      // Also match routines' package barcodes so scanning a box/strip resolves to
+      // the medicine (with its matching unit) even though the medicine-level
+      // barcode is absent or different.
       conditions.push(
         or(
           ilike(medicinesTable.name, `%${search}%`),
           ilike(medicinesTable.genericName, `%${search}%`),
           eq(medicinesTable.barcode, search),
+          sql`EXISTS (
+            SELECT 1 FROM ${medicineUnitsTable}
+            WHERE ${medicineUnitsTable.medicineId} = ${medicinesTable.id}
+              AND ${medicineUnitsTable.barcode} = ${search}
+          )`,
         )!
       );
     }
@@ -541,7 +549,17 @@ const MedicineUnitInput = z.object({
   unitName: z.string().min(1),
   conversionFactorToBase: z.number().int().min(1),
   isBaseUnit: z.boolean(),
+  barcode: z.string().trim().max(100).optional().nullable(),
+  sellPrice: z.coerce.number().positive().optional().nullable(),
 });
+const MedicineUnitUpdateInput = MedicineUnitInput.partial();
+
+function cleanNullable(values: z.infer<typeof MedicineUnitInput> | Partial<z.infer<typeof MedicineUnitInput>>) {
+  const out: Record<string, unknown> = { ...values };
+  if ("barcode" in out && (out.barcode === "" || out.barcode == null)) out.barcode = null;
+  if ("sellPrice" in out && (out.sellPrice === "" || out.sellPrice == null)) out.sellPrice = null;
+  return out;
+}
 
 router.get("/medicines/:id/units", requireAuth, async (req, res): Promise<void> => {
   const params = MedicineUnitParams.safeParse(req.params);
@@ -577,11 +595,46 @@ router.post("/medicines/:id/units", requireAuth, requireRole("admin", "pharmacis
       unitName: parsed.data.unitName,
       conversionFactorToBase: parsed.data.conversionFactorToBase,
       isBaseUnit: parsed.data.isBaseUnit,
+      barcode: parsed.data.barcode || null,
+      sellPrice: parsed.data.sellPrice != null ? parsed.data.sellPrice.toFixed(2) : null,
     }).returning();
     await logAudit(req.auth!.userId, "CREATE", "medicine", params.data.id, `Created unit "${unit.unitName}" for medicine #${params.data.id}.`);
     res.status(201).json(unit);
   } catch (err) {
     res.status(500).json({ error: "Failed to create unit.", detail: getDbErrorMessage(err) });
+  }
+});
+
+router.patch("/medicines/:id/units/:unitId", requireAuth, requireRole("admin", "pharmacist"), async (req, res): Promise<void> => {
+  const params = MedicineUnitDeleteParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  const parsed = MedicineUnitUpdateInput.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  try {
+    const [existing] = await db
+      .select({ id: medicineUnitsTable.id, unitName: medicineUnitsTable.unitName })
+      .from(medicineUnitsTable)
+      .where(and(eq(medicineUnitsTable.id, params.data.unitId), eq(medicineUnitsTable.medicineId, params.data.id)));
+    if (!existing) { res.status(404).json({ error: "Unit not found for this medicine." }); return; }
+
+    // If this unit is being set as base unit, clear previous base unit flag
+    if (parsed.data.isBaseUnit) {
+      await db.update(medicineUnitsTable)
+        .set({ isBaseUnit: false })
+        .where(and(eq(medicineUnitsTable.medicineId, params.data.id), ne(medicineUnitsTable.id, params.data.unitId)));
+    }
+
+    const values = cleanNullable(parsed.data);
+    if (typeof values.sellPrice === "number") values.sellPrice = values.sellPrice.toFixed(2);
+
+    const [unit] = await db.update(medicineUnitsTable)
+      .set(values as object)
+      .where(and(eq(medicineUnitsTable.id, params.data.unitId), eq(medicineUnitsTable.medicineId, params.data.id)))
+      .returning();
+    await logAudit(req.auth!.userId, "UPDATE", "medicine", params.data.id, `Updated unit "${unit.unitName}" for medicine #${params.data.id}.`);
+    res.json(unit);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to update unit.", detail: getDbErrorMessage(err) });
   }
 });
 

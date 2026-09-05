@@ -55,9 +55,19 @@ export function getBaseUnit(units: MedicineUnit[]): MedicineUnit | undefined {
 
 /**
  * Calculate the price for a given unit (price is stored per base unit).
- * e.g. $0.50/tablet → strip (10 tablets) = $5.00
+ * When the unit carries its own direct sell price (per-pack pricing), that
+ * overrides the derived value. e.g. $0.50/tablet → strip (10 tablets) = $5.00,
+ * or a strip priced directly at $4.75 keeps $4.75.
  */
-export function priceForUnit(basePriceStr: string, conversionFactor: number): number {
+export function priceForUnit(
+  basePriceStr: string,
+  conversionFactor: number,
+  sellPrice?: number | string | null
+): number {
+  if (sellPrice != null) {
+    const direct = parseFloat(String(sellPrice))
+    if (Number.isFinite(direct)) return direct
+  }
   const base = parseFloat(basePriceStr)
   if (!Number.isFinite(base) || !Number.isFinite(conversionFactor)) return 0
   return base * conversionFactor

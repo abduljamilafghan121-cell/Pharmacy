@@ -25,12 +25,20 @@ type MedicineRow = Medicine & {
   drugClass?: string | null
 }
 
+// medicine_units now carries an optional per-pack barcode + direct sell price
+// that the generated client type hasn't caught up with yet.
+type UnitRow = MedicineUnit & {
+  barcode?: string | null
+  sellPrice?: string | number | null
+}
+
 interface SaleItem {
   medicine: MedicineRow
   quantity: number
   unitId?: number
   unitName?: string
   conversionFactor: number
+  sellPrice?: number | null
   sig?: string
 }
 
@@ -110,19 +118,29 @@ function severityStyle(
   }
 }
 
-function getUnits(medicine: MedicineRow): MedicineUnit[] {
-  return medicine.units ?? []
+function getUnits(medicine: MedicineRow): UnitRow[] {
+  return (medicine.units ?? []) as UnitRow[]
 }
 
-function defaultUnit(medicine: MedicineRow): { unitId?: number; unitName?: string; conversionFactor: number } {
+function defaultUnit(medicine: MedicineRow): {
+  unitId?: number
+  unitName?: string
+  conversionFactor: number
+  sellPrice?: number | null
+} {
   const units = getUnits(medicine)
-  if (units.length === 0) return { conversionFactor: 1 }
+  if (units.length === 0) return { conversionFactor: 1, sellPrice: null }
   const sorted = [...units].sort((a, b) => a.conversionFactorToBase - b.conversionFactorToBase)
   const base =
     sorted.find((u) => u.isBaseUnit && u.conversionFactorToBase === 1) ??
     sorted.find((u) => u.conversionFactorToBase === 1) ??
     sorted[0]
-  return { unitId: base.id, unitName: base.unitName, conversionFactor: base.conversionFactorToBase }
+  return {
+    unitId: base.id,
+    unitName: base.unitName,
+    conversionFactor: base.conversionFactorToBase,
+    sellPrice: base.sellPrice != null ? parseFloat(String(base.sellPrice)) : null
+  }
 }
 
 export default function NewSale(): ReactElement {
@@ -323,19 +341,43 @@ export default function NewSale(): ReactElement {
   )
 
   const addItem = useCallback(
-    (medicine: MedicineRow): void => {
+    (medicine: MedicineRow, unitOverride?: UnitRow): void => {
       const defUnit = defaultUnit(medicine)
+      const picked =
+        unitOverride ??
+        getUnits(medicine).find((u) => u.id === defUnit.unitId) ??
+        undefined
+      const factor = picked?.conversionFactorToBase ?? defUnit.conversionFactor
+      const sellPrice = picked?.sellPrice != null ? parseFloat(String(picked.sellPrice)) : null
+      const entry: SaleItem = {
+        medicine,
+        quantity: 1,
+        unitId: picked?.id ?? defUnit.unitId,
+        unitName: picked?.unitName ?? defUnit.unitName,
+        conversionFactor: factor,
+        sellPrice
+      }
       setSaleItems((prev) => {
-        const existing = prev.find((i) => i.medicine.id === medicine.id)
-        const baseUnitsNeeded = (existing ? existing.quantity + 1 : 1) * defUnit.conversionFactor
+        // Merge only when the same package (unit) is being added; different
+        // packs of the same medicine (e.g. a scanned box vs strip) get their
+        // own line so each keeps its own price/barcode.
+        const existing = prev.find(
+          (i) => i.medicine.id === medicine.id && (i.unitId ?? -1) === (entry.unitId ?? -1)
+        )
+        const baseUnitsNeeded = (existing ? existing.quantity + 1 : 1) * factor
+        const showStockBlock = () => {
+          showToast(
+            `Stock limit — only ${formatStockDisplay(medicine.quantity, getUnits(medicine))} of ${medicine.name}`
+          )
+          return prev
+        }
         if (existing) {
-          if (existing.medicine.quantity < baseUnitsNeeded) {
-            showToast(
-              `Stock limit — only ${formatStockDisplay(medicine.quantity, getUnits(medicine))} of ${medicine.name}`
-            )
-            return prev
-          }
-          return prev.map((i) => (i.medicine.id === medicine.id ? { ...i, quantity: i.quantity + 1 } : i))
+          if (existing.medicine.quantity < baseUnitsNeeded) return showStockBlock()
+          return prev.map((i) =>
+            i.medicine.id === medicine.id && (i.unitId ?? -1) === (entry.unitId ?? -1)
+              ? { ...i, quantity: i.quantity + 1 }
+              : i
+          )
         }
         if (medicine.quantity === 0) {
           showToast(`Out of stock — ${medicine.name} is unavailable`)
@@ -345,7 +387,8 @@ export default function NewSale(): ReactElement {
           showToast(`Expired — ${medicine.name} cannot be sold`)
           return prev
         }
-        return [...prev, { medicine, quantity: 1, ...defUnit }]
+        if (baseUnitsNeeded > medicine.quantity) return showStockBlock()
+        return [...prev, entry]
       })
       setSearch('')
       searchRef.current?.focus()
@@ -364,13 +407,24 @@ export default function NewSale(): ReactElement {
           `medicines?search=${encodeURIComponent(barcode)}`
         )
         const rows: MedicineRow[] = Array.isArray(list) ? list : list.data ?? []
-        const match = rows.find((m) => m.barcode === barcode)
-        if (!match) {
+        const byMedBarcode = rows.find((m) => m.barcode === barcode)
+        // Package (unit) barcode match — scanning a box/strip picks that pack
+        let unitMatch: UnitRow | undefined
+        let medicineMatch: MedicineRow | undefined
+        for (const m of rows) {
+          const hit = getUnits(m).find((u) => u.barcode === barcode)
+          if (hit) {
+            unitMatch = hit
+            medicineMatch = m
+            break
+          }
+        }
+        if (!byMedBarcode && !medicineMatch) {
           showToast(`Barcode not recognised: ${barcode}`)
           return
         }
-        addItem(match)
-        setScanFlash(match.name)
+        addItem(byMedBarcode ?? medicineMatch!, byMedBarcode ? undefined : unitMatch)
+        setScanFlash((byMedBarcode ?? medicineMatch)!.name)
         setTimeout(() => setScanFlash(null), 2000)
       } catch {
         showToast('Scan lookup failed — could not reach the server')
@@ -414,10 +468,16 @@ export default function NewSale(): ReactElement {
     setSaleItems((prev) =>
       prev.map((i) => {
         if (i.medicine.id !== medicineId) return i
-        if (unitId == null) return { ...i, unitId: undefined, unitName: undefined, conversionFactor: 1 }
-        const unit = units.find((u) => u.id === unitId)
+        if (unitId == null) return { ...i, unitId: undefined, unitName: undefined, conversionFactor: 1, sellPrice: null }
+        const unit = (units as UnitRow[]).find((u) => u.id === unitId)
         if (!unit) return i
-        return { ...i, unitId: unit.id, unitName: unit.unitName, conversionFactor: unit.conversionFactorToBase }
+        return {
+          ...i,
+          unitId: unit.id,
+          unitName: unit.unitName,
+          conversionFactor: unit.conversionFactorToBase,
+          sellPrice: unit.sellPrice != null ? parseFloat(String(unit.sellPrice)) : null
+        }
       })
     )
   }
@@ -432,7 +492,7 @@ export default function NewSale(): ReactElement {
   }
 
   const subtotal = saleItems.reduce(
-    (sum, i) => sum + priceForUnit(i.medicine.price, i.conversionFactor) * i.quantity,
+    (sum, i) => sum + priceForUnit(i.medicine.price, i.conversionFactor, i.sellPrice) * i.quantity,
     0
   )
   const discountClamped = Math.min(discountAmount, subtotal)
@@ -1119,7 +1179,7 @@ export default function NewSale(): ReactElement {
                 <tbody>
                   {saleItems.map((item, idx) => {
                     const units = getUnits(item.medicine)
-                    const unitPrice = priceForUnit(item.medicine.price, item.conversionFactor)
+                    const unitPrice = priceForUnit(item.medicine.price, item.conversionFactor, item.sellPrice)
                     const lineTotal = unitPrice * item.quantity
                     const baseUnitsUsed = item.quantity * item.conversionFactor
                     const maxQty = Math.floor(item.medicine.quantity / item.conversionFactor)
@@ -1197,6 +1257,7 @@ export default function NewSale(): ReactElement {
                                   .map((u) => (
                                     <option key={u.id} value={u.id}>
                                       {u.unitName}
+                                      {u.barcode ? ` · ${u.barcode}` : ''}
                                     </option>
                                   ))}
                               </select>

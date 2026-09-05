@@ -12,13 +12,14 @@ import {
   getListMedicineUnitsQueryKey
 } from '@workspace/api-client-react'
 import type { Medicine, MedicineUnit } from '@workspace/api-client-react'
-import { Search, Plus, Filter, AlertCircle, CalendarClock, Trash2, Loader2, Lock, Package } from 'lucide-react'
+import { Search, Plus, Filter, AlertCircle, CalendarClock, Trash2, Loader2, Lock, Package, Pencil, Save, X } from 'lucide-react'
 import { useUiStore } from '../store/uiStore'
 import Loading from '../components/Loading'
 import { getTheme, mono, serif } from '../theme'
 import { useAuth } from '../hooks/useAuth'
 import { usePharmacySettings, formatCurrency } from '../hooks/usePharmacySettings'
 import { formatStockDisplay } from '../lib/stock-format'
+import { apiUrl, authHeaders, jsonOrThrow } from '../lib/apiClient'
 import Modal from '../components/Modal'
 
 // The server returns controlledSchedule/drugClass but the generated Medicine
@@ -28,6 +29,20 @@ type MedicineRow = Medicine & {
   controlledSchedule?: string | null
   drugClass?: string | null
   barcode?: string | null
+}
+
+// medicine_units now carries an optional per-pack barcode + direct sell price
+// that the generated client type hasn't caught up with yet.
+type UnitRow = MedicineUnit & {
+  barcode?: string | null
+  sellPrice?: string | number | null
+}
+
+function parseSellPrice(value: string): number | null {
+  const v = value.trim()
+  if (!v) return null
+  const n = Number(v)
+  return Number.isFinite(n) && n > 0 ? n : null
 }
 
 export default function Medicines(): ReactElement {
@@ -530,9 +545,10 @@ function ManageUnitsModal({
   const { dark, showToast } = useUiStore()
   const theme = getTheme(dark)
   const queryClient = useQueryClient()
+  const { data: settings } = usePharmacySettings()
 
   const { data: liveUnits, isLoading: unitsLoading } = useListMedicineUnits(medicine.id)
-  const displayUnits: MedicineUnit[] = liveUnits ?? medicine.units ?? []
+  const displayUnits: UnitRow[] = (liveUnits ?? medicine.units ?? []) as UnitRow[]
 
   const createUnit = useCreateMedicineUnit({
     mutation: {
@@ -559,21 +575,75 @@ function ManageUnitsModal({
   const [unitName, setUnitName] = useState('')
   const [factor, setFactor] = useState('')
   const [isBase, setIsBase] = useState(false)
+  const [unitBarcode, setUnitBarcode] = useState('')
+  const [unitSellPrice, setUnitSellPrice] = useState('')
+
+  // Inline edit state — per-unit barcode/price tweaks
+  const [editingUnit, setEditingUnit] = useState<number | null>(null)
+  const [editBarcode, setEditBarcode] = useState('')
+  const [editSellPrice, setEditSellPrice] = useState('')
+  const [savingUnit, setSavingUnit] = useState(false)
+
+  const startEdit = (u: UnitRow): void => {
+    setEditingUnit(u.id)
+    setEditBarcode(u.barcode ?? '')
+    setEditSellPrice(u.sellPrice != null ? String(u.sellPrice) : '')
+  }
+  const cancelEdit = (): void => {
+    setEditingUnit(null)
+    setEditBarcode('')
+    setEditSellPrice('')
+  }
+
+  const handleEditUnit = async (u: UnitRow): Promise<void> => {
+    if (savingUnit) return
+    setSavingUnit(true)
+    try {
+      const res = await fetch(apiUrl(`medicines/${medicine.id}/units/${u.id}`), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({
+          barcode: editBarcode.trim() || null,
+          sellPrice: parseSellPrice(editSellPrice)
+        })
+      })
+      await jsonOrThrow(res, "Couldn't update packaging unit")
+      queryClient.invalidateQueries({ queryKey: getListMedicineUnitsQueryKey(medicine.id) })
+      queryClient.invalidateQueries({ queryKey: getListMedicinesQueryKey(undefined) })
+      showToast('Packaging unit updated')
+      cancelEdit()
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Couldn't update packaging unit")
+    } finally {
+      setSavingUnit(false)
+    }
+  }
 
   const handleAddUnit = (e: React.FormEvent): void => {
     e.preventDefault()
     const parsed = parseInt(factor, 10)
+    const sellPrice = parseSellPrice(unitSellPrice)
     if (!unitName.trim() || !parsed || parsed < 1) {
       showToast('Fill in unit name and a conversion factor ≥ 1')
       return
     }
     createUnit.mutate({
       id: medicine.id,
-      data: { unitName: unitName.trim(), conversionFactorToBase: parsed, isBaseUnit: isBase }
+      data: {
+        ...({
+          unitName: unitName.trim(),
+          conversionFactorToBase: parsed,
+          isBaseUnit: isBase,
+          barcode: unitBarcode.trim() || null,
+          sellPrice
+        } as object)
+      } as never
     })
     setUnitName('')
     setFactor('')
     setIsBase(false)
+    setUnitBarcode('')
+    setUnitSellPrice('')
   }
 
   const sorted = [...displayUnits].sort((a, b) => a.conversionFactorToBase - b.conversionFactorToBase)
@@ -614,6 +684,11 @@ function ManageUnitsModal({
           <p className="mt-1">
             In a sale you can then choose <em>Tablet</em> and enter 5 to sell exactly 5 tablets.
           </p>
+          <p className="mt-1">
+            Give a pack its <strong style={{ color: theme.text }}>own barcode</strong> to scan it directly,
+            and set a <strong style={{ color: theme.text }}>sell price per pack</strong> to override the
+            auto-calculated price (base × factor) for that package.
+          </p>
         </div>
 
         {/* Current units */}
@@ -638,37 +713,103 @@ function ManageUnitsModal({
               </div>
             )}
             {sorted.map((unit) => (
-              <div
-                key={unit.id}
-                style={{ border: `1px solid ${theme.border}`, background: theme.cardAlt }}
-                className="flex items-center justify-between rounded-lg p-3"
-              >
-                <div>
-                  <span style={{ color: theme.text }} className="font-medium text-sm">
-                    {unit.unitName}
-                  </span>
-                  {unit.isBaseUnit && (
-                    <span
-                      style={{ background: theme.primarySoft, color: theme.primaryText }}
-                      className="ml-2 text-[10px] px-1.5 py-0.5 rounded"
-                    >
-                      Base
+              <div key={unit.id} style={{ border: `1px solid ${theme.border}`, background: theme.cardAlt }} className="rounded-lg p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <span style={{ color: theme.text }} className="font-medium text-sm">
+                      {unit.unitName}
                     </span>
-                  )}
-                  <p style={{ color: theme.muted }} className="text-xs mt-0.5">
-                    1 {unit.unitName} = {unit.conversionFactorToBase} base unit
-                    {unit.conversionFactorToBase !== 1 ? 's' : ''}
-                  </p>
+                    {unit.isBaseUnit && (
+                      <span
+                        style={{ background: theme.primarySoft, color: theme.primaryText }}
+                        className="ml-2 text-[10px] px-1.5 py-0.5 rounded"
+                      >
+                        Base
+                      </span>
+                    )}
+                    {unit.barcode && (
+                      <span style={{ ...mono, color: theme.muted, borderColor: theme.borderStrong }} className="ml-2 text-[10px] px-1.5 py-0.5 rounded border">
+                        {unit.barcode}
+                      </span>
+                    )}
+                    {unit.sellPrice != null && unit.sellPrice !== '' && (
+                      <span style={{ color: theme.primaryText, background: theme.primarySoft }} className="ml-2 text-[10px] px-1.5 py-0.5 rounded font-semibold">
+                        {formatCurrency(parseFloat(String(unit.sellPrice)), settings)}
+                      </span>
+                    )}
+                    <p style={{ color: theme.muted }} className="text-xs mt-0.5">
+                      1 {unit.unitName} = {unit.conversionFactorToBase} base unit
+                      {unit.conversionFactorToBase !== 1 ? 's' : ''}
+                      {unit.sellPrice != null && unit.sellPrice !== '' && (
+                        <span className="opacity-80"> · price set for this pack</span>
+                      )}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={() => (editingUnit === unit.id ? cancelEdit() : startEdit(unit))}
+                      disabled={savingUnit}
+                      title={editingUnit === unit.id ? 'Cancel edit' : 'Edit barcode / price'}
+                      style={{ color: theme.muted }}
+                      className="w-7 h-7 rounded-md flex items-center justify-center transition-colors hover:bg-[color:var(--row-hover)] disabled:opacity-40"
+                    >
+                      {editingUnit === unit.id ? <X size={13} /> : <Pencil size={13} />}
+                    </button>
+                    <button
+                      onClick={() => deleteUnit.mutate({ id: medicine.id, unitId: unit.id })}
+                      disabled={deleteUnit.isPending}
+                      title="Remove unit"
+                      style={{ color: theme.muted }}
+                      className="w-7 h-7 rounded-md flex items-center justify-center transition-colors hover:bg-[color:var(--row-hover)] disabled:opacity-40"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
                 </div>
-                <button
-                  onClick={() => deleteUnit.mutate({ id: medicine.id, unitId: unit.id })}
-                  disabled={deleteUnit.isPending}
-                  title="Remove unit"
-                  style={{ color: theme.muted }}
-                  className="w-7 h-7 rounded-md flex items-center justify-center shrink-0 transition-colors hover:bg-[color:var(--row-hover)] disabled:opacity-40"
-                >
-                  <Trash2 size={13} />
-                </button>
+
+                {/* Inline edit: barcode + direct sell price */}
+                {editingUnit === unit.id && (
+                  <div className="mt-3 pt-3 space-y-2.5" style={{ borderTop: `1px dashed ${theme.borderStrong}` }}>
+                    <div className="grid grid-cols-2 gap-3">
+                      <label className="block">
+                        <span style={{ color: theme.muted }} className="text-xs font-medium mb-1.5 block">
+                          Pack barcode
+                        </span>
+                        <input
+                          value={editBarcode}
+                          onChange={(e) => setEditBarcode(e.target.value)}
+                          placeholder="e.g. 8901234567890"
+                          style={inputStyle}
+                          className={inputCls}
+                        />
+                      </label>
+                      <label className="block">
+                        <span style={{ color: theme.muted }} className="text-xs font-medium mb-1.5 block">
+                          Sell price per pack
+                        </span>
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={editSellPrice}
+                          onChange={(e) => setEditSellPrice(e.target.value)}
+                          placeholder="Leave empty to auto-calc"
+                          style={inputStyle}
+                          className={inputCls}
+                        />
+                      </label>
+                    </div>
+                    <button
+                      onClick={() => handleEditUnit(unit)}
+                      disabled={savingUnit}
+                      style={{ background: 'linear-gradient(135deg, #22B57F 0%, #0E8A64 100%)' }}
+                      className="w-full flex items-center justify-center gap-2 rounded-lg py-2 text-white text-sm font-semibold transition-transform active:scale-[0.98] disabled:opacity-60"
+                    >
+                      {savingUnit ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                      Save unit
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -691,6 +832,20 @@ function ManageUnitsModal({
                 How many base units?
               </span>
               <input type="number" min={1} value={factor} onChange={(e) => setFactor(e.target.value)} placeholder="e.g. 1, 10, 100" required style={inputStyle} className={inputCls} />
+            </label>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <span style={{ color: theme.muted }} className="text-xs font-medium mb-1.5 block">
+                Pack barcode <span style={{ opacity: 0.7 }}>(optional)</span>
+              </span>
+              <input value={unitBarcode} onChange={(e) => setUnitBarcode(e.target.value)} placeholder="Scan or type the code" style={inputStyle} className={inputCls} />
+            </label>
+            <label className="block">
+              <span style={{ color: theme.muted }} className="text-xs font-medium mb-1.5 block">
+                Sell price per pack <span style={{ opacity: 0.7 }}>(optional)</span>
+              </span>
+              <input type="number" min={0} step="0.01" value={unitSellPrice} onChange={(e) => setUnitSellPrice(e.target.value)} placeholder="Auto = base × factor" style={inputStyle} className={inputCls} />
             </label>
           </div>
           <label className="flex items-center gap-2 cursor-pointer">

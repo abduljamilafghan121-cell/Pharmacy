@@ -103,8 +103,13 @@ router.post("/orders", requireAuth, async (req, res): Promise<void> => {
     const unit = item.unitId ? units.find((u) => u.id === item.unitId) : null;
     const conversionFactor = unit?.conversionFactorToBase ?? 1;
     const unitName = unit?.unitName ?? null;
+    // Direct per-pack price overrides the derived price (base price × factor)
+    const sellPrice = unit?.sellPrice != null ? parseFloat(unit.sellPrice) : null;
+    const unitPrice = sellPrice != null && Number.isFinite(sellPrice)
+      ? sellPrice
+      : parseFloat(med.price) * conversionFactor;
     const baseUnitsNeeded = item.quantity * conversionFactor;
-    return { ...item, med, unit, conversionFactor, unitName, baseUnitsNeeded };
+    return { ...item, med, unit, conversionFactor, unitName, sellPrice, unitPrice, baseUnitsNeeded };
   });
 
   // Validate stock (in base units) and expiry
@@ -227,10 +232,10 @@ router.post("/orders", requireAuth, async (req, res): Promise<void> => {
     }
   }
 
-  // Compute totals — price per base unit × base units needed
+  // Compute totals — per-pack price (direct or derived) × quantity
   let subtotal = 0;
   for (const ri of resolvedItems) {
-    subtotal += parseFloat(ri.med.price) * ri.baseUnitsNeeded;
+    subtotal += ri.unitPrice * ri.quantity;
   }
 
   // Apply discount then tax
@@ -259,8 +264,8 @@ router.post("/orders", requireAuth, async (req, res): Promise<void> => {
 
     const orderItems = [];
     for (const ri of resolvedItems) {
-      const unitPrice = parseFloat(ri.med.price);
-      const lineTotal = unitPrice * ri.baseUnitsNeeded;
+      const unitPrice = ri.unitPrice;
+      const lineTotal = unitPrice * ri.quantity;
       const [oi] = await tx.insert(orderItemsTable).values({
         orderId: order.id,
         medicineId: ri.medicineId,
