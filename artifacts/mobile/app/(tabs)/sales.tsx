@@ -179,7 +179,7 @@ function statusColor(colors: ReturnType<typeof useColors>, status: string) {
 
 function payColor(colors: ReturnType<typeof useColors>, status: string) {
   if (status === 'paid') return colors.success;
-  if (status === 'refunded') return colors.warning;
+  if (status === 'refunded' || status === 'unpaid') return colors.warning;
   return colors.destructive;
 }
 

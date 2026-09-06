@@ -345,7 +345,7 @@ router.patch("/purchase-orders/:id/receive", requireAuth, requireRole("admin", "
 router.post(
   "/purchase-orders/:id/reverse",
   requireAuth,
-  requireRole("admin", "pharmacist"),
+  requireRole("admin"),
   async (req, res): Promise<void> => {
     const poId = parseInt(String(req.params.id), 10);
     if (isNaN(poId)) {

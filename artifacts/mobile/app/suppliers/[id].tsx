@@ -1,12 +1,22 @@
 import { useColors } from '@/hooks/useColors';
-import { formatCurrency } from '@/lib/format';
-import { useCreateSupplierPayment, useGetSupplierLedger, getListSupplierLedgerQueryKey } from '@workspace/api-client-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { formatCurrency, getErrorMessage } from '@/lib/format';
+import { customFetch, useCreateSupplierPayment, useGetSupplierLedger, getListSupplierLedgerQueryKey, getGetSupplierLedgerQueryKey, type SupplierLedgerEntry } from '@workspace/api-client-react';
 import { Feather } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import React, { useState } from 'react';
-import { ActivityIndicator, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+// The generated SupplierLedgerEntry type hasn't caught up with the API — the
+// server also returns payment entries with voided/voidReason/method (same
+// extension the desktop SupplierLedger uses).
+type LedgerEntryRow = SupplierLedgerEntry & {
+  voided?: boolean;
+  voidReason?: string | null;
+  method?: string | null;
+};
 
 export default function SupplierLedgerScreen() {
   const colors = useColors();
@@ -14,6 +24,7 @@ export default function SupplierLedgerScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const qc = useQueryClient();
+  const { user } = useAuth();
 
   const { data: ledger, isLoading } = useGetSupplierLedger(Number(id), {});
   const [payOpen, setPayOpen] = useState(false);
@@ -21,10 +32,37 @@ export default function SupplierLedgerScreen() {
   const [method, setMethod] = useState<'cash' | 'bank' | 'cheque' | 'transfer'>('cash');
   const [note, setNote] = useState('');
 
+  // VOID — reversal-by-void for mistakenly-recorded payments (admin only).
+  const [voidTarget, setVoidTarget] = useState<{ id: number; amount: string } | null>(null);
+  const [voidReason, setVoidReason] = useState('');
+  const [voiding, setVoiding] = useState(false);
+  const canVoid = user?.role === 'admin';
+
+  const voidPayment = async () => {
+    if (!voidTarget) return;
+    setVoiding(true);
+    try {
+      await customFetch(`/api/supplier-payments/${voidTarget.id}/void`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: voidReason.trim() }),
+      });
+      qc.invalidateQueries({ queryKey: getListSupplierLedgerQueryKey() });
+      qc.invalidateQueries({ queryKey: getGetSupplierLedgerQueryKey(Number(id)) });
+      setVoidTarget(null);
+      setVoidReason('');
+    } catch (e) {
+      Alert.alert('Could not void payment', getErrorMessage(e));
+    } finally {
+      setVoiding(false);
+    }
+  };
+
   const createPayment = useCreateSupplierPayment({
     mutation: {
       onSuccess: () => {
         qc.invalidateQueries({ queryKey: getListSupplierLedgerQueryKey() });
+        qc.invalidateQueries({ queryKey: getGetSupplierLedgerQueryKey(Number(id)) });
         setPayOpen(false);
         setAmount('');
         setNote('');
@@ -84,21 +122,40 @@ export default function SupplierLedgerScreen() {
           {ledger.entries.length === 0 ? (
             <Text style={{ color: colors.mutedForeground, fontSize: 13, fontFamily: 'Inter_400Regular' }}>No transactions yet</Text>
           ) : (
-            ledger.entries.map((entry, i) => (
-              <View key={entry.id} style={[s.entryRow, i === ledger.entries.length - 1 && { borderBottomWidth: 0 }]}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                  <View style={{ flex: 1, marginRight: 8 }}>
-                    <Text style={{ fontSize: 12, fontFamily: 'Inter_600SemiBold', color: colors.foreground }}>{entry.description}</Text>
-                    <Text style={{ fontSize: 10, fontFamily: 'Inter_400Regular', color: colors.mutedForeground, marginTop: 2 }}>{new Date(entry.date).toLocaleDateString()}</Text>
-                  </View>
-                  <View style={{ alignItems: 'flex-end' }}>
-                    {parseFloat(entry.debit) > 0 && <Text style={{ fontSize: 12, fontFamily: 'Inter_600SemiBold', color: colors.destructive }}>-{formatCurrency(entry.debit)}</Text>}
-                    {parseFloat(entry.credit) > 0 && <Text style={{ fontSize: 12, fontFamily: 'Inter_600SemiBold', color: colors.success }}>+{formatCurrency(entry.credit)}</Text>}
-                    <Text style={{ fontSize: 10, fontFamily: 'Inter_400Regular', color: colors.mutedForeground }}>Bal: {formatCurrency(entry.runningBalance)}</Text>
+            ledger.entries.map((raw, i) => {
+              const entry = raw as LedgerEntryRow;
+              return (
+                <View key={entry.id} style={[s.entryRow, i === ledger.entries.length - 1 && { borderBottomWidth: 0 }]}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                    <View style={{ flex: 1, marginRight: 8 }}>
+                      <Text style={{ fontSize: 12, fontFamily: 'Inter_600SemiBold', color: entry.voided ? colors.mutedForeground : colors.foreground, textDecorationLine: entry.voided ? 'line-through' : 'none' }}>{entry.description}</Text>
+                      <Text style={{ fontSize: 10, fontFamily: 'Inter_400Regular', color: colors.mutedForeground, marginTop: 2 }}>
+                        {new Date(entry.date).toLocaleDateString()}
+                        {entry.entryType === 'payment' && entry.method ? ` · ${entry.method}` : ''}
+                      </Text>
+                      {entry.voided && (
+                        <Text style={{ fontSize: 10, fontFamily: 'Inter_500Medium', color: colors.destructive, marginTop: 2 }}>
+                          Voided{entry.voidReason ? ` — ${entry.voidReason}` : ''}
+                        </Text>
+                      )}
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      {parseFloat(entry.debit) > 0 && <Text style={{ fontSize: 12, fontFamily: 'Inter_600SemiBold', color: entry.voided ? colors.mutedForeground : colors.destructive, textDecorationLine: entry.voided ? 'line-through' : 'none' }}>-{formatCurrency(entry.debit)}</Text>}
+                      {parseFloat(entry.credit) > 0 && <Text style={{ fontSize: 12, fontFamily: 'Inter_600SemiBold', color: entry.voided ? colors.mutedForeground : colors.success, textDecorationLine: entry.voided ? 'line-through' : 'none' }}>+{formatCurrency(entry.credit)}</Text>}
+                      <Text style={{ fontSize: 10, fontFamily: 'Inter_400Regular', color: colors.mutedForeground }}>Bal: {formatCurrency(entry.runningBalance)}</Text>
+                      {canVoid && entry.entryType === 'payment' && !entry.voided && (
+                        <TouchableOpacity
+                          onPress={() => { setVoidTarget({ id: entry.paymentId!, amount: entry.credit }); setVoidReason(''); }}
+                          style={{ marginTop: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: colors.destructive }}
+                        >
+                          <Text style={{ fontSize: 10, fontFamily: 'Inter_700Bold', color: colors.destructive }}>Void</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
                   </View>
                 </View>
-              </View>
-            ))
+              );
+            })
           )}
         </View>
       </ScrollView>
@@ -123,6 +180,26 @@ export default function SupplierLedgerScreen() {
             <TextInput style={s.inp} value={note} onChangeText={setNote} placeholder="Reference, invoice #…" placeholderTextColor={colors.mutedForeground} />
             <TouchableOpacity style={s.payBtn} onPress={() => createPayment.mutate({ data: { supplierId: Number(id), amount: amount || String(balance), method, note: note || null } })} disabled={createPayment.isPending}>
               {createPayment.isPending ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontFamily: 'Inter_600SemiBold', fontSize: 15 }}>Record Payment</Text>}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={!!voidTarget} transparent animationType="slide" onRequestClose={() => setVoidTarget(null)}>
+        <View style={s.overlay}>
+          <View style={s.sheet}>
+            <View style={s.handle} />
+            <Text style={{ fontSize: 16, fontFamily: 'Inter_700Bold', color: colors.foreground, marginBottom: 4 }}>Void Payment</Text>
+            <Text style={{ fontSize: 13, fontFamily: 'Inter_400Regular', color: colors.mutedForeground, marginBottom: 12 }}>
+              You're about to void a payment of {formatCurrency(voidTarget?.amount ?? '0')}. It will be excluded from the ledger balance.
+            </Text>
+            <Text style={s.label}>Void reason *</Text>
+            <TextInput style={s.inp} value={voidReason} onChangeText={setVoidReason} placeholder="Why is this payment being voided?" placeholderTextColor={colors.mutedForeground} />
+            <TouchableOpacity style={[s.payBtn, { backgroundColor: colors.destructive }]} onPress={voidPayment} disabled={voiding || voidReason.trim().length === 0}>
+              {voiding ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontFamily: 'Inter_600SemiBold', fontSize: 15 }}>Void Payment</Text>}
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setVoidTarget(null)} style={{ alignItems: 'center', paddingVertical: 12 }}>
+              <Text style={{ color: colors.mutedForeground, fontFamily: 'Inter_500Medium', fontSize: 13 }}>Cancel</Text>
             </TouchableOpacity>
           </View>
         </View>

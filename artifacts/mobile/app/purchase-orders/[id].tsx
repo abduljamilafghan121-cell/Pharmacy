@@ -1,10 +1,13 @@
 import { useColors } from '@/hooks/useColors';
+import { useAuth } from '@/contexts/AuthContext';
 import { formatCurrency, getErrorMessage } from '@/lib/format';
 import { useSellableBatches, type MedicineBatch } from '@/hooks/useMedicineBatches';
 import {
+  customFetch,
   useGetPurchaseOrder,
   useReceivePurchaseOrder,
   getListPurchaseOrdersQueryKey,
+  getGetPurchaseOrderQueryKey,
   getListMedicinesQueryKey,
   type PurchaseOrderItem,
 } from '@workspace/api-client-react';
@@ -130,17 +133,41 @@ export default function PurchaseOrderDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const qc = useQueryClient();
+  const { user } = useAuth();
 
   const { data: po, isLoading } = useGetPurchaseOrder(Number(id), {});
   const receivePO = useReceivePurchaseOrder({
     mutation: {
       onSuccess: () => {
         qc.invalidateQueries({ queryKey: getListPurchaseOrdersQueryKey() });
+        qc.invalidateQueries({ queryKey: getGetPurchaseOrderQueryKey(Number(id)) });
         qc.invalidateQueries({ queryKey: getListMedicinesQueryKey() });
       },
       onError: (e) => Alert.alert('Could not receive order', getErrorMessage(e)),
     },
   });
+
+  const canReverse = user?.role === 'admin';
+  const [reversing, setReversing] = useState(false);
+
+  // Reverse — undo a mistakenly-received purchase order: removes the stock
+  // lot(s) this receipt created and sets the PO back to pending (admin only).
+  const reversePO = async () => {
+    setReversing(true);
+    try {
+      await customFetch(`/api/purchase-orders/${po?.id}/reverse`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      qc.invalidateQueries({ queryKey: getListPurchaseOrdersQueryKey() });
+      qc.invalidateQueries({ queryKey: getGetPurchaseOrderQueryKey(Number(id)) });
+      qc.invalidateQueries({ queryKey: getListMedicinesQueryKey() });
+    } catch (e) {
+      Alert.alert('Could not reverse receipt', getErrorMessage(e));
+    } finally {
+      setReversing(false);
+    }
+  };
 
   const [lines, setLines] = useState<Record<number, ReceiveLine>>({});
 
@@ -251,6 +278,23 @@ export default function PurchaseOrderDetailScreen() {
       {po.status === 'pending' && (
         <TouchableOpacity style={s.receiveBtn} onPress={handleReceive} disabled={receivePO.isPending}>
           {receivePO.isPending ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontFamily: 'Inter_600SemiBold', fontSize: 15 }}>Receive & Update Stock</Text>}
+        </TouchableOpacity>
+      )}
+
+      {canReverse && po.status === 'received' && (
+        <TouchableOpacity
+          style={[s.receiveBtn, { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: colors.destructive }]}
+          onPress={() => Alert.alert(
+            'Reverse this receipt?',
+            'This will remove the stock lot(s) this receipt created and set the PO back to pending. Only possible while the stock is still available.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Reverse', style: 'destructive', onPress: reversePO },
+            ],
+          )}
+          disabled={reversing}
+        >
+          {reversing ? <ActivityIndicator color={colors.destructive} /> : <Text style={{ color: colors.destructive, fontFamily: 'Inter_600SemiBold', fontSize: 15 }}>Reverse Receive</Text>}
         </TouchableOpacity>
       )}
     </ScrollView>
