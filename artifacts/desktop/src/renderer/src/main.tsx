@@ -5,7 +5,15 @@ import App from './App'
 import { initApiClient } from './lib/apiClient'
 import './index.css'
 
-const queryClient = new QueryClient()
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,
+      retry: 1,
+      refetchOnWindowFocus: false
+    }
+  }
+})
 
 // initApiClient reads the saved session token from the OS secure store via
 // IPC, so the app waits for it before mounting — otherwise the first

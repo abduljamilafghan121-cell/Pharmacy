@@ -1,5 +1,5 @@
 ﻿import type { ReactElement } from 'react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   useListMedicines,
@@ -53,12 +53,17 @@ export default function Medicines(): ReactElement {
   const { setScreen, setPendingMedicineDetailId } = useUiStore()
 
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 150)
+    return () => clearTimeout(t)
+  }, [search])
   const [categoryId, setCategoryId] = useState<number | ''>('')
   const [addOpen, setAddOpen] = useState(false)
   const [unitsFor, setUnitsFor] = useState<MedicineRow | null>(null)
 
   const { data: medicines = [], isLoading } = useListMedicines({
-    search: search.trim() || undefined,
+    search: debouncedSearch.trim() || undefined,
     categoryId: categoryId || undefined
   })
   const { data: categories = [] } = useListCategories()

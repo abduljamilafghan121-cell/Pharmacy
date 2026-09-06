@@ -99,7 +99,12 @@ function CreatePurchaseOrderModal({ onClose }: { onClose: () => void }): ReactEl
   const priceHistory = usePriceHistory()
   const [supplierId, setSupplierId] = useState<number | ''>('')
   const [search, setSearch] = useState('')
-  const { data: results = [] } = useListMedicines(search.trim() ? { search: search.trim() } : undefined)
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 150)
+    return () => clearTimeout(t)
+  }, [search])
+  const { data: results = [] } = useListMedicines(debouncedSearch.trim() ? { search: debouncedSearch.trim() } : undefined)
   const [lines, setLines] = useState<Line[]>([])
 
   const addLine = (m: Medicine): void => {

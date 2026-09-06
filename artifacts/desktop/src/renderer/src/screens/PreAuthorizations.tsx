@@ -1,5 +1,5 @@
 ﻿import type { ReactElement } from 'react'
-import { useState, useMemo } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { Plus, Loader2, Check, X as XIcon, Search, RefreshCw, Pencil, X } from 'lucide-react'
 import { useListMedicines, useListPatients } from '@workspace/api-client-react'
 import type { Medicine } from '@workspace/api-client-react'
@@ -36,8 +36,13 @@ function SubmitPreAuthModal({ onClose }: { onClose: () => void }): ReactElement 
   const createPreAuth = useCreatePreAuth()
   const [patientId, setPatientId] = useState<number | ''>('')
   const [medicineSearch, setMedicineSearch] = useState('')
+  const [debouncedMedicineSearch, setDebouncedMedicineSearch] = useState('')
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedMedicineSearch(medicineSearch), 150)
+    return () => clearTimeout(t)
+  }, [medicineSearch])
   const [medicine, setMedicine] = useState<Medicine | null>(null)
-  const { data: medResults = [] } = useListMedicines(medicineSearch.trim() ? { search: medicineSearch.trim() } : undefined)
+  const { data: medResults = [] } = useListMedicines(debouncedMedicineSearch.trim() ? { search: debouncedMedicineSearch.trim() } : undefined)
   const [insurerName, setInsurerName] = useState('')
   const [policyNumber, setPolicyNumber] = useState('')
   const [diagnosisCode, setDiagnosisCode] = useState('')

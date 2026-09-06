@@ -67,6 +67,9 @@ app.use(
       return cb(error, false);
     },
     allowedHeaders: ["Authorization", "Content-Type", "Accept"],
+    // Cache preflight results for a day so cross-origin clients (desktop,
+    // dev web) skip the extra OPTIONS round-trip per request.
+    maxAge: 86400,
     credentials: false,
   }),
 );

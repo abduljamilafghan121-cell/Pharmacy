@@ -523,9 +523,14 @@ export default function Patients(): ReactElement {
   const { dark } = useUiStore()
   const theme = getTheme(dark)
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 150)
+    return () => clearTimeout(t)
+  }, [search])
   const [showAdd, setShowAdd] = useState(false)
   const [selected, setSelected] = useState<PatientExtended | null>(null)
-  const { data: patients = [], isLoading, isError, refetch } = useListPatientsExtended(search.trim() || undefined)
+  const { data: patients = [], isLoading, isError, refetch } = useListPatientsExtended(debouncedSearch.trim() || undefined)
 
   return (
     <div className="p-7">
