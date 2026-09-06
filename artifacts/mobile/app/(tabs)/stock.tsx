@@ -37,7 +37,7 @@ export default function StockScreen() {
   const [catId, setCatId] = useState<number | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const emptyForm = {
-    name: '', genericName: '', price: '', quantity: '', expiryDate: '',
+    name: '', genericName: '', barcode: '', price: '', quantity: '', expiryDate: '',
     manufacturer: '', batchNumber: '', categoryId: null as number | null,
     description: '', controlledSchedule: '', drugClass: '', prescriptionRequired: false,
   };
@@ -139,7 +139,9 @@ export default function StockScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={s.itemName} numberOfLines={1}>{item.name}</Text>
-                <Text style={s.itemSub}>{item.manufacturer ?? item.categoryName ?? 'Uncategorised'} · {formatCurrency(item.price)}</Text>
+                <Text style={s.itemSub}>
+                  {[item.manufacturer ?? item.categoryName ?? 'Uncategorised', formatCurrency(item.price), (item as any).barcode ? `#${(item as any).barcode}` : ''].filter(Boolean).join(' · ')}
+                </Text>
               </View>
               <View style={{ alignItems: 'flex-end', gap: 4 }}>
                 <View style={[s.badge, { backgroundColor: stockColor(item.quantity) + '20' }]}>
@@ -173,10 +175,12 @@ export default function StockScreen() {
               <TextInput style={s.inp} value={form.name} onChangeText={v => setForm(f => ({ ...f, name: v }))} placeholder="e.g. Amoxicillin 500mg" placeholderTextColor={colors.mutedForeground} />
               <Text style={s.label}>Generic Name</Text>
               <TextInput style={s.inp} value={form.genericName} onChangeText={v => setForm(f => ({ ...f, genericName: v }))} placeholder="e.g. Amoxicillin" placeholderTextColor={colors.mutedForeground} />
+              <Text style={s.label}>Barcode / SKU</Text>
+              <TextInput style={s.inp} value={form.barcode} onChangeText={v => setForm(f => ({ ...f, barcode: v }))} placeholder="e.g. 8901234567890 (optional)" placeholderTextColor={colors.mutedForeground} />
               <View style={s.row2}>
                 <View style={{ flex: 1 }}>
                   <Text style={s.label}>Price ($) *</Text>
-                  <TextInput style={s.inp} value={form.price} onChangeText={v => setForm(f => ({ ...f, price: v }))} keyboardType="numeric" placeholder="0.00" placeholderTextColor={colors.mutedForeground} />
+                  <TextInput style={s.inp} value={form.price} onChangeText={v => setForm(f => ({ ...f, price: v }))} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={colors.mutedForeground} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={s.label}>Quantity *</Text>
@@ -269,6 +273,7 @@ export default function StockScreen() {
                     quantity: parseInt(form.quantity) || 0,
                     expiryDate: form.expiryDate,
                     genericName: form.genericName || undefined,
+                    barcode: form.barcode || undefined,
                     manufacturer: form.manufacturer || undefined,
                     batchNumber: form.batchNumber || undefined,
                     categoryId: form.categoryId ?? undefined,

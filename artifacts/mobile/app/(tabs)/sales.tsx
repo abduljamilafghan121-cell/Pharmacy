@@ -899,7 +899,9 @@ export default function SalesScreen() {
                                 style={[s.unitChip, { backgroundColor: active ? colors.primary : colors.muted, borderColor: active ? colors.primary : colors.border }]}
                                 onPress={() => updateUnit(c.medicine.id, u.id)}
                               >
-                                <Text style={[s.unitChipText, { color: active ? '#fff' : colors.mutedForeground }]}>{u.unitName}</Text>
+                                <Text style={[s.unitChipText, { color: active ? '#fff' : colors.mutedForeground }]}>
+                                  {u.unitName}{(u as any).barcode ? ` · ${(u as any).barcode}` : ''}
+                                </Text>
                               </TouchableOpacity>
                             );
                           })}
