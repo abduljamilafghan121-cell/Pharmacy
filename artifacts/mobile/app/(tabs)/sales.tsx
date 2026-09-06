@@ -1,5 +1,7 @@
 import { useColors } from '@/hooks/useColors';
+import { usePharmacySettings } from '@/hooks/usePharmacySettings';
 import { formatCurrency, getErrorMessage } from '@/lib/format';
+import BarcodeScannerModal from '@/components/BarcodeScannerModal';
 import {
   customFetch,
   useCreateOrder,
@@ -38,7 +40,19 @@ type CartItem = {
   unitId?: number;
   unitName?: string;
   conversionFactor: number;
+  sellPrice?: number | null;
+  sig?: string;
 };
+
+interface GenericAlternative {
+  id: number;
+  name: string;
+  genericName: string | null;
+  price: string;
+  quantity: number;
+  manufacturer: string | null;
+  units?: any[];
+}
 
 interface PrescriptionInfo {
   id: number;
@@ -83,19 +97,24 @@ function getUnits(medicine: Medicine): MedicineUnit[] {
 /** Picks the base packaging unit (conversionFactorToBase = 1) as the
  * default so a freshly-added cart line prices the same as before units
  * existed; mirrors artifacts/web/src/pages/NewSale.tsx. */
-function defaultUnit(medicine: Medicine): { unitId?: number; unitName?: string; conversionFactor: number } {
+function defaultUnit(medicine: Medicine): {
+  unitId?: number; unitName?: string; conversionFactor: number; sellPrice?: number | null;
+} {
   const units = getUnits(medicine);
-  if (units.length === 0) return { conversionFactor: 1 };
+  if (units.length === 0) return { conversionFactor: 1, sellPrice: null };
   const sorted = [...units].sort((a, b) => a.conversionFactorToBase - b.conversionFactorToBase);
   const base =
     sorted.find((u) => u.isBaseUnit && u.conversionFactorToBase === 1) ??
     sorted.find((u) => u.conversionFactorToBase === 1) ??
     sorted[0];
-  return { unitId: base.id, unitName: base.unitName, conversionFactor: base.conversionFactorToBase };
+  const sellPrice = (base as any).sellPrice != null ? parseFloat(String((base as any).sellPrice)) : null;
+  return { unitId: base.id, unitName: base.unitName, conversionFactor: base.conversionFactorToBase, sellPrice };
 }
 
-/** Price is stored per base unit — a strip of 10 is 10× the base price. */
-function priceForUnit(basePriceStr: string, conversionFactor: number): number {
+/** Price is stored per base unit — a strip of 10 is 10× the base price;
+ * a per-pack sellPrice (when set) overrides the derived price. */
+function priceForUnit(basePriceStr: string, conversionFactor: number, sellPrice?: number | null): number {
+  if (sellPrice != null && Number.isFinite(sellPrice)) return sellPrice;
   return parseFloat(basePriceStr) * conversionFactor;
 }
 
@@ -112,6 +131,8 @@ function MedicineCard({ med, inCart, onToggle }: { med: Medicine; inCart: boolea
     },
     iconWrap: { width: 36, height: 36, borderRadius: 10, backgroundColor: colors.secondary, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
     name: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: colors.foreground, marginBottom: 2 },
+    schBadge: { fontSize: 8, fontFamily: 'Inter_700Bold', color: colors.destructive },
+    gen: { fontSize: 9, fontFamily: 'Inter_400Regular', color: colors.mutedForeground, marginBottom: 2 },
     stock: { fontSize: 10, fontFamily: 'Inter_400Regular', color: colors.mutedForeground, marginBottom: 4 },
     rxBadge: { fontSize: 9, fontFamily: 'Inter_600SemiBold', color: colors.warning, marginBottom: 8 },
     row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -127,7 +148,17 @@ function MedicineCard({ med, inCart, onToggle }: { med: Medicine; inCart: boolea
       <View style={s.iconWrap}>
         <Ionicons name="medical-outline" size={16} color={colors.primary} />
       </View>
-      <Text style={s.name} numberOfLines={2}>{med.name}</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+        <Text style={[s.name, { flex: 1 }]} numberOfLines={2}>{med.name}</Text>
+        {(med as any).controlledSchedule != null && (
+          <Text style={s.schBadge}>Sch {(med as any).controlledSchedule}</Text>
+        )}
+      </View>
+      {med.genericName ? (
+        <Text style={s.gen} numberOfLines={1}>{med.genericName}</Text>
+      ) : (
+        <View style={{ marginBottom: 2 }} />
+      )}
       <Text style={s.stock}>{med.quantity} in stock</Text>
       {med.prescriptionRequired ? <Text style={s.rxBadge}>Rx required</Text> : <View style={{ marginBottom: 8 }} />}
       <View style={s.row}>
@@ -201,9 +232,23 @@ export default function SalesScreen() {
   const gridRef = useRef<FlatList<any>>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [cartOpen, setCartOpen] = useState(false);
-  const [payMethod, setPayMethod] = useState<'cash' | 'card' | 'insurance'>('cash');
+  const [payMethod, setPayMethod] = useState<'cash' | 'card' | 'insurance' | 'credit'>('cash');
+  const [notes, setNotes] = useState('');
+  const [discountAmount, setDiscountAmount] = useState(0);
   const [checkingOut, setCheckingOut] = useState(false);
   const [receipt, setReceipt] = useState<{ orderId: number; total: string } | null>(null);
+
+  // Barcode scanning (device camera) — search row button opens the scanner
+  const [scanOpen, setScanOpen] = useState(false);
+  const [scanFlash, setScanFlash] = useState<string | null>(null);
+  const [scanError, setScanError] = useState<string | null>(null);
+
+  // Generic substitution suggestion — mirrors web/desktop NewSale
+  const [genericSuggestion, setGenericSuggestion] = useState<{
+    brandId: number;
+    brandName: string;
+    alternatives: GenericAlternative[];
+  } | null>(null);
 
   // Patient (optional) — matches web's "Patient Name" + "Patient ID" fields
   const [patientName, setPatientName] = useState('');
@@ -240,7 +285,17 @@ export default function SalesScreen() {
 
   const createOrder = useCreateOrder({ mutation: {} });
 
-  const cartTotal = cart.reduce((sum, c) => sum + priceForUnit(c.medicine.price, c.conversionFactor) * c.qty, 0);
+  const { data: settings } = usePharmacySettings();
+  const taxRatePct = parseFloat(settings?.taxRatePercent ?? '0');
+
+  // Totals — cart price uses the per-pack sellPrice when configured, then
+  // discount + tax are layered on (mirrors web/desktop NewSale).
+  const subtotal = cart.reduce((sum, c) => sum + priceForUnit(c.medicine.price, c.conversionFactor, c.sellPrice) * c.qty, 0);
+  const discountClamped = Math.min(Math.max(0, discountAmount), subtotal);
+  const tax = (subtotal - discountClamped) * (taxRatePct / 100);
+  const grandTotal = subtotal - discountClamped + tax;
+
+  const controlledItems = cart.filter(c => (c.medicine as any).controlledSchedule != null);
   const requiresRx = cart.some(c => c.medicine.prescriptionRequired || (c.medicine as any).controlledSchedule != null);
 
   // ── Safety flags (mirror web/desktop NewSale) ────────────────────────
@@ -256,24 +311,104 @@ export default function SalesScreen() {
     hasBlockContraindication ||
     refillsExhausted;
 
-  // Tapping a medicine card SELECTS it (adds to cart at qty 1); tapping the
-  // same card again DESELECTS it (removes from cart entirely). Quantity is
-  // then adjusted from the cart sheet's +/- controls.
-  const toggleCart = (med: Medicine) => {
+  // Cheaper-generic suggestion (best effort) — mirrors web/desktop NewSale.
+  const checkGenericAlternatives = async (medicineId: number, medicineName: string) => {
+    try {
+      const alts = await customFetch<GenericAlternative[]>(`/api/medicines/${medicineId}/generics`);
+      if (alts.length > 0) {
+        setGenericSuggestion({ brandId: medicineId, brandName: medicineName, alternatives: alts.slice(0, 2) });
+      }
+    } catch {
+      /* silent — suggestion is best-effort */
+    }
+  };
+
+  // Shared "add one line" path used by card taps, barcode scan and generic
+  // switch. Enforces stock/expiry like web/desktop and merges lines that use
+  // the same medicine + packaging unit.
+  const addToCart = (med: Medicine, unitId?: number) => {
+    const units = getUnits(med);
+    const picked = unitId != null ? units.find(u => u.id === unitId) : undefined;
+    const def = picked
+      ? {
+          unitId: picked.id,
+          unitName: picked.unitName,
+          conversionFactor: picked.conversionFactorToBase,
+          sellPrice: (picked as any).sellPrice != null ? parseFloat(String((picked as any).sellPrice)) : null,
+        }
+      : defaultUnit(med);
+    const factor = def.conversionFactor;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setCart(prev => {
-      const existing = prev.find(c => c.medicine.id === med.id);
-      if (existing) return prev.filter(c => c.medicine.id !== med.id);
+      const existing = prev.find(c => c.medicine.id === med.id && (c.unitId ?? -1) === (def.unitId ?? -1));
+      if (existing) {
+        const needed = (existing.qty + 1) * factor;
+        if (existing.medicine.quantity < needed) {
+          Alert.alert('Stock limit', `Only ${med.quantity} base unit${med.quantity !== 1 ? 's' : ''} of ${med.name} available.`);
+          return prev;
+        }
+        return prev.map(c =>
+          c.medicine.id === med.id && (c.unitId ?? -1) === (def.unitId ?? -1) ? { ...c, qty: c.qty + 1 } : c
+        );
+      }
       if (med.quantity === 0) {
         Alert.alert('Out of stock', `${med.name} is currently unavailable.`);
         return prev;
       }
-      return [...prev, { medicine: med, qty: 1, ...defaultUnit(med) }];
+      if (med.expiryDate && med.expiryDate < new Date().toISOString().slice(0, 10)) {
+        Alert.alert('Expired medicine', `${med.name} cannot be sold because it has expired.`);
+        return prev;
+      }
+      if (factor > med.quantity) {
+        Alert.alert('Insufficient stock', `${med.name} has only ${med.quantity} base unit${med.quantity !== 1 ? 's' : ''} available.`);
+        return prev;
+      }
+      return [...prev, { medicine: med, qty: 1, ...def }];
     });
+    if (med.genericName) checkGenericAlternatives(med.id, med.name);
+  };
+
+  // Tapping a medicine card SELECTS it (adds to cart at qty 1); tapping the
+  // same card again DESELECTS it (removes from cart entirely). Quantity is
+  // then adjusted from the cart sheet's +/- controls.
+  const toggleCart = (med: Medicine) => {
+    if (cart.some(c => c.medicine.id === med.id)) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      setCart(prev => prev.filter(c => c.medicine.id !== med.id));
+      return;
+    }
+    addToCart(med);
+  };
+
+  const switchToGeneric = (alt: GenericAlternative) => {
+    if (!genericSuggestion) return;
+    const removeBrand = () => setCart(prev => prev.filter(c => c.medicine.id !== genericSuggestion.brandId));
+    const found = (medicines ?? []).find(m => m.id === alt.id);
+    if (found) {
+      removeBrand();
+      addToCart(found);
+    } else {
+      // The alternative may not be in the current filtered list — build a
+      // minimal Medicine from the generics row (same strategy as web).
+      const medLike = {
+        id: alt.id,
+        name: alt.name,
+        genericName: alt.genericName,
+        price: alt.price,
+        quantity: alt.quantity,
+        prescriptionRequired: false,
+        createdAt: new Date().toISOString(),
+        units: alt.units ?? [],
+      } as unknown as Medicine;
+      removeBrand();
+      addToCart(medLike);
+    }
+    setGenericSuggestion(null);
   };
 
   const removeFromCart = (id: number) => {
     setCart(prev => prev.filter(c => c.medicine.id !== id));
+    setGenericSuggestion(prev => (prev?.brandId === id ? null : prev));
   };
 
   const updateQty = (id: number, delta: number) => {
@@ -287,8 +422,48 @@ export default function SalesScreen() {
       if (c.medicine.id !== id) return c;
       const unit = getUnits(c.medicine).find(u => u.id === unitId);
       if (!unit) return c;
-      return { ...c, unitId: unit.id, unitName: unit.unitName, conversionFactor: unit.conversionFactorToBase };
+      return {
+        ...c,
+        unitId: unit.id,
+        unitName: unit.unitName,
+        conversionFactor: unit.conversionFactorToBase,
+        sellPrice: (unit as any).sellPrice != null ? parseFloat(String((unit as any).sellPrice)) : null,
+      };
     }));
+  };
+
+  const updateSig = (id: number, sig: string) => {
+    setCart(prev => prev.map(c => (c.medicine.id === id ? { ...c, sig: sig || undefined } : c)));
+  };
+
+  // ── Barcode scan handler ──────────────────────────────────────────────────
+  // Looks the code up against medicine-level barcodes first, then package
+  // (unit) barcodes so scanning a box/strip adds that exact pack.
+  const handleScanned = async (barcode: string) => {
+    try {
+      const res = await customFetch<Array<Medicine & { barcode?: string | null }> | { data: Array<Medicine & { barcode?: string | null }> }>(
+        `/api/medicines?search=${encodeURIComponent(barcode)}`
+      );
+      const rows = Array.isArray(res) ? res : (res.data ?? []);
+      const byMed = rows.find(m => m.barcode === barcode);
+      let unitMatch: { med: Medicine; unit: MedicineUnit } | null = null;
+      for (const m of rows) {
+        const hit = getUnits(m).find(u => (u as any).barcode === barcode);
+        if (hit) { unitMatch = { med: m, unit: hit }; break; }
+      }
+      const matched = byMed ?? unitMatch?.med;
+      if (!matched) {
+        setScanError(`No medicine found for: ${barcode}`);
+        setTimeout(() => setScanError(null), 2500);
+        return;
+      }
+      addToCart(matched, byMed ? undefined : unitMatch!.unit.id);
+      setScanFlash(matched.name);
+      setTimeout(() => setScanFlash(null), 2000);
+    } catch {
+      setScanError('Scan lookup failed — could not reach the server');
+      setTimeout(() => setScanError(null), 2500);
+    }
   };
 
   // Re-run safety checks whenever the cart or linked patient changes.
@@ -410,15 +585,18 @@ export default function SalesScreen() {
       // second payment endpoint here (that was causing the "already paid" error).
       const order = await createOrder.mutateAsync({
         data: {
-          paymentMethod: payMethod,
+          ...(payMethod === 'credit' ? { paymentStatus: 'unpaid' } : { paymentMethod: payMethod }),
           items: cart.map(c => ({
             medicineId: c.medicine.id,
             quantity: c.qty,
             ...(c.unitId ? { unitId: c.unitId } : {}),
+            ...(c.sig ? { sig: c.sig } : {}),
           })),
           ...(patientName.trim() ? { patientName: patientName.trim() } : {}),
           ...(patientId ? { patientId } : {}),
           ...(prescriptionId ? { prescriptionId } : {}),
+          ...(notes.trim() ? { notes: notes.trim() } : {}),
+          ...(discountClamped > 0 ? { discountAmount: discountClamped } : {}),
         },
       });
       qc.invalidateQueries({ queryKey: getListOrdersQueryKey() });
@@ -428,6 +606,10 @@ export default function SalesScreen() {
       setCartOpen(false);
       setPatientName('');
       setPatientIdInput('');
+      setNotes('');
+      setDiscountAmount(0);
+      setGenericSuggestion(null);
+      setPayMethod('cash');
       clearPrescription();
     } catch (e: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -459,6 +641,7 @@ export default function SalesScreen() {
     headerSub: { color: 'rgba(255,255,255,0.65)', fontSize: 12, fontFamily: 'Inter_400Regular', marginTop: 2 },
     searchRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 12, marginTop: 12, paddingHorizontal: 12, height: 40 },
     searchInput: { flex: 1, color: '#fff', fontFamily: 'Inter_400Regular', fontSize: 14, marginLeft: 8 },
+    searchScanBtn: { marginLeft: 10, padding: 6 },
     segmentRow: { flexDirection: 'row', backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 12, marginTop: 12, padding: 3 },
     segmentBtn: { flex: 1, paddingVertical: 8, borderRadius: 9, alignItems: 'center' },
     segmentText: { fontSize: 13, fontFamily: 'Inter_600SemiBold' },
@@ -493,6 +676,21 @@ export default function SalesScreen() {
     unitRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
     unitChip: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 14, borderWidth: 1 },
     unitChipText: { fontSize: 11, fontFamily: 'Inter_500Medium' },
+    sigInput: {
+      backgroundColor: colors.muted, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7,
+      fontSize: 11, fontFamily: 'Inter_400Regular', color: colors.foreground, marginTop: 8,
+    },
+    genWrap: {
+      marginHorizontal: 20, marginTop: 14, borderRadius: 12, padding: 12,
+      backgroundColor: '#ECFDF5', borderWidth: 1, borderColor: '#6EE7B7',
+      flexDirection: 'row', alignItems: 'flex-start', gap: 8,
+    },
+    genTitle: { flex: 1, fontSize: 12, fontFamily: 'Inter_700Bold', color: '#047857' },
+    genRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10, gap: 10 },
+    genName: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: colors.foreground },
+    genMeta: { fontSize: 11, fontFamily: 'Inter_400Regular', color: colors.mutedForeground, marginTop: 1 },
+    genSwitch: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: '#10B981' },
+    genSwitchText: { fontSize: 11, fontFamily: 'Inter_700Bold', color: '#047857' },
     sectionCard: { marginHorizontal: 20, marginTop: 14 },
     sectionTitle: { fontSize: 13, fontFamily: 'Inter_700Bold', color: colors.foreground, marginBottom: 8, flexDirection: 'row' },
     sectionHint: { fontSize: 10, fontFamily: 'Inter_400Regular', color: colors.mutedForeground },
@@ -513,6 +711,12 @@ export default function SalesScreen() {
     totalRow: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 14, paddingBottom: 6 },
     totalLabel: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: colors.foreground },
     totalVal: { fontSize: 18, fontFamily: 'Inter_700Bold', color: colors.primary },
+    totalValSub: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: colors.foreground },
+    discountInput: {
+      width: 92, textAlign: 'right',
+      backgroundColor: colors.muted, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 6,
+      fontSize: 13, fontFamily: 'Inter_600SemiBold', color: colors.foreground,
+    },
     payRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 20, marginTop: 10, marginBottom: 14 },
     payBtn: { flex: 1, paddingVertical: 10, borderRadius: 12, borderWidth: 1.5, alignItems: 'center' },
     checkoutBtn: {
@@ -561,6 +765,9 @@ export default function SalesScreen() {
                 <Feather name="x" size={16} color="rgba(255,255,255,0.7)" />
               </TouchableOpacity>
             )}
+            <TouchableOpacity style={s.searchScanBtn} onPress={() => setScanOpen(true)} hitSlop={8}>
+              <Ionicons name="scan-outline" size={20} color="rgba(255,255,255,0.9)" />
+            </TouchableOpacity>
           </View>
         ) : (
           <View style={s.searchRow}>
@@ -632,7 +839,7 @@ export default function SalesScreen() {
           {cart.length > 0 && (
             <TouchableOpacity style={s.cartFab} onPress={() => setCartOpen(true)}>
               <Feather name="shopping-cart" size={18} color="#fff" />
-              <Text style={s.cartFabText}>{cart.length} items · {formatCurrency(cartTotal)}</Text>
+              <Text style={s.cartFabText}>{cart.length} items · {formatCurrency(grandTotal)}</Text>
             </TouchableOpacity>
           )}
         </>
@@ -677,7 +884,7 @@ export default function SalesScreen() {
                             <Feather name="plus" size={12} color={colors.foreground} />
                           </TouchableOpacity>
                         </View>
-                        <Text style={s.cartPrice}>{formatCurrency(priceForUnit(c.medicine.price, c.conversionFactor) * c.qty)}</Text>
+                        <Text style={s.cartPrice}>{formatCurrency(priceForUnit(c.medicine.price, c.conversionFactor, c.sellPrice) * c.qty)}</Text>
                         <TouchableOpacity style={s.removeBtn} onPress={() => removeFromCart(c.medicine.id)}>
                           <Feather name="trash-2" size={15} color={colors.destructive} />
                         </TouchableOpacity>
@@ -698,10 +905,47 @@ export default function SalesScreen() {
                           })}
                         </View>
                       )}
+                      <TextInput
+                        style={s.sigInput}
+                        value={c.sig ?? ''}
+                        onChangeText={(t) => updateSig(c.medicine.id, t)}
+                        placeholder="Dosing instructions (e.g. Take 1 tablet twice daily after food)"
+                        placeholderTextColor={colors.mutedForeground}
+                      />
                     </View>
                   );
                 })}
               </ScrollView>
+
+              {/* Cheaper generic suggestion */}
+              {genericSuggestion && (
+                <View style={s.genWrap}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.genTitle}>Cheaper generic available for {genericSuggestion.brandName}</Text>
+                    {genericSuggestion.alternatives.slice(0, 2).map(alt => {
+                      const brandPrice = parseFloat(cart.find(c => c.medicine.id === genericSuggestion.brandId)?.medicine.price ?? '0');
+                      const saving = brandPrice - parseFloat(alt.price);
+                      return (
+                        <View key={alt.id} style={s.genRow}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={s.genName} numberOfLines={1}>{alt.name}</Text>
+                            <Text style={s.genMeta}>
+                              {formatCurrency(alt.price)}
+                              {saving > 0 ? ` · save ${formatCurrency(saving)}/unit` : ''}
+                            </Text>
+                          </View>
+                          <TouchableOpacity style={s.genSwitch} onPress={() => switchToGeneric(alt)}>
+                            <Text style={s.genSwitchText}>Switch</Text>
+                          </TouchableOpacity>
+                        </View>
+                      );
+                    })}
+                  </View>
+                  <TouchableOpacity onPress={() => setGenericSuggestion(null)} hitSlop={8}>
+                    <Feather name="x" size={14} color={colors.mutedForeground} />
+                  </TouchableOpacity>
+                </View>
+              )}
 
               {/* Patient */}
               <View style={s.sectionCard}>
@@ -770,10 +1014,33 @@ export default function SalesScreen() {
                 )}
               </View>
 
+              {/* Notes */}
+              <View style={s.sectionCard}>
+                <Text style={s.sectionTitle}>Notes</Text>
+                <Text style={[s.sectionHint, { marginBottom: 6 }]}>Optional — e.g. prescription #…</Text>
+                <TextInput
+                  style={s.input}
+                  value={notes}
+                  onChangeText={setNotes}
+                  placeholder="Notes (optional)"
+                  placeholderTextColor={colors.mutedForeground}
+                />
+              </View>
+
               {/* Safety */}
               {(interactions.length > 0 || allergyHits.length > 0 || contraindications.length > 0 || refillsExhausted) && (
                 <View style={s.sectionCard}>
                   <Text style={s.sectionTitle}>Safety</Text>
+                  {controlledItems.length > 0 && (
+                    <View style={[s.safetyBanner, { backgroundColor: '#FEF3C7', borderColor: colors.warning }]}>
+                      <Text style={[s.safetyTitle, { color: colors.warning }]}>
+                        Controlled substance{controlledItems.length > 1 ? 's' : ''} — prescription required
+                      </Text>
+                      <Text style={s.safetyText}>
+                        {controlledItems.map(c => `${c.medicine.name} (Schedule ${(c.medicine as any).controlledSchedule})`).join(', ')} — a verified prescription must be attached and will be auto-logged.
+                      </Text>
+                    </View>
+                  )}
                   {interactions.filter(i => i.severity !== 'contraindicated').map(i => (
                     <View key={i.id} style={[s.safetyBanner, { backgroundColor: '#FEF3C7', borderColor: colors.warning }]}>
                       <Text style={[s.safetyTitle, { color: colors.warning }]}>Drug interaction ({i.severity})</Text>
@@ -818,18 +1085,51 @@ export default function SalesScreen() {
               )}
 
               <View style={s.totalRow}>
+                <Text style={s.totalLabel}>Subtotal</Text>
+                <Text style={s.totalValSub}>{formatCurrency(subtotal)}</Text>
+              </View>
+              <View style={[s.totalRow, { paddingTop: 2, paddingBottom: 2 }]}>
+                <Text style={s.totalLabel}>Discount</Text>
+                <TextInput
+                  style={s.discountInput}
+                  value={discountAmount ? String(discountAmount) : ''}
+                  onChangeText={(t) => setDiscountAmount(Math.max(0, parseFloat(t) || 0))}
+                  placeholder="0.00"
+                  placeholderTextColor={colors.mutedForeground}
+                  keyboardType="decimal-pad"
+                />
+              </View>
+              {taxRatePct > 0 && (
+                <View style={[s.totalRow, { paddingTop: 2, paddingBottom: 2 }]}>
+                  <Text style={s.totalLabel}>Tax ({taxRatePct}%)</Text>
+                  <Text style={s.totalValSub}>{formatCurrency(tax)}</Text>
+                </View>
+              )}
+              <View style={[s.totalRow, { borderTopWidth: 1, borderTopColor: colors.border }]}>
                 <Text style={s.totalLabel}>Total</Text>
-                <Text style={s.totalVal}>{formatCurrency(cartTotal)}</Text>
+                <Text style={s.totalVal}>{formatCurrency(grandTotal)}</Text>
               </View>
 
               <View style={s.payRow}>
-                {(['cash', 'card', 'insurance'] as const).map(m => (
+                {([
+                  ['cash', 'Cash'],
+                  ['card', 'Card'],
+                  ['insurance', 'Insurance'],
+                  ['credit', 'Pay Later'],
+                ] as const).map(([m, label]) => (
                   <TouchableOpacity key={m} style={[s.payBtn, { backgroundColor: payMethod === m ? colors.secondary : 'transparent', borderColor: payMethod === m ? colors.primary : colors.border }]}
                     onPress={() => setPayMethod(m)}>
-                    <Text style={{ fontSize: 12, fontFamily: 'Inter_600SemiBold', color: payMethod === m ? colors.primary : colors.mutedForeground, textTransform: 'capitalize' }}>{m}</Text>
+                    <Text style={{ fontSize: 11, fontFamily: 'Inter_600SemiBold', color: payMethod === m ? colors.primary : colors.mutedForeground }}>{label}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
+              {payMethod === 'credit' && (
+                <View style={[s.safetyBanner, { marginHorizontal: 20, marginBottom: 12, backgroundColor: '#FEF3C7', borderColor: colors.warning }]}>
+                  <Text style={[s.safetyText, { color: colors.warning, fontFamily: 'Inter_600SemiBold' }]}>
+                    Pay later — items are dispensed now. Collect payment on the Sales screen.
+                  </Text>
+                </View>
+              )}
 
               {isSafetyBlocked && (
                 <View style={[s.safetyBanner, { marginHorizontal: 20, marginBottom: 12, backgroundColor: '#FEF2F2', borderColor: colors.destructive }]}>
@@ -837,7 +1137,7 @@ export default function SalesScreen() {
                 </View>
               )}
               <TouchableOpacity style={s.checkoutBtn} onPress={checkout} disabled={checkingOut || isSafetyBlocked}>
-                {checkingOut ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontSize: 15, fontFamily: 'Inter_600SemiBold' }}>Complete Sale · {formatCurrency(cartTotal)}</Text>}
+                {checkingOut ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontSize: 15, fontFamily: 'Inter_600SemiBold' }}>Complete Sale · {formatCurrency(grandTotal)}</Text>}
               </TouchableOpacity>
             </ScrollView>
           </View>
@@ -860,6 +1160,15 @@ export default function SalesScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Barcode scanner (device camera) */}
+      <BarcodeScannerModal
+        open={scanOpen}
+        onClose={() => setScanOpen(false)}
+        onScanned={handleScanned}
+        scanFeedback={scanFlash}
+        scanError={scanError}
+        />
     </View>
   );
 }
