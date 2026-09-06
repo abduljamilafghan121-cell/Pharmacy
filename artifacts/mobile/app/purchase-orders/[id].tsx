@@ -27,9 +27,10 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 
 /** What the receiver decided to do for one line: top up an existing,
- * non-expired batch ("choice" holds its id), or create a new one. */
+ *  non-expired batch ("choice" holds its id), or create a new one. */
 type ReceiveLine = { choice: 'new' | number; batchNumber: string; expiryDate: string };
 
 function daysUntil(dateStr: string) {
@@ -224,7 +225,7 @@ export default function PurchaseOrderDetailScreen() {
   };
 
   return (
-    <ScrollView style={s.container}>
+    <KeyboardAwareScrollViewCompat style={s.container} keyboardShouldPersistTaps="handled">
       <View style={s.header}>
         <TouchableOpacity onPress={() => router.back()}><Feather name="arrow-left" size={20} color="rgba(255,255,255,0.8)" /></TouchableOpacity>
         <Text style={s.title}>PO #{po.id}</Text>
@@ -297,6 +298,6 @@ export default function PurchaseOrderDetailScreen() {
           {reversing ? <ActivityIndicator color={colors.destructive} /> : <Text style={{ color: colors.destructive, fontFamily: 'Inter_600SemiBold', fontSize: 15 }}>Reverse Receive</Text>}
         </TouchableOpacity>
       )}
-    </ScrollView>
+    </KeyboardAwareScrollViewCompat>
   );
 }

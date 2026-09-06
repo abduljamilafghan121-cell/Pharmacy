@@ -7,8 +7,9 @@ import { Feather, Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 
 function InfoRow({ label, value }: { label: string; value: string | null | undefined }) {
   const colors = useColors();
@@ -168,7 +169,7 @@ export default function MedicineDetailScreen() {
   if (isLoading || !med) return <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}><ActivityIndicator color={colors.primary} /></View>;
 
   return (
-    <ScrollView style={s.container} contentContainerStyle={{ paddingBottom: 40 }}>
+    <KeyboardAwareScrollViewCompat style={s.container} contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
       <View style={s.heroCard}>
         <TouchableOpacity onPress={() => router.back()} style={{ marginBottom: 4 }}>
           <Feather name="arrow-left" size={20} color="rgba(255,255,255,0.8)" />
@@ -289,8 +290,9 @@ export default function MedicineDetailScreen() {
 
       <Modal visible={!!writeOffTarget} transparent animationType="slide" onRequestClose={() => setWriteOffTarget(null)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' }}>
-          <View style={{ backgroundColor: colors.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: insets.bottom + 20 }}>
+          <View style={{ backgroundColor: colors.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: insets.bottom + 20, maxHeight: '85%' }}>
             <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: 'center', marginBottom: 14 }} />
+            <KeyboardAwareScrollViewCompat keyboardShouldPersistTaps="handled">
             <Text style={{ fontSize: 16, fontFamily: 'Inter_700Bold', color: colors.foreground }}>Write off batch</Text>
             <Text style={{ fontSize: 12, fontFamily: 'Inter_400Regular', color: colors.mutedForeground, marginTop: 4 }}>
               {writeOffTarget?.batchNumber ?? `Batch #${writeOffTarget?.id}`} · {writeOffTarget?.quantity} units will be removed from sellable stock.
@@ -323,6 +325,7 @@ export default function MedicineDetailScreen() {
             <TouchableOpacity onPress={() => setWriteOffTarget(null)} style={{ alignItems: 'center', paddingVertical: 14 }}>
               <Text style={{ color: colors.mutedForeground, fontFamily: 'Inter_500Medium' }}>Cancel</Text>
             </TouchableOpacity>
+            </KeyboardAwareScrollViewCompat>
           </View>
         </View>
       </Modal>
@@ -331,7 +334,7 @@ export default function MedicineDetailScreen() {
         <View style={s.overlay}>
           <View style={[s.sheet, { maxHeight: '85%' }]}>
             <View style={s.handle} />
-            <ScrollView keyboardShouldPersistTaps="handled" style={{ flexGrow: 0 }}>
+            <KeyboardAwareScrollViewCompat keyboardShouldPersistTaps="handled" style={{ flexGrow: 0 }}>
             <Text style={{ fontSize: 16, fontFamily: 'Inter_700Bold', color: colors.foreground, marginBottom: 4 }}>Packaging Units</Text>
             <Text style={{ fontSize: 12, fontFamily: 'Inter_400Regular', color: colors.mutedForeground, marginBottom: 12 }}>
               Each unit can carry its own pack barcode and a direct sell price. Leave sell price empty to auto-derive (base price × factor).
@@ -435,10 +438,10 @@ export default function MedicineDetailScreen() {
             <TouchableOpacity onPress={() => setUnitsOpen(false)} style={{ alignItems: 'center', paddingVertical: 14 }}>
               <Text style={{ color: colors.mutedForeground, fontFamily: 'Inter_500Medium', fontSize: 13 }}>Close</Text>
             </TouchableOpacity>
-            </ScrollView>
+            </KeyboardAwareScrollViewCompat>
           </View>
         </View>
       </Modal>
-    </ScrollView>
+    </KeyboardAwareScrollViewCompat>
   );
 }

@@ -189,6 +189,7 @@ export default function StocktakeDetailScreen() {
         data={filtered}
         keyExtractor={(item) => String(item.id)}
         contentContainerStyle={{ paddingBottom: locked ? insets.bottom + 24 : 16 }}
+        keyboardShouldPersistTaps="handled"
         renderItem={({ item }) => <StocktakeItemRow item={item} colors={colors} locked={!!locked} />}
         refreshing={isLoading}
         onRefresh={refetch}

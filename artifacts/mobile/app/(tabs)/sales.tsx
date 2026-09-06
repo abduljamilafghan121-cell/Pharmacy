@@ -31,6 +31,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { useQueryClient } from '@tanstack/react-query';
 import { getListOrdersQueryKey, getListMedicinesQueryKey } from '@workspace/api-client-react';
 
@@ -867,7 +868,7 @@ export default function SalesScreen() {
           <View style={s.sheet}>
             <View style={s.handle} />
             <Text style={s.sheetTitle}>Cart</Text>
-            <ScrollView style={{ maxHeight: '100%' }}>
+            <KeyboardAwareScrollViewCompat keyboardShouldPersistTaps="handled">
               <ScrollView style={{ maxHeight: 260 }} nestedScrollEnabled scrollEnabled={cart.length > 2}>
                 {cart.map(c => {
                   const units = getUnits(c.medicine);
@@ -1141,7 +1142,7 @@ export default function SalesScreen() {
               <TouchableOpacity style={s.checkoutBtn} onPress={checkout} disabled={checkingOut || isSafetyBlocked}>
                 {checkingOut ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontSize: 15, fontFamily: 'Inter_600SemiBold' }}>Complete Sale · {formatCurrency(grandTotal)}</Text>}
               </TouchableOpacity>
-            </ScrollView>
+            </KeyboardAwareScrollViewCompat>
           </View>
         </View>
       </Modal>

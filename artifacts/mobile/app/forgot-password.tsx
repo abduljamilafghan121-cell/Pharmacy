@@ -7,10 +7,8 @@ import React, { useState } from 'react';
 import {
   ActivityIndicator,
   Image,
-  KeyboardAvoidingView,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -18,6 +16,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 
 export default function ForgotPasswordScreen() {
   const colors = useColors();
@@ -132,7 +131,7 @@ export default function ForgotPasswordScreen() {
   });
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <View style={styles.container}>
       <View style={styles.top}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} hitSlop={8}>
           <Ionicons name="arrow-back" size={20} color="#fff" />
@@ -144,7 +143,7 @@ export default function ForgotPasswordScreen() {
         <Text style={styles.tagline}>Smart Pharmacy. Better Care.</Text>
       </View>
 
-      <ScrollView style={styles.card} keyboardShouldPersistTaps="handled">
+      <KeyboardAwareScrollViewCompat style={styles.card} keyboardShouldPersistTaps="handled">
         {done ? (
           <View style={styles.doneWrap}>
             <View style={styles.doneIcon}>
@@ -198,7 +197,7 @@ export default function ForgotPasswordScreen() {
             </TouchableOpacity>
           </>
         )}
-      </ScrollView>
-    </KeyboardAvoidingView>
+      </KeyboardAwareScrollViewCompat>
+    </View>
   );
 }

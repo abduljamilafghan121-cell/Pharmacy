@@ -7,10 +7,8 @@ import React, { useState } from 'react';
 import {
   ActivityIndicator,
   Image,
-  KeyboardAvoidingView,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -18,6 +16,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 
 /** Accepts either the raw token ("123.abc…") or a full reset link
  * (e.g. "https://app/reset-password?token=123.abc…") pasted from the email. */
@@ -157,7 +156,7 @@ export default function ResetPasswordScreen() {
   });
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <View style={styles.container}>
       <View style={styles.top}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} hitSlop={8}>
           <Ionicons name="arrow-back" size={20} color="#fff" />
@@ -169,7 +168,7 @@ export default function ResetPasswordScreen() {
         <Text style={styles.tagline}>Smart Pharmacy. Better Care.</Text>
       </View>
 
-      <ScrollView style={styles.card} keyboardShouldPersistTaps="handled">
+      <KeyboardAwareScrollViewCompat style={styles.card} keyboardShouldPersistTaps="handled">
         {done ? (
           <View style={styles.doneWrap}>
             <View style={styles.doneIcon}>
@@ -252,7 +251,7 @@ export default function ResetPasswordScreen() {
             </TouchableOpacity>
           </>
         )}
-      </ScrollView>
-    </KeyboardAvoidingView>
+      </KeyboardAwareScrollViewCompat>
+    </View>
   );
 }

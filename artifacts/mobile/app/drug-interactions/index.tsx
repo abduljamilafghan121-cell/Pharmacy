@@ -8,6 +8,7 @@ import { useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 
 interface DrugInteraction {
   id: number;
@@ -201,6 +202,7 @@ export default function DrugInteractionsScreen() {
         <View style={s.overlay}>
           <View style={s.sheet}>
             <View style={s.handle} />
+            <KeyboardAwareScrollViewCompat keyboardShouldPersistTaps="handled">
             <Text style={s.sheetTitle}>Add Drug Interaction Rule</Text>
 
             <Text style={s.label}>Medicine 1 *</Text>
@@ -261,6 +263,7 @@ export default function DrugInteractionsScreen() {
             <TouchableOpacity onPress={() => { setAddOpen(false); resetForm(); }} style={{ alignItems: 'center', paddingVertical: 14 }}>
               <Text style={{ color: colors.mutedForeground, fontFamily: 'Inter_500Medium' }}>Cancel</Text>
             </TouchableOpacity>
+            </KeyboardAwareScrollViewCompat>
           </View>
         </View>
       </Modal>

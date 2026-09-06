@@ -6,8 +6,9 @@ import { useListMedicines, useListPatients, getListMedicinesQueryKey, getListPat
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 
 interface PreAuth {
   id: number;
@@ -145,7 +146,7 @@ export default function PreAuthorizationsScreen() {
       <Modal visible={sheetOpen} transparent animationType="slide" onRequestClose={() => setSheetOpen(false)}>
         <View style={s.overlay}>
           <View style={s.sheet}>
-            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+            <KeyboardAwareScrollViewCompat showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             <View style={s.handle} />
             <Text style={{ fontSize: 16, fontFamily: 'Inter_700Bold', color: colors.foreground }}>New Pre-Authorization</Text>
 
@@ -198,7 +199,7 @@ export default function PreAuthorizationsScreen() {
             <TouchableOpacity onPress={() => setSheetOpen(false)} style={{ alignItems: 'center', paddingVertical: 14 }}>
               <Text style={{ color: colors.mutedForeground, fontFamily: 'Inter_500Medium' }}>Cancel</Text>
             </TouchableOpacity>
-            </ScrollView>
+            </KeyboardAwareScrollViewCompat>
           </View>
         </View>
       </Modal>

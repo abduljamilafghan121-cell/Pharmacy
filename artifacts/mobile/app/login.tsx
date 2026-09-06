@@ -7,10 +7,8 @@ import React, { useState } from 'react';
 import {
   ActivityIndicator,
   Image,
-  KeyboardAvoidingView,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -18,6 +16,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 
 export default function LoginScreen() {
   const colors = useColors();
@@ -100,7 +99,7 @@ export default function LoginScreen() {
   });
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <View style={styles.container}>
       <View style={styles.top}>
         <View style={styles.iconWrap}>
           <Image source={require('../assets/images/icon.png')} style={{ width: 52, height: 52, borderRadius: 12 }} />
@@ -109,7 +108,7 @@ export default function LoginScreen() {
         <Text style={styles.tagline}>Smart Pharmacy. Better Care.</Text>
       </View>
 
-      <ScrollView style={styles.card} keyboardShouldPersistTaps="handled" scrollEnabled={false}>
+      <KeyboardAwareScrollViewCompat style={styles.card} keyboardShouldPersistTaps="handled">
         <Text style={styles.heading}>Welcome back</Text>
         <Text style={styles.sub}>Sign in to your account to continue</Text>
 
@@ -165,7 +164,7 @@ export default function LoginScreen() {
             ? <ActivityIndicator color={colors.primaryForeground} />
             : <Text style={styles.btnText}>Sign In</Text>}
         </Pressable>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      </KeyboardAwareScrollViewCompat>
+    </View>
   );
 }

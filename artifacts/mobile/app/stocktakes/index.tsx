@@ -6,6 +6,7 @@ import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 
 interface Stocktake {
   id: number;
@@ -58,7 +59,7 @@ export default function StocktakesScreen() {
     meta: { fontSize: 11, fontFamily: 'Inter_400Regular', color: colors.mutedForeground, marginTop: 2 },
     badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
     overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-    sheet: { backgroundColor: colors.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: insets.bottom + 20 },
+    sheet: { backgroundColor: colors.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: insets.bottom + 20, maxHeight: '88%' },
     handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: 'center', marginBottom: 14 },
     label: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: colors.mutedForeground, marginBottom: 4, marginTop: 10 },
     inp: { height: 44, borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.input, paddingHorizontal: 12, color: colors.foreground, fontFamily: 'Inter_400Regular', fontSize: 14 },
@@ -113,6 +114,7 @@ export default function StocktakesScreen() {
         <View style={s.overlay}>
           <View style={s.sheet}>
             <View style={s.handle} />
+            <KeyboardAwareScrollViewCompat keyboardShouldPersistTaps="handled">
             <Text style={{ fontSize: 16, fontFamily: 'Inter_700Bold', color: colors.foreground }}>Start Stocktake</Text>
             <Text style={{ fontSize: 12, fontFamily: 'Inter_400Regular', color: colors.mutedForeground, marginTop: 4 }}>
               This will snapshot every medicine's current stock so you can count and reconcile it.
@@ -127,6 +129,7 @@ export default function StocktakesScreen() {
             <TouchableOpacity onPress={() => setSheetOpen(false)} style={{ alignItems: 'center', paddingVertical: 14 }}>
               <Text style={{ color: colors.mutedForeground, fontFamily: 'Inter_500Medium' }}>Cancel</Text>
             </TouchableOpacity>
+            </KeyboardAwareScrollViewCompat>
           </View>
         </View>
       </Modal>

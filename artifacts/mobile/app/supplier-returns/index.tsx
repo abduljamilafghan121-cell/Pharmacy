@@ -9,6 +9,7 @@ import { useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 
 interface SupplierReturn {
   id: number;
@@ -163,7 +164,7 @@ export default function SupplierReturnsScreen() {
       <Modal visible={sheetOpen} transparent animationType="slide" onRequestClose={() => setSheetOpen(false)}>
         <View style={s.overlay}>
           <View style={s.sheet}>
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <KeyboardAwareScrollViewCompat showsVerticalScrollIndicator={false}>
               <View style={s.handle} />
               <Text style={{ fontSize: 16, fontFamily: 'Inter_700Bold', color: colors.foreground }}>New Supplier Return</Text>
 
@@ -215,7 +216,7 @@ export default function SupplierReturnsScreen() {
               <TouchableOpacity onPress={() => setSheetOpen(false)} style={{ alignItems: 'center', paddingVertical: 14 }}>
                 <Text style={{ color: colors.mutedForeground, fontFamily: 'Inter_500Medium' }}>Cancel</Text>
               </TouchableOpacity>
-            </ScrollView>
+            </KeyboardAwareScrollViewCompat>
           </View>
         </View>
       </Modal>

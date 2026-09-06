@@ -8,6 +8,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import React, { useState } from 'react';
 import { ActivityIndicator, Alert, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 
 // The generated SupplierLedgerEntry type hasn't caught up with the API — the
 // server also returns payment entries with voided/voidReason/method (same
@@ -83,7 +84,7 @@ export default function SupplierLedgerScreen() {
     sectionTitle: { fontSize: 13, fontFamily: 'Inter_700Bold', color: colors.foreground, marginBottom: 10 },
     entryRow: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
     overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-    sheet: { backgroundColor: colors.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: insets.bottom + 20 },
+    sheet: { backgroundColor: colors.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: insets.bottom + 20, maxHeight: '88%' },
     handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: 'center', marginBottom: 20 },
     label: { fontSize: 12, fontFamily: 'Inter_600SemiBold', color: colors.mutedForeground, marginBottom: 4, marginTop: 10 },
     inp: { height: 44, borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.input, paddingHorizontal: 12, color: colors.foreground, fontFamily: 'Inter_400Regular', fontSize: 14 },
@@ -164,6 +165,7 @@ export default function SupplierLedgerScreen() {
         <View style={s.overlay}>
           <View style={s.sheet}>
             <View style={s.handle} />
+            <KeyboardAwareScrollViewCompat keyboardShouldPersistTaps="handled">
             <Text style={{ fontSize: 16, fontFamily: 'Inter_700Bold', color: colors.foreground, marginBottom: 4 }}>Record Payment</Text>
             <Text style={{ fontSize: 13, fontFamily: 'Inter_400Regular', color: colors.mutedForeground, marginBottom: 12 }}>Outstanding: {formatCurrency(balance)}</Text>
             <Text style={s.label}>Amount ($)</Text>
@@ -181,6 +183,7 @@ export default function SupplierLedgerScreen() {
             <TouchableOpacity style={s.payBtn} onPress={() => createPayment.mutate({ data: { supplierId: Number(id), amount: amount || String(balance), method, note: note || null } })} disabled={createPayment.isPending}>
               {createPayment.isPending ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontFamily: 'Inter_600SemiBold', fontSize: 15 }}>Record Payment</Text>}
             </TouchableOpacity>
+            </KeyboardAwareScrollViewCompat>
           </View>
         </View>
       </Modal>
@@ -189,6 +192,7 @@ export default function SupplierLedgerScreen() {
         <View style={s.overlay}>
           <View style={s.sheet}>
             <View style={s.handle} />
+            <KeyboardAwareScrollViewCompat keyboardShouldPersistTaps="handled">
             <Text style={{ fontSize: 16, fontFamily: 'Inter_700Bold', color: colors.foreground, marginBottom: 4 }}>Void Payment</Text>
             <Text style={{ fontSize: 13, fontFamily: 'Inter_400Regular', color: colors.mutedForeground, marginBottom: 12 }}>
               You're about to void a payment of {formatCurrency(voidTarget?.amount ?? '0')}. It will be excluded from the ledger balance.
@@ -201,6 +205,7 @@ export default function SupplierLedgerScreen() {
             <TouchableOpacity onPress={() => setVoidTarget(null)} style={{ alignItems: 'center', paddingVertical: 12 }}>
               <Text style={{ color: colors.mutedForeground, fontFamily: 'Inter_500Medium', fontSize: 13 }}>Cancel</Text>
             </TouchableOpacity>
+            </KeyboardAwareScrollViewCompat>
           </View>
         </View>
       </Modal>
