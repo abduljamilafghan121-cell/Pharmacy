@@ -59,7 +59,7 @@ interface Line {
 interface PriceHistoryRow {
   unitPrice: string
   quantity: number
-  createdAt: string
+  orderedAt: string | null
   supplierName?: string | null
   poId: number
 }
@@ -320,7 +320,8 @@ function CreatePurchaseOrderModal({ onClose }: { onClose: () => void }): ReactEl
                     {history.slice(0, 3).map((h, i) => (
                       <div key={i} className="flex justify-between gap-2">
                         <span style={{ color: theme.muted }} className="truncate">
-                          {h.supplierName ?? 'Unknown'} · {new Date(h.createdAt).toLocaleDateString()}
+                          {h.supplierName ?? 'Unknown'}
+                          {h.orderedAt ? ` · ${new Date(h.orderedAt).toLocaleDateString()}` : ''}
                         </span>
                         <span style={{ ...mono, color: theme.text }}>${parseFloat(h.unitPrice).toFixed(2)}</span>
                       </div>
