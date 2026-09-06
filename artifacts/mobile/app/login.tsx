@@ -94,6 +94,9 @@ export default function LoginScreen() {
     btnText: { color: colors.primaryForeground, fontSize: 16, fontFamily: 'Inter_600SemiBold' },
     heading: { fontSize: 22, fontFamily: 'Inter_700Bold', color: colors.foreground, marginBottom: 6 },
     sub: { fontSize: 13, fontFamily: 'Inter_400Regular', color: colors.mutedForeground, marginBottom: 28 },
+    forgotRow: { flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 18, marginTop: -6 },
+    forgotBtn: { paddingVertical: 4, paddingHorizontal: 2 },
+    forgotText: { color: colors.primary, fontSize: 13, fontFamily: 'Inter_600SemiBold' },
   });
 
   return (
@@ -143,6 +146,12 @@ export default function LoginScreen() {
         </View>
 
         {!!error && <Text style={styles.error}>{error}</Text>}
+
+        <View style={styles.forgotRow}>
+          <TouchableOpacity style={styles.forgotBtn} onPress={() => router.push('/forgot-password' as any)} hitSlop={8}>
+            <Text style={styles.forgotText}>Forgot password?</Text>
+          </TouchableOpacity>
+        </View>
 
         <Pressable
           style={({ pressed }) => [styles.btn, { opacity: pressed ? 0.85 : 1 }]}
