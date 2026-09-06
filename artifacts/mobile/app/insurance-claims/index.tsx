@@ -27,7 +27,7 @@ export default function InsuranceClaimsScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const topInset = insets.top + (Platform.OS === 'web' ? 67 : 0);
-  const canCreate = user?.role === 'admin' || user?.role === 'pharmacist' || user?.role === 'cashier';
+  const canCreate = user?.role === 'admin' || user?.role === 'pharmacist';
 
   const { data, isLoading, refetch } = useApiQuery<InsuranceClaim[]>(['insurance-claims'], '/api/insurance-claims');
   const createClaim = useApiMutation<InsuranceClaim, { orderId: number; providerName: string; policyNumber?: string; claimAmount: number; notes?: string }>(

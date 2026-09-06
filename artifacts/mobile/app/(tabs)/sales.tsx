@@ -49,6 +49,33 @@ interface PrescriptionInfo {
   refillsUsed: number;
 }
 
+interface DrugInteraction {
+  id: number;
+  medicine1Id: number;
+  medicine1Name: string;
+  medicine2Id: number;
+  medicine2Name: string;
+  severity: 'minor' | 'moderate' | 'major' | 'contraindicated';
+  description?: string | null;
+}
+
+interface PatientAllergy {
+  id: number;
+  allergen: string;
+  severity: 'mild' | 'moderate' | 'severe';
+  reaction?: string | null;
+}
+
+interface ContraindicationWarning {
+  id: number;
+  medicineId: number;
+  medicineName: string;
+  contraindicationType: string;
+  value: string;
+  severity: 'warn' | 'block';
+  description: string;
+}
+
 function getUnits(medicine: Medicine): MedicineUnit[] {
   return (medicine.units as MedicineUnit[]) ?? [];
 }
@@ -190,6 +217,12 @@ export default function SalesScreen() {
   const [prescriptionLoading, setPrescriptionLoading] = useState(false);
   const [prescriptionError, setPrescriptionError] = useState<string | null>(null);
 
+  // Safety checks — drug interactions, patient allergies, contraindications
+  const [interactions, setInteractions] = useState<DrugInteraction[]>([]);
+  const [allergies, setAllergies] = useState<PatientAllergy[]>([]);
+  const [allergyHits, setAllergyHits] = useState<string[]>([]);
+  const [contraindications, setContraindications] = useState<ContraindicationWarning[]>([]);
+
   // History search
   const [historySearch, setHistorySearch] = useState('');
 
@@ -208,7 +241,20 @@ export default function SalesScreen() {
   const createOrder = useCreateOrder({ mutation: {} });
 
   const cartTotal = cart.reduce((sum, c) => sum + priceForUnit(c.medicine.price, c.conversionFactor) * c.qty, 0);
-  const requiresRx = cart.some(c => c.medicine.prescriptionRequired);
+  const requiresRx = cart.some(c => c.medicine.prescriptionRequired || (c.medicine as any).controlledSchedule != null);
+
+  // ── Safety flags (mirror web/desktop NewSale) ────────────────────────
+  const contraindicatedPairs = interactions.filter(i => i.severity === 'contraindicated');
+  const hasSevereAllergy =
+    allergyHits.length > 0 &&
+    allergies.some(a => a.severity === 'severe' && allergyHits.some(h => h.toLowerCase().includes(a.allergen.toLowerCase())));
+  const hasBlockContraindication = contraindications.some(c => c.severity === 'block');
+  const refillsExhausted = !!(requiresRx && prescriptionInfo && prescriptionInfo.refillsUsed > prescriptionInfo.maxRefills);
+  const isSafetyBlocked =
+    contraindicatedPairs.length > 0 ||
+    hasSevereAllergy ||
+    hasBlockContraindication ||
+    refillsExhausted;
 
   // Tapping a medicine card SELECTS it (adds to cart at qty 1); tapping the
   // same card again DESELECTS it (removes from cart entirely). Quantity is
@@ -245,6 +291,78 @@ export default function SalesScreen() {
     }));
   };
 
+  // Re-run safety checks whenever the cart or linked patient changes.
+  useEffect(() => {
+    const ids = cart.map(c => c.medicine.id);
+
+    if (ids.length === 0) {
+      setInteractions([]);
+      setAllergies([]);
+      setAllergyHits([]);
+      setContraindications([]);
+      return;
+    }
+
+    let cancelled = false;
+    const run = async () => {
+      if (ids.length >= 2) {
+        try {
+          const res = await customFetch<{ interactions: DrugInteraction[] }>('/api/medicines/check-interactions', {
+            method: 'POST',
+            body: JSON.stringify({ medicineIds: ids }),
+          });
+          if (!cancelled) setInteractions(res.interactions ?? []);
+        } catch {
+          if (!cancelled) setInteractions([]);
+        }
+      } else {
+        setInteractions([]);
+      }
+
+      if (patientId) {
+        try {
+          const rows = await customFetch<PatientAllergy[]>(`/api/patients/${patientId}/allergies`);
+          if (!cancelled) {
+            setAllergies(rows);
+            const allergenNames = rows.map(a => a.allergen.toLowerCase());
+            const hits = cart
+              .map(c => c.medicine)
+              .filter(m =>
+                allergenNames.some(a =>
+                  m.name.toLowerCase().includes(a) ||
+                  (m.genericName ?? '').toLowerCase().includes(a) ||
+                  ((m as any).drugClass ?? '').toLowerCase().includes(a)
+                )
+              )
+              .map(m => m.name);
+            setAllergyHits(Array.from(new Set(hits)));
+          }
+        } catch {
+          if (!cancelled) {
+            setAllergies([]);
+            setAllergyHits([]);
+          }
+        }
+
+        try {
+          const res = await customFetch<{ contraindications: ContraindicationWarning[] }>('/api/medicines/check-contraindications', {
+            method: 'POST',
+            body: JSON.stringify({ medicineIds: ids, patientId }),
+          });
+          if (!cancelled) setContraindications(res.contraindications ?? []);
+        } catch {
+          if (!cancelled) setContraindications([]);
+        }
+      } else {
+        setAllergies([]);
+        setAllergyHits([]);
+        setContraindications([]);
+      }
+    };
+    run();
+    return () => { cancelled = true; };
+  }, [cart, patientId]);
+
   const lookupPrescription = async () => {
     if (!prescriptionInput) return;
     const id = Number(prescriptionInput);
@@ -275,6 +393,14 @@ export default function SalesScreen() {
     if (!cart.length) return;
     if (requiresRx && !prescriptionId) {
       Alert.alert('Prescription required', 'One or more items need a verified prescription. Link a prescription ID before completing this sale.');
+      return;
+    }
+    if (isSafetyBlocked) {
+      Alert.alert('Safety check failed', 'Resolve the red safety warnings before completing this sale.');
+      return;
+    }
+    if (requiresRx && prescriptionInfo && prescriptionInfo.status !== 'verified') {
+      Alert.alert('Prescription not verified', 'Only verified prescriptions can authorise a sale. Verify this prescription first.');
       return;
     }
     setCheckingOut(true);
@@ -380,6 +506,10 @@ export default function SalesScreen() {
     rxInfoBox: { borderRadius: 10, padding: 10, marginTop: 8, borderWidth: 1 },
     rxInfoTitle: { fontSize: 12, fontFamily: 'Inter_700Bold' },
     rxInfoLine: { fontSize: 11, fontFamily: 'Inter_400Regular', marginTop: 2 },
+    safetyBanner: { borderRadius: 10, padding: 10, marginBottom: 8, borderWidth: 1 },
+    safetyTitle: { fontSize: 12, fontFamily: 'Inter_700Bold', marginBottom: 2 },
+    safetyText: { fontSize: 11, fontFamily: 'Inter_400Regular', color: colors.foreground, marginTop: 1 },
+    safetyMuted: { color: colors.mutedForeground, marginTop: 3 },
     totalRow: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 14, paddingBottom: 6 },
     totalLabel: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: colors.foreground },
     totalVal: { fontSize: 18, fontFamily: 'Inter_700Bold', color: colors.primary },
@@ -640,6 +770,53 @@ export default function SalesScreen() {
                 )}
               </View>
 
+              {/* Safety */}
+              {(interactions.length > 0 || allergyHits.length > 0 || contraindications.length > 0 || refillsExhausted) && (
+                <View style={s.sectionCard}>
+                  <Text style={s.sectionTitle}>Safety</Text>
+                  {interactions.filter(i => i.severity !== 'contraindicated').map(i => (
+                    <View key={i.id} style={[s.safetyBanner, { backgroundColor: '#FEF3C7', borderColor: colors.warning }]}>
+                      <Text style={[s.safetyTitle, { color: colors.warning }]}>Drug interaction ({i.severity})</Text>
+                      <Text style={s.safetyText}>{i.medicine1Name} + {i.medicine2Name}</Text>
+                      {!!i.description && <Text style={[s.safetyText, s.safetyMuted]}>{i.description}</Text>}
+                    </View>
+                  ))}
+                  {contraindicatedPairs.map(i => (
+                    <View key={i.id} style={[s.safetyBanner, { backgroundColor: '#FEF2F2', borderColor: colors.destructive }]}>
+                      <Text style={[s.safetyTitle, { color: colors.destructive }]}>Contraindicated — cannot dispense</Text>
+                      <Text style={s.safetyText}>{i.medicine1Name} + {i.medicine2Name}</Text>
+                      {!!i.description && <Text style={[s.safetyText, s.safetyMuted]}>{i.description}</Text>}
+                    </View>
+                  ))}
+                  {allergyHits.length > 0 && (
+                    <View style={[s.safetyBanner, { backgroundColor: hasSevereAllergy ? '#FEF2F2' : '#FEF3C7', borderColor: hasSevereAllergy ? colors.destructive : colors.warning }]}>
+                      <Text style={[s.safetyTitle, { color: hasSevereAllergy ? colors.destructive : colors.warning }]}>
+                        {hasSevereAllergy ? 'Severe allergy alert' : 'Allergy warning'}
+                      </Text>
+                      <Text style={s.safetyText}>Patient is allergic to something in: {allergyHits.join(', ')}</Text>
+                    </View>
+                  )}
+                  {contraindications.filter(c => c.severity === 'warn').map(c => (
+                    <View key={c.id} style={[s.safetyBanner, { backgroundColor: '#FEF3C7', borderColor: colors.warning }]}>
+                      <Text style={[s.safetyTitle, { color: colors.warning }]}>Contraindication warning</Text>
+                      <Text style={s.safetyText}>{c.medicineName}: {c.description}</Text>
+                    </View>
+                  ))}
+                  {contraindications.filter(c => c.severity === 'block').map(c => (
+                    <View key={c.id} style={[s.safetyBanner, { backgroundColor: '#FEF2F2', borderColor: colors.destructive }]}>
+                      <Text style={[s.safetyTitle, { color: colors.destructive }]}>Contraindicated — cannot dispense</Text>
+                      <Text style={s.safetyText}>{c.medicineName}: {c.description}</Text>
+                    </View>
+                  ))}
+                  {refillsExhausted && (
+                    <View style={[s.safetyBanner, { backgroundColor: '#FEF2F2', borderColor: colors.destructive }]}>
+                      <Text style={[s.safetyTitle, { color: colors.destructive }]}>No remaining refills</Text>
+                      <Text style={s.safetyText}>This prescription has no refills left. Please obtain a new prescription.</Text>
+                    </View>
+                  )}
+                </View>
+              )}
+
               <View style={s.totalRow}>
                 <Text style={s.totalLabel}>Total</Text>
                 <Text style={s.totalVal}>{formatCurrency(cartTotal)}</Text>
@@ -654,7 +831,12 @@ export default function SalesScreen() {
                 ))}
               </View>
 
-              <TouchableOpacity style={s.checkoutBtn} onPress={checkout} disabled={checkingOut}>
+              {isSafetyBlocked && (
+                <View style={[s.safetyBanner, { marginHorizontal: 20, marginBottom: 12, backgroundColor: '#FEF2F2', borderColor: colors.destructive }]}>
+                  <Text style={[s.safetyTitle, { color: colors.destructive }]}>Safety check failed — resolve the red warnings to complete this sale</Text>
+                </View>
+              )}
+              <TouchableOpacity style={s.checkoutBtn} onPress={checkout} disabled={checkingOut || isSafetyBlocked}>
                 {checkingOut ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontSize: 15, fontFamily: 'Inter_600SemiBold' }}>Complete Sale · {formatCurrency(cartTotal)}</Text>}
               </TouchableOpacity>
             </ScrollView>

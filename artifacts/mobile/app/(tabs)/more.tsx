@@ -24,9 +24,9 @@ export default function MoreScreen() {
 
   const role = user?.role;
   const canSeeCashRegister = role === 'admin' || role === 'pharmacist' || role === 'cashier';
-  const canSeeInsuranceClaims = role === 'admin' || role === 'pharmacist' || role === 'viewer';
+  const canSeeInsuranceClaims = role === 'admin' || role === 'pharmacist';
   const canSeePreAuths = role === 'admin' || role === 'pharmacist';
-  const canSeeSupplierReturns = role === 'admin' || role === 'pharmacist' || role === 'viewer';
+  const canSeeSupplierReturns = role === 'admin' || role === 'pharmacist';
   const canSeeControlledSubstances = role === 'admin' || role === 'pharmacist';
 
   const sections: { title: string; items: MenuItem[] }[] = [
