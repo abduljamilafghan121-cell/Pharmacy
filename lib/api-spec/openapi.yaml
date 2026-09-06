@@ -1341,7 +1341,7 @@ components:
           type: string
         role:
           type: string
-          enum: [admin, pharmacist]
+          enum: [admin, pharmacist, cashier, viewer]
 
     UserLoginInput:
       type: object
@@ -1376,7 +1376,7 @@ components:
           type: ["string", "null"]
         role:
           type: string
-          enum: [admin, pharmacist]
+          enum: [admin, pharmacist, cashier, viewer]
         createdAt:
           type: string
           format: date-time

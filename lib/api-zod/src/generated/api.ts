@@ -29,7 +29,7 @@ export const RegisterUserBody = zod.object({
   "email": zod.string(),
   "password": zod.string().min(registerUserBodyPasswordMin),
   "phone": zod.string().optional(),
-  "role": zod.enum(['admin', 'pharmacist']).optional()
+  "role": zod.enum(['admin', 'pharmacist', 'cashier', 'viewer']).optional()
 })
 
 export const RegisterUserResponse = zod.object({
@@ -39,7 +39,7 @@ export const RegisterUserResponse = zod.object({
   "name": zod.string(),
   "email": zod.string(),
   "phone": zod.string().nullish(),
-  "role": zod.enum(['admin', 'pharmacist']),
+  "role": zod.enum(['admin', 'pharmacist', 'cashier', 'viewer']),
   "createdAt": zod.coerce.date()
 })
 })
@@ -60,7 +60,7 @@ export const LoginUserResponse = zod.object({
   "name": zod.string(),
   "email": zod.string(),
   "phone": zod.string().nullish(),
-  "role": zod.enum(['admin', 'pharmacist']),
+  "role": zod.enum(['admin', 'pharmacist', 'cashier', 'viewer']),
   "createdAt": zod.coerce.date()
 })
 })
@@ -74,7 +74,7 @@ export const GetMeResponse = zod.object({
   "name": zod.string(),
   "email": zod.string(),
   "phone": zod.string().nullish(),
-  "role": zod.enum(['admin', 'pharmacist']),
+  "role": zod.enum(['admin', 'pharmacist', 'cashier', 'viewer']),
   "createdAt": zod.coerce.date()
 })
 
@@ -95,7 +95,7 @@ export const UpdateProfileResponse = zod.object({
   "name": zod.string(),
   "email": zod.string(),
   "phone": zod.string().nullish(),
-  "role": zod.enum(['admin', 'pharmacist']),
+  "role": zod.enum(['admin', 'pharmacist', 'cashier', 'viewer']),
   "createdAt": zod.coerce.date()
 })
 
@@ -125,7 +125,7 @@ export const ListUsersResponseItem = zod.object({
   "name": zod.string(),
   "email": zod.string(),
   "phone": zod.string().nullish(),
-  "role": zod.enum(['admin', 'pharmacist']),
+  "role": zod.enum(['admin', 'pharmacist', 'cashier', 'viewer']),
   "createdAt": zod.coerce.date()
 })
 export const ListUsersResponse = zod.array(ListUsersResponseItem)
@@ -144,7 +144,7 @@ export const CreateUserBody = zod.object({
   "email": zod.string(),
   "password": zod.string().min(createUserBodyPasswordMin),
   "phone": zod.string().optional(),
-  "role": zod.enum(['admin', 'pharmacist']).optional()
+  "role": zod.enum(['admin', 'pharmacist', 'cashier', 'viewer']).optional()
 })
 
 export const CreateUserResponse = zod.object({
@@ -152,7 +152,7 @@ export const CreateUserResponse = zod.object({
   "name": zod.string(),
   "email": zod.string(),
   "phone": zod.string().nullish(),
-  "role": zod.enum(['admin', 'pharmacist']),
+  "role": zod.enum(['admin', 'pharmacist', 'cashier', 'viewer']),
   "createdAt": zod.coerce.date()
 })
 
@@ -234,8 +234,6 @@ export const ListPatientsResponse = zod.array(ListPatientsResponseItem)
 export const CreatePatientBody = zod.object({
   "name": zod.string().min(1),
   "phone": zod.string().optional(),
-  "dateOfBirth": zod.string().optional(),
-  "gender": zod.enum(["male", "female", "other"]).optional(),
   "notes": zod.string().optional()
 })
 
@@ -243,8 +241,6 @@ export const CreatePatientResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
   "phone": zod.string().nullish(),
-  "dateOfBirth": zod.string().nullish(),
-  "gender": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 })
@@ -261,8 +257,6 @@ export const GetPatientResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
   "phone": zod.string().nullish(),
-  "dateOfBirth": zod.string().nullish(),
-  "gender": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 })
@@ -281,8 +275,6 @@ export const UpdatePatientParams = zod.object({
 export const UpdatePatientBody = zod.object({
   "name": zod.string().min(1).optional(),
   "phone": zod.string().optional(),
-  "dateOfBirth": zod.string().optional(),
-  "gender": zod.enum(["male", "female", "other"]).optional(),
   "notes": zod.string().optional()
 })
 
@@ -290,8 +282,6 @@ export const UpdatePatientResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
   "phone": zod.string().nullish(),
-  "dateOfBirth": zod.string().nullish(),
-  "gender": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 })
@@ -1051,9 +1041,9 @@ export const ReceivePurchaseOrderParams = zod.object({
 export const ReceivePurchaseOrderBody = zod.object({
   "items": zod.array(zod.object({
   "medicineId": zod.number(),
-  "batchId": zod.number().nullish(),
-  "batchNumber": zod.string().nullish(),
-  "expiryDate": zod.string().nullish()
+  "batchId": zod.number().nullish().describe('ID of an existing, non-expired batch for this medicine to add the received quantity into. Takes precedence over batchNumber.'),
+  "batchNumber": zod.string().nullish().describe('Lot number for a new batch, or to match\/merge into an existing batch with the same number.'),
+  "expiryDate": zod.coerce.date().nullish()
 })).optional()
 })
 

@@ -3446,7 +3446,8 @@ export const getReceivePurchaseOrderUrl = (id: number,) => {
 /**
  * @summary Mark purchase order as received (updates stock)
  */
-export const receivePurchaseOrder = async (id: number, receivePurchaseOrderInput?: BodyType<ReceivePurchaseOrderInput>, options?: RequestInit): Promise<PurchaseOrder> => {
+export const receivePurchaseOrder = async (id: number,
+    receivePurchaseOrderInput?: ReceivePurchaseOrderInput, options?: RequestInit): Promise<PurchaseOrder> => {
 
   return customFetch<PurchaseOrder>(getReceivePurchaseOrderUrl(id),
   {
@@ -3462,8 +3463,8 @@ export const receivePurchaseOrder = async (id: number, receivePurchaseOrderInput
 
 
 export const getReceivePurchaseOrderMutationOptions = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof receivePurchaseOrder>>, TError,{id: number; data?: BodyType<ReceivePurchaseOrderInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof receivePurchaseOrder>>, TError,{id: number; data?: BodyType<ReceivePurchaseOrderInput>}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof receivePurchaseOrder>>, TError,{id: number;data?: BodyType<ReceivePurchaseOrderInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof receivePurchaseOrder>>, TError,{id: number;data?: BodyType<ReceivePurchaseOrderInput>}, TContext> => {
 
 const mutationKey = ['receivePurchaseOrder'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -3475,7 +3476,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof receivePurchaseOrder>>, {id: number; data?: BodyType<ReceivePurchaseOrderInput>}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof receivePurchaseOrder>>, {id: number;data?: BodyType<ReceivePurchaseOrderInput>}> = (props) => {
           const {id,data} = props ?? {};
 
           return  receivePurchaseOrder(id,data,requestOptions)
@@ -3489,18 +3490,18 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type ReceivePurchaseOrderMutationResult = NonNullable<Awaited<ReturnType<typeof receivePurchaseOrder>>>
-    export type ReceivePurchaseOrderMutationBody = BodyType<ReceivePurchaseOrderInput>
+    export type ReceivePurchaseOrderMutationBody = BodyType<ReceivePurchaseOrderInput> | undefined
     export type ReceivePurchaseOrderMutationError = ErrorType<ErrorResponse>
 
     /**
  * @summary Mark purchase order as received (updates stock)
  */
 export const useReceivePurchaseOrder = <TError = ErrorType<ErrorResponse>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof receivePurchaseOrder>>, TError,{id: number; data?: BodyType<ReceivePurchaseOrderInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof receivePurchaseOrder>>, TError,{id: number;data?: BodyType<ReceivePurchaseOrderInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof receivePurchaseOrder>>,
         TError,
-        {id: number; data?: BodyType<ReceivePurchaseOrderInput>},
+        {id: number;data?: BodyType<ReceivePurchaseOrderInput>},
         TContext
       > => {
       return useMutation(getReceivePurchaseOrderMutationOptions(options));

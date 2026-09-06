@@ -53,6 +53,8 @@ export * from './purchaseOrderInput';
 export * from './purchaseOrderItem';
 export * from './purchaseOrderItemInput';
 export * from './purchaseOrderStatus';
+export * from './receivePurchaseOrderInput';
+export * from './receivePurchaseOrderItemInput';
 export * from './revenueByRange';
 export * from './revenueReport';
 export * from './salesByDay';

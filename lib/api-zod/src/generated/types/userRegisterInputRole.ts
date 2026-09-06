@@ -12,4 +12,6 @@ export type UserRegisterInputRole = typeof UserRegisterInputRole[keyof typeof Us
 export const UserRegisterInputRole = {
   admin: 'admin',
   pharmacist: 'pharmacist',
+  cashier: 'cashier',
+  viewer: 'viewer',
 } as const;

@@ -72,6 +72,8 @@ export type UserRegisterInputRole = typeof UserRegisterInputRole[keyof typeof Us
 export const UserRegisterInputRole = {
   admin: 'admin',
   pharmacist: 'pharmacist',
+  cashier: 'cashier',
+  viewer: 'viewer',
 } as const;
 
 export interface UserRegisterInput {
@@ -95,6 +97,8 @@ export type UserRole = typeof UserRole[keyof typeof UserRole];
 export const UserRole = {
   admin: 'admin',
   pharmacist: 'pharmacist',
+  cashier: 'cashier',
+  viewer: 'viewer',
 } as const;
 
 export interface User {
@@ -479,17 +483,10 @@ export interface PurchaseOrderInput {
 
 export interface ReceivePurchaseOrderItemInput {
   medicineId: number;
-  /**
-   * ID of an existing, non-expired batch for this medicine to add the received quantity into. Takes precedence over batchNumber.
-   * @nullable
-   */
+  /** ID of an existing, non-expired batch for this medicine to add the received quantity into. Takes precedence over batchNumber. */
   batchId?: number | null;
-  /**
-   * Lot number for a new batch, or to match/merge into an existing batch with the same number.
-   * @nullable
-   */
+  /** Lot number for a new batch, or to match/merge into an existing batch with the same number. */
   batchNumber?: string | null;
-  /** @nullable */
   expiryDate?: string | null;
 }
 
