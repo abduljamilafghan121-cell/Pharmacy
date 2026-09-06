@@ -448,8 +448,8 @@ export default function Login(): ReactElement {
                   <p style={{ color: theme.muted }} className="text-xs">
                     A password reset link has been sent to <strong>{forgotEmail}</strong>. The link expires in 1 hour.
                   </p>
-                  <p style={{ color: theme.muted }} className="text-xs mt-1">
-                    The email opens the web app — here, use the link's token directly.
+                  <p style={{ color: theme.text }} className="text-xs mt-1 font-medium">
+                    Open the email first, then paste the link or token below to continue.
                   </p>
                 </div>
                 <button
