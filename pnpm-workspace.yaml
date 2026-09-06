@@ -63,9 +63,11 @@ autoInstallPeers: false
 
 onlyBuiltDependencies:
   - '@swc/core'
+  - dtrace-provider
   - electron
   - esbuild
   - msw
+  - protobufjs
   - unrs-resolver
 
 overrides:
@@ -104,8 +106,10 @@ overrides:
 
 allowBuilds:
   core-js: true
+  dtrace-provider: true
   electron: true
   esbuild: true
+  protobufjs: true
 
 patchedDependencies:
   '@expo/cli@54.0.17': patches/@expo__cli@54.0.17.patch

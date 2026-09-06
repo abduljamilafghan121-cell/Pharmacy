@@ -12,6 +12,7 @@
   "private": true,
   "packageManager": "pnpm@11.9.0",
   "devDependencies": {
+    "eas-cli": "^23.2.0",
     "prettier": "^3.9.5",
     "typescript": "~5.9.3"
   }
