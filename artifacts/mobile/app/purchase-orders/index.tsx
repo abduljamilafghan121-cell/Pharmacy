@@ -1,5 +1,5 @@
 import { useColors } from '@/hooks/useColors';
-import { useCreatePurchaseOrder, useListMedicines, useListPurchaseOrders, useListSuppliers, getListPurchaseOrdersQueryKey } from '@workspace/api-client-react';
+import { customFetch, useCreatePurchaseOrder, useListMedicines, useListPurchaseOrders, useListSuppliers, getListPurchaseOrdersQueryKey, type MedicineUnit } from '@workspace/api-client-react';
 import { formatCurrency } from '@/lib/format';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -9,7 +9,17 @@ import { ActivityIndicator, FlatList, Modal, Platform, ScrollView, StyleSheet, T
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 
-type DraftItem = { medicineId: number; quantity: string; unitPrice: string };
+type DraftItem = { medicineId: number; quantity: string; unitPrice: string; unitId?: number };
+
+interface PriceHistoryRow {
+  supplierId: number | null;
+  supplierName: string | null;
+  unitPrice: string;
+  unitName: string | null;
+  quantity: number;
+  orderedAt: string | null;
+  status: string;
+}
 
 export default function PurchaseOrdersScreen() {
   const colors = useColors();
@@ -21,6 +31,7 @@ export default function PurchaseOrdersScreen() {
   const [createOpen, setCreateOpen] = useState(false);
   const [supplierId, setSupplierId] = useState('');
   const [items, setItems] = useState<DraftItem[]>([{ medicineId: 0, quantity: '', unitPrice: '' }]);
+  const [priceHistoryMap, setPriceHistoryMap] = useState<Record<number, PriceHistoryRow[]>>({});
 
   const { data: pos, isLoading, refetch } = useListPurchaseOrders({});
   const { data: suppliers } = useListSuppliers({});
@@ -51,6 +62,30 @@ export default function PurchaseOrdersScreen() {
   const addItem = () => setItems(prev => [...prev, { medicineId: 0, quantity: '', unitPrice: '' }]);
   const removeItem = (i: number) => setItems(prev => prev.filter((_, idx) => idx !== i));
   const updateItem = (i: number, patch: Partial<DraftItem>) => setItems(prev => prev.map((it, idx) => idx === i ? { ...it, ...patch } : it));
+
+  const getMedicineUnits = (medicine: { id: number; units?: MedicineUnit[] }): MedicineUnit[] => medicine.units ?? [];
+
+  // Recent purchase prices per medicine (cached for the session, like desktop).
+  const fetchPriceHistory = async (medicineId: number) => {
+    if (priceHistoryMap[medicineId]) return;
+    try {
+      const res = await customFetch<PriceHistoryRow[]>(`/api/purchase-orders/price-history?medicineId=${medicineId}`, { method: 'GET' });
+      if (Array.isArray(res)) setPriceHistoryMap(prev => ({ ...prev, [medicineId]: res }));
+    } catch { /* silent — price history is a convenience, not a blocker */ }
+  };
+
+  // Default to the base unit and pre-fill the unit cost with the base price.
+  const selectMedicine = (i: number, med: { id: number; price: string; units?: MedicineUnit[] }) => {
+    const units = getMedicineUnits(med);
+    const baseUnit = units.find(u => u.isBaseUnit) ?? units.find(u => u.conversionFactorToBase === 1) ?? units[0];
+    updateItem(i, { medicineId: med.id, unitId: baseUnit?.id, unitPrice: med.price });
+    fetchPriceHistory(med.id);
+  };
+
+  // Buying in larger packs costs proportionally more: price = base price × factor.
+  const selectUnit = (i: number, unit: MedicineUnit, medPrice: string) => {
+    updateItem(i, { unitId: unit.id, unitPrice: (parseFloat(medPrice) * unit.conversionFactorToBase).toFixed(2) });
+  };
 
   return (
     <View style={s.container}>
@@ -113,7 +148,10 @@ export default function PurchaseOrdersScreen() {
                 </ScrollView>
               </View>
               <Text style={[s.label, { marginTop: 16 }]}>Lines</Text>
-              {items.map((item, i) => (
+              {items.map((item, i) => {
+                const selectedMed = (medicines ?? []).find(m => m.id === item.medicineId);
+                const units = selectedMed ? getMedicineUnits(selectedMed) : [];
+                return (
                 <View key={i} style={s.draftItem}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
                     <Text style={{ fontSize: 12, fontFamily: 'Inter_600SemiBold', color: colors.mutedForeground }}>Line {i + 1}</Text>
@@ -122,23 +160,56 @@ export default function PurchaseOrdersScreen() {
                   <View style={s.select}>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ alignItems: 'center' }}>
                       {(medicines ?? []).slice(0, 20).map(med => (
-                        <TouchableOpacity key={med.id} onPress={() => updateItem(i, { medicineId: med.id })} style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 16, marginRight: 5, backgroundColor: item.medicineId === med.id ? colors.primary : colors.background }}>
+                        <TouchableOpacity key={med.id} onPress={() => selectMedicine(i, med)} style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 16, marginRight: 5, backgroundColor: item.medicineId === med.id ? colors.primary : colors.background }}>
                           <Text style={{ fontSize: 11, fontFamily: 'Inter_500Medium', color: item.medicineId === med.id ? '#fff' : colors.mutedForeground }}>{med.name}</Text>
                         </TouchableOpacity>
                       ))}
                     </ScrollView>
                   </View>
+                  {units.length > 0 && (
+                    <>
+                      <Text style={[s.label, { marginTop: 8 }]}>Packaging unit</Text>
+                      <View style={s.select}>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ alignItems: 'center' }}>
+                          {[...units].sort((a, b) => a.conversionFactorToBase - b.conversionFactorToBase).map(u => {
+                            const active = item.unitId === u.id;
+                            return (
+                              <TouchableOpacity key={u.id} onPress={() => selectUnit(i, u, selectedMed!.price)} style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 16, marginRight: 5, backgroundColor: active ? colors.primary : colors.background }}>
+                                <Text style={{ fontSize: 11, fontFamily: 'Inter_500Medium', color: active ? '#fff' : colors.mutedForeground }}>
+                                  {u.unitName} (×{u.conversionFactorToBase})
+                                </Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </ScrollView>
+                      </View>
+                    </>
+                  )}
+                  {!!selectedMed && (priceHistoryMap[selectedMed.id] ?? []).length > 0 && (
+                    <View style={{ marginTop: 8, borderRadius: 8, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background, padding: 8 }}>
+                      <Text style={{ fontSize: 10, fontFamily: 'Inter_600SemiBold', color: colors.mutedForeground, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 2 }}>Recent purchase prices</Text>
+                      {(priceHistoryMap[selectedMed.id] ?? []).slice(0, 3).map((h, idx) => (
+                        <View key={idx} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 2 }}>
+                          <Text style={{ fontSize: 11, fontFamily: 'Inter_400Regular', color: colors.mutedForeground, flex: 1, marginRight: 8 }} numberOfLines={1}>{h.supplierName ?? 'Unknown'}{h.orderedAt ? ` · ${new Date(h.orderedAt).toLocaleDateString()}` : ''}</Text>
+                          <Text style={{ fontSize: 11, fontFamily: 'Inter_600SemiBold', color: colors.foreground }}>
+                            {formatCurrency(h.unitPrice)}{h.unitName ? ` / ${h.unitName}` : ''}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
                   <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
                     <TextInput style={[s.inp, { flex: 1 }]} value={item.quantity} onChangeText={v => updateItem(i, { quantity: v })} placeholder="Qty" placeholderTextColor={colors.mutedForeground} keyboardType="numeric" />
                     <TextInput style={[s.inp, { flex: 1 }]} value={item.unitPrice} onChangeText={v => updateItem(i, { unitPrice: v })} placeholder="Unit cost" placeholderTextColor={colors.mutedForeground} keyboardType="numeric" />
                   </View>
                 </View>
-              ))}
+                );
+              })}
               <TouchableOpacity onPress={addItem} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 }}>
                 <Feather name="plus-circle" size={16} color={colors.primary} />
                 <Text style={{ fontSize: 13, fontFamily: 'Inter_500Medium', color: colors.primary }}>Add Line</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={s.submitBtn} onPress={() => createPO.mutate({ data: { supplierId: parseInt(supplierId), items: items.filter(it => it.medicineId > 0).map(it => ({ medicineId: it.medicineId, quantity: parseInt(it.quantity) || 1, unitPrice: it.unitPrice })) } })} disabled={createPO.isPending}>
+              <TouchableOpacity style={s.submitBtn} onPress={() => createPO.mutate({ data: { supplierId: parseInt(supplierId), items: items.filter(it => it.medicineId > 0).map(it => ({ medicineId: it.medicineId, quantity: parseInt(it.quantity) || 1, unitPrice: it.unitPrice, ...(it.unitId ? { unitId: it.unitId } : {}) })) } })} disabled={createPO.isPending}>
                 {createPO.isPending ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontFamily: 'Inter_600SemiBold', fontSize: 15 }}>Create Order</Text>}
               </TouchableOpacity>
               <TouchableOpacity onPress={() => setCreateOpen(false)} style={{ alignItems: 'center', paddingVertical: 14 }}>
