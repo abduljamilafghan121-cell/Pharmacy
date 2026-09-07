@@ -3,7 +3,7 @@ import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { useGetMe, useLoginUser, getGetMeQueryKey } from '@workspace/api-client-react'
 import type { User } from '@workspace/api-client-react'
 import { getToken, setToken as persistToken, notifyLogout } from '../lib/apiClient'
-import { rememberEmail, clearRecallEmails } from '../lib/emailRecall'
+import { rememberEmail } from '../lib/emailRecall'
 
 interface AuthContextType {
   user: User | null
@@ -56,9 +56,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
 
   const logout = (): void => {
     notifyLogout()
-    // Don't leave a trail of previously-used staff emails on a shared terminal
-    // after a deliberate sign-out.
-    clearRecallEmails()
+    // Remembered-email suggestions intentionally survive a logout so the
+    // "previously used accounts" dropdown keeps working on a shared terminal.
+    // Users who want it gone can clear it from the login screen's dropdown.
     tokenRef.current = null
     persistToken(null)
     setToken(null)
