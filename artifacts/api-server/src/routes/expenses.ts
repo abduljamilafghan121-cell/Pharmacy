@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, sql, and, gte, lte } from "drizzle-orm";
 import { db, expensesTable, usersTable, expenseCategoryEnum } from "@workspace/db";
 import { requireAuth, requireRole } from "../middlewares/auth";
 import { getDbErrorMessage } from "../lib/api-errors";
@@ -37,11 +37,20 @@ type ExpenseRowWithName = {
 
 // GET /expenses — full list (voided entries kept for the audit trail) plus a
 // summary of non-voided spending. Admin only, like the supplier ledger.
+// Optional `from` / `to` query params (YYYY-MM-DD) filter everything in the
+// response to that date range — entries and every summary figure.
 router.get(
   "/expenses",
   requireAuth,
   requireRole("admin"),
-  async (_req, res): Promise<void> => {
+  async (req, res): Promise<void> => {
+    const from = req.query["from"] as string | undefined;
+    const to = req.query["to"] as string | undefined;
+
+    const conditions = [];
+    if (from) conditions.push(gte(sql`DATE(${expensesTable.expenseDate})`, from));
+    if (to) conditions.push(lte(sql`DATE(${expensesTable.expenseDate})`, to));
+
     try {
       const rows = await db
         .select({
@@ -60,6 +69,7 @@ router.get(
         })
         .from(expensesTable)
         .leftJoin(usersTable, eq(usersTable.id, expensesTable.recordedBy))
+        .where(conditions.length ? and(...conditions) : undefined)
         .orderBy(desc(expensesTable.expenseDate), desc(expensesTable.id));
 
       const active = rows.filter((r) => !r.voidedAt);

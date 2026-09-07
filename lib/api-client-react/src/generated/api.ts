@@ -34,6 +34,7 @@ import type {
   GetSalesReportParams,
   HealthStatus,
   InventoryReport,
+  ListExpensesParams,
   ListMedicinesParams,
   ListPatientsParams,
   Medicine,
@@ -3737,20 +3738,27 @@ export const useCreateSupplierPayment = <TError = ErrorType<unknown>,
       return useMutation(getCreateSupplierPaymentMutationOptions(options));
     }
 
-export const getListExpensesUrl = () => {
+export const getListExpensesUrl = (params?: ListExpensesParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/expenses`
+  return stringifiedParams.length > 0 ? `/api/expenses?${stringifiedParams}` : `/api/expenses`
 }
 
 /**
  * @summary List expenses with summary totals (admin only)
  */
-export const listExpenses = async ( options?: RequestInit): Promise<ExpensesResponse> => {
+export const listExpenses = async (params?: ListExpensesParams, options?: RequestInit): Promise<ExpensesResponse> => {
 
-  return customFetch<ExpensesResponse>(getListExpensesUrl(),
+  return customFetch<ExpensesResponse>(getListExpensesUrl(params),
   {
     ...options,
     method: 'GET'
@@ -3763,23 +3771,23 @@ export const listExpenses = async ( options?: RequestInit): Promise<ExpensesResp
 
 
 
-export const getListExpensesQueryKey = () => {
+export const getListExpensesQueryKey = (params?: ListExpensesParams,) => {
     return [
-    `/api/expenses`
+    `/api/expenses`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getListExpensesQueryOptions = <TData = Awaited<ReturnType<typeof listExpenses>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listExpenses>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getListExpensesQueryOptions = <TData = Awaited<ReturnType<typeof listExpenses>>, TError = ErrorType<unknown>>(params?: ListExpensesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listExpenses>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getListExpensesQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getListExpensesQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listExpenses>>> = ({ signal }) => listExpenses({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listExpenses>>> = ({ signal }) => listExpenses(params, { signal, ...requestOptions });
 
 
 
@@ -3797,11 +3805,11 @@ export type ListExpensesQueryError = ErrorType<unknown>
  */
 
 export function useListExpenses<TData = Awaited<ReturnType<typeof listExpenses>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listExpenses>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ params?: ListExpensesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listExpenses>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getListExpensesQueryOptions(options)
+  const queryOptions = getListExpensesQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

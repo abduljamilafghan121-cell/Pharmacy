@@ -42,6 +42,39 @@ const METHOD_LABELS: Record<ExpenseMethod, string> = {
 
 const CATEGORY_ORDER: ExpenseCategory[] = Object.keys(CATEGORY_LABELS) as ExpenseCategory[]
 
+type RangePreset = 'all' | 'today' | '7d' | 'month' | 'custom'
+
+const RANGE_OPTIONS: Record<Exclude<RangePreset, 'custom'>, string> = {
+  all: 'All time',
+  today: 'Today',
+  '7d': 'Last 7 days',
+  month: 'This month'
+}
+
+const localISO = (d: Date): string => {
+  const p = (n: number): string => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
+function rangeForPreset(preset: RangePreset, customFrom: string, customTo: string): { from?: string; to?: string } {
+  const now = new Date()
+  if (preset === 'today') return { from: localISO(now), to: localISO(now) }
+  if (preset === '7d') {
+    const from = new Date(now)
+    from.setDate(now.getDate() - 6)
+    return { from: localISO(from), to: localISO(now) }
+  }
+  if (preset === 'month') {
+    const from = new Date(now.getFullYear(), now.getMonth(), 1)
+    return { from: localISO(from), to: localISO(now) }
+  }
+  if (preset === 'custom') {
+    if (!customFrom || !customTo) return {}
+    return { from: customFrom, to: customTo }
+  }
+  return {}
+}
+
 function AddExpenseModal({ onClose }: { onClose: () => void }): ReactElement {
   const { dark, showToast } = useUiStore()
   const theme = getTheme(dark)
@@ -213,7 +246,12 @@ function VoidExpenseModal({
 export default function Expenses(): ReactElement {
   const { dark, showToast } = useUiStore()
   const theme = getTheme(dark)
-  const { data, isLoading } = useListExpenses()
+  const [rangePreset, setRangePreset] = useState<RangePreset>('all')
+  const [customFrom, setCustomFrom] = useState('')
+  const [customTo, setCustomTo] = useState('')
+  const range = rangeForPreset(rangePreset, customFrom, customTo)
+  const rangeActive = !!range.from && !!range.to
+  const { data, isLoading } = useListExpenses(rangeActive ? { from: range.from, to: range.to } : undefined)
   const { data: settings } = usePharmacySettings()
   const [addOpen, setAddOpen] = useState(false)
   const [voidTarget, setVoidTarget] = useState<{ id: number; amount: string; category: string } | null>(null)
@@ -233,11 +271,14 @@ export default function Expenses(): ReactElement {
     })
   }, [entries, search, categoryFilter])
 
-  const hasActiveFilters = !!(search || categoryFilter !== 'all')
+  const hasActiveFilters = !!(search || categoryFilter !== 'all' || rangeActive)
 
   const clearFilters = (): void => {
     setSearch('')
     setCategoryFilter('all')
+    setRangePreset('all')
+    setCustomFrom('')
+    setCustomTo('')
   }
 
   const exportPdf = async (): Promise<void> => {
@@ -261,7 +302,7 @@ export default function Expenses(): ReactElement {
         recordedBy: e.recordedByName ?? `#${e.recordedById ?? ''}`
       }))
       const summaryRows = [
-        { label: 'Total (all time)', value: formatCurrency(parseFloat(data.summary.total), settings) },
+        { label: rangeActive ? 'Total in range' : 'Total (all time)', value: formatCurrency(parseFloat(data.summary.total), settings) },
         { label: 'This month', value: formatCurrency(parseFloat(data.summary.thisMonth), settings) },
         ...CATEGORY_ORDER.map((c) => ({
           label: CATEGORY_LABELS[c],
@@ -270,7 +311,7 @@ export default function Expenses(): ReactElement {
       ]
       await exportReportAsPdf({
         fileName: 'expenses-ledger',
-        title: 'Expenses Ledger',
+        title: `Expenses Ledger${rangeActive && range.from ? ` (${range.from}${range.to ? ` → ${range.to}` : ''})` : ''}`,
         pharmacy: settings,
         columns,
         rows,
@@ -309,7 +350,7 @@ export default function Expenses(): ReactElement {
           <div style={{ background: theme.card, border: `1px solid ${theme.border}` }} className="rounded-xl p-4 flex items-center justify-between">
             <div>
               <p style={{ color: theme.muted }} className="text-xs mb-1">
-                Total Expenses
+                {rangeActive ? 'Total In Range' : 'Total Expenses'}
               </p>
               <p style={{ ...mono, color: theme.text }} className="text-lg font-semibold">
                 {summary.total}
@@ -381,10 +422,12 @@ export default function Expenses(): ReactElement {
               <ReceiptText size={22} />
             </div>
             <p style={{ color: theme.text }} className="text-base font-medium">
-              No expenses recorded yet
+              {rangeActive ? 'No expenses in this date range' : 'No expenses recorded yet'}
             </p>
             <p style={{ color: theme.muted }} className="text-sm mt-1 max-w-sm">
-              Rent, utilities, salaries and other business costs will show here once you record your first expense.
+              {rangeActive
+                ? 'Try a wider date range, or clear the filters.'
+                : 'Rent, utilities, salaries and other business costs will show here once you record your first expense.'}
             </p>
             <button
               onClick={() => setAddOpen(true)}
@@ -431,6 +474,38 @@ export default function Expenses(): ReactElement {
                   </option>
                 ))}
               </select>
+              <select
+                value={rangePreset}
+                onChange={(e) => setRangePreset(e.target.value as RangePreset)}
+                style={{ background: theme.cardAlt, border: `1px solid ${theme.border}`, color: theme.text }}
+                className="text-sm rounded-lg px-3 py-2 outline-none"
+              >
+                {(Object.keys(RANGE_OPTIONS) as (keyof typeof RANGE_OPTIONS)[]).map((k) => (
+                  <option key={k} value={k}>
+                    {RANGE_OPTIONS[k]}
+                  </option>
+                ))}
+                <option value="custom">Custom range…</option>
+              </select>
+              {rangePreset === 'custom' && (
+                <>
+                  <input
+                    type="date"
+                    value={customFrom}
+                    onChange={(e) => setCustomFrom(e.target.value)}
+                    style={{ background: theme.cardAlt, border: `1px solid ${theme.border}`, color: theme.text }}
+                    className="text-sm rounded-lg px-3 py-2 outline-none"
+                  />
+                  <span style={{ color: theme.muted }} className="text-sm">to</span>
+                  <input
+                    type="date"
+                    value={customTo}
+                    onChange={(e) => setCustomTo(e.target.value)}
+                    style={{ background: theme.cardAlt, border: `1px solid ${theme.border}`, color: theme.text }}
+                    className="text-sm rounded-lg px-3 py-2 outline-none"
+                  />
+                </>
+              )}
               <button
                 onClick={exportPdf}
                 disabled={exporting}
@@ -454,6 +529,10 @@ export default function Expenses(): ReactElement {
             {hasActiveFilters && (
               <p style={{ color: theme.muted }} className="text-xs py-3 px-4">
                 Showing {filteredEntries.length} of {entries.length} expenses
+                {rangeActive && range.from && range.to && (
+                  <> · {range.from === range.to ? range.from : `${range.from} → ${range.to}`}</>
+                )}
+                {rangeActive && summary && <> · Total in range: {summary.total}</>}
               </p>
             )}
 

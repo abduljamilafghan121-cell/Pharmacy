@@ -41,6 +41,39 @@ const METHOD_LABELS: Record<ExpenseMethod, string> = {
   credit: 'Credit',
 };
 
+type RangePreset = 'all' | 'today' | '7d' | 'month' | 'custom';
+
+const RANGE_LABELS: Record<Exclude<RangePreset, 'custom'>, string> = {
+  all: 'All time',
+  today: 'Today',
+  '7d': '7 days',
+  month: 'This month',
+};
+
+const localISO = (d: Date): string => {
+  const p = (n: number): string => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+};
+
+function rangeForPreset(preset: RangePreset, customFrom: string, customTo: string): { from?: string; to?: string } {
+  const now = new Date();
+  if (preset === 'today') return { from: localISO(now), to: localISO(now) };
+  if (preset === '7d') {
+    const from = new Date(now);
+    from.setDate(now.getDate() - 6);
+    return { from: localISO(from), to: localISO(now) };
+  }
+  if (preset === 'month') {
+    const from = new Date(now.getFullYear(), now.getMonth(), 1);
+    return { from: localISO(from), to: localISO(now) };
+  }
+  if (preset === 'custom') {
+    if (!customFrom || !customTo) return {};
+    return { from: customFrom, to: customTo };
+  }
+  return {};
+}
+
 export default function ExpensesScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -48,7 +81,13 @@ export default function ExpensesScreen() {
   const qc = useQueryClient();
   const { user } = useAuth();
 
-  const { data, isLoading, refetch } = useListExpenses();
+  const [rangePreset, setRangePreset] = useState<RangePreset>('all');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
+  const range = rangeForPreset(rangePreset, customFrom, customTo);
+  const rangeActive = !!range.from && !!range.to;
+
+  const { data, isLoading, refetch } = useListExpenses(rangeActive ? { from: range.from, to: range.to } : undefined);
   const entries = data?.entries ?? [];
   const summary = data?.summary;
 
@@ -227,7 +266,7 @@ export default function ExpensesScreen() {
             <>
               <Text style={s.sub}>Business spending — {formatCurrency(summary.thisMonth)} this month</Text>
               <View style={s.statsRow}>
-                <View style={s.statChip}><Text style={s.statVal}>{formatCurrency(summary.total)}</Text><Text style={s.statLbl}>ALL TIME</Text></View>
+                <View style={s.statChip}><Text style={s.statVal}>{formatCurrency(summary.total)}</Text><Text style={s.statLbl}>{rangeActive ? 'IN RANGE' : 'ALL TIME'}</Text></View>
                 <View style={s.statChip}><Text style={s.statVal}>{formatCurrency(summary.thisMonth)}</Text><Text style={s.statLbl}>THIS MONTH</Text></View>
                 <View style={s.statChip}><Text style={s.statVal}>{entries.filter((e) => !e.voided).length}</Text><Text style={s.statLbl}>ENTRIES</Text></View>
               </View>
@@ -240,6 +279,39 @@ export default function ExpensesScreen() {
             <Text style={{ color: '#fff', fontFamily: 'Inter_600SemiBold', fontSize: 14 }}>+ Record Expense</Text>
           </TouchableOpacity>
         </View>
+
+        {(summary || entries.length > 0) && (
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>Date range</Text>
+            <View style={s.chipRow}>
+              {(Object.keys(RANGE_LABELS) as (keyof typeof RANGE_LABELS)[]).map((k) => (
+                <TouchableOpacity
+                  key={k}
+                  onPress={() => setRangePreset(k)}
+                  style={[s.chip, { backgroundColor: rangePreset === k ? colors.primary : colors.secondary, borderColor: rangePreset === k ? colors.primary : colors.border }]}
+                >
+                  <Text style={[s.chipText, { color: rangePreset === k ? (colors.primaryForeground ?? '#fff') : colors.mutedForeground }]}>
+                    {RANGE_LABELS[k]}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity
+                onPress={() => setRangePreset('custom')}
+                style={[s.chip, { backgroundColor: rangePreset === 'custom' ? colors.primary : colors.secondary, borderColor: rangePreset === 'custom' ? colors.primary : colors.border }]}
+              >
+                <Text style={[s.chipText, { color: rangePreset === 'custom' ? (colors.primaryForeground ?? '#fff') : colors.mutedForeground }]}>Custom</Text>
+              </TouchableOpacity>
+            </View>
+            {rangePreset === 'custom' && (
+              <View>
+                <Text style={s.label}>From (YYYY-MM-DD)</Text>
+                <TextInput style={s.inp} value={customFrom} onChangeText={setCustomFrom} placeholder="2026-09-01" placeholderTextColor={colors.mutedForeground} />
+                <Text style={s.label}>To (YYYY-MM-DD)</Text>
+                <TextInput style={s.inp} value={customTo} onChangeText={setCustomTo} placeholder="2026-09-07" placeholderTextColor={colors.mutedForeground} />
+              </View>
+            )}
+          </View>
+        )}
 
         {(summary || entries.length > 0) && (
           <View style={s.section}>
@@ -271,14 +343,24 @@ export default function ExpensesScreen() {
         )}
 
         <View style={s.section}>
-          <Text style={s.sectionTitle}>{catFilter === 'all' ? 'All expenses' : CATEGORY_LABELS[catFilter]}</Text>
+          <Text style={s.sectionTitle}>
+            {rangeActive
+              ? `Expenses · ${range.from} → ${range.to}`
+              : catFilter === 'all'
+                ? 'All expenses'
+                : CATEGORY_LABELS[catFilter]}
+          </Text>
           {isLoading ? (
             <ActivityIndicator style={{ marginVertical: 24 }} color={colors.primary} />
           ) : filteredEntries.length === 0 ? (
             <View style={s.empty}>
               <Feather name="credit-card" size={48} color={colors.border} />
               <Text style={{ color: colors.mutedForeground, fontFamily: 'Inter_500Medium', marginTop: 12 }}>
-                {entries.length === 0 ? 'No expenses recorded yet' : 'No expenses in this category'}
+                {entries.length === 0
+                  ? rangeActive
+                    ? 'No expenses in this date range'
+                    : 'No expenses recorded yet'
+                  : 'No expenses in this category'}
               </Text>
             </View>
           ) : (

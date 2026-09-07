@@ -1137,6 +1137,11 @@ export const CreateSupplierPaymentResponse = zod.object({
 /**
  * @summary List expenses with summary totals (admin only)
  */
+export const ListExpensesQueryParams = zod.object({
+  "from": zod.date().optional().describe('Only include expenses on or after this date (YYYY-MM-DD)'),
+  "to": zod.date().optional().describe('Only include expenses on or before this date (YYYY-MM-DD)')
+})
+
 export const ListExpensesResponse = zod.object({
   "entries": zod.array(zod.object({
   "id": zod.number(),

@@ -26,6 +26,7 @@ export * from './getRevenueReportParams';
 export * from './getSalesReportParams';
 export * from './healthStatus';
 export * from './inventoryReport';
+export * from './listExpensesParams';
 export * from './listMedicinesParams';
 export * from './listPatientsParams';
 export * from './medicine';

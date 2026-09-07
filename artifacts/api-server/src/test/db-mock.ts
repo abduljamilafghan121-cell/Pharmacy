@@ -1,4 +1,4 @@
-import { newDb, type IMemoryDb } from "pg-mem";
+import { newDb, DataType, type IMemoryDb } from "pg-mem";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { isTable, getTableName } from "drizzle-orm/table";
 import { getTableColumns } from "drizzle-orm/utils";
@@ -263,6 +263,25 @@ let bundlePromise: Promise<TestDbBundle> | null = null;
 
 function createBundle(): Promise<TestDbBundle> {
   const mem = newDb();
+
+  // pg-mem implements very few native functions. Real Postgres' date(timestamptz)
+  // is used by the reports/expenses date-range filters (DATE(col)), so register is
+  // here to mirror the production behaviour. On postgres the session timezone rules;
+  // pg-mem keeps values in UTC, matching how date-only inputs are stored (UTC midnight).
+  for (const argType of [DataType.timestamptz, DataType.timestamp, DataType.text] as const) {
+    mem.public.registerFunction({
+      name: "date",
+      args: [argType],
+      returns: DataType.date,
+      implementation: (value: unknown) => {
+        if (value == null) return null;
+        const d = value instanceof Date ? value : new Date(String(value));
+        if (Number.isNaN(d.getTime())) return null;
+        return d.toISOString().slice(0, 10);
+      },
+    });
+  }
+
   const { Pool } = mem.adapters.createPg();
 
   // drizzle-orm's node-postgres driver is pickier than the plain `pg` API:

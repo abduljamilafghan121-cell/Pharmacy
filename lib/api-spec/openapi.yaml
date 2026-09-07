@@ -1150,6 +1150,19 @@ paths:
       operationId: listExpenses
       tags: [expenses]
       summary: List expenses with summary totals (admin only)
+      parameters:
+        - name: from
+          in: query
+          description: Only include expenses on or after this date (YYYY-MM-DD)
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          description: Only include expenses on or before this date (YYYY-MM-DD)
+          schema:
+            type: string
+            format: date
       responses:
         "200":
           description: Expenses ledger with summary

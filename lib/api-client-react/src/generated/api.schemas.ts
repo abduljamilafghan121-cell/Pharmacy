@@ -730,6 +730,17 @@ categoryId?: number;
 prescriptionRequired?: boolean;
 };
 
+export type ListExpensesParams = {
+/**
+ * Only include expenses on or after this date (YYYY-MM-DD)
+ */
+from?: string;
+/**
+ * Only include expenses on or before this date (YYYY-MM-DD)
+ */
+to?: string;
+};
+
 export type GetSalesReportParams = {
 from?: string;
 to?: string;
