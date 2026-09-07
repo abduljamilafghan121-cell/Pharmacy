@@ -62,6 +62,8 @@ interface UiState {
 export const SCREEN_ROLES: Partial<Record<Screen, string[]>> = {
   'supplier-ledger': ['admin'],
   expenses: ['admin'],
+  'purchase-orders': ['admin', 'pharmacist'],
+  'new-sale': ['admin', 'pharmacist', 'cashier'],
   users: ['admin'],
   'audit-log': ['admin'],
   'cash-register': ['admin', 'pharmacist', 'cashier'],

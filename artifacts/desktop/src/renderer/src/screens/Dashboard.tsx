@@ -240,13 +240,15 @@ export default function Dashboard(): ReactElement {
         }}
         className="rounded-xl p-4 flex items-center gap-2.5 animate-fade-up"
       >
-        <button
-          onClick={() => setScreen('new-sale')}
-          style={{ background: 'linear-gradient(135deg, #22B57F 0%, #0E8A64 100%)' }}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-white text-sm font-semibold transition-transform active:scale-[0.98]"
-        >
-          <Plus size={15} /> New Sale
-        </button>
+        {['admin', 'pharmacist', 'cashier'].includes(user?.role ?? '') && (
+          <button
+            onClick={() => setScreen('new-sale')}
+            style={{ background: 'linear-gradient(135deg, #22B57F 0%, #0E8A64 100%)' }}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-white text-sm font-semibold transition-transform active:scale-[0.98]"
+          >
+            <Plus size={15} /> New Sale
+          </button>
+        )}
         <button
           onClick={() => setScreen('prescriptions')}
           style={{ background: theme.primarySoft, color: theme.primaryText }}

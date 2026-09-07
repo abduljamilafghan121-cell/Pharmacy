@@ -5,6 +5,7 @@ import { useListOrders, type Order } from '@workspace/api-client-react'
 import { useUiStore } from '../store/uiStore'
 import { getTheme, mono, serif } from '../theme'
 import { usePharmacySettings, formatCurrency } from '../hooks/usePharmacySettings'
+import { useAuth } from '../hooks/useAuth'
 import SaleDetail from '../components/SaleDetail'
 import Loading from '../components/Loading'
 
@@ -41,6 +42,8 @@ function Pill({ label, kind, theme }: { label: string; kind: 'ok' | 'low' | 'exp
 export default function Sales(): ReactElement {
   const { dark, setScreen, pendingSaleDetailId, setPendingSaleDetailId } = useUiStore()
   const theme = getTheme(dark)
+  const { user } = useAuth()
+  const canSell = !!user && ['admin', 'pharmacist', 'cashier'].includes(user.role)
   const { data: settings } = usePharmacySettings()
   const { data: orders = [], isLoading } = useListOrders()
 
@@ -97,14 +100,16 @@ export default function Sales(): ReactElement {
             History of all counter sales and transactions
           </p>
         </div>
-        <button
-          onClick={() => setScreen('new-sale')}
-          style={{ background: theme.primary, color: '#fff' }}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium"
-        >
-          <Plus size={14} />
-          New Sale
-        </button>
+        {canSell && (
+          <button
+            onClick={() => setScreen('new-sale')}
+            style={{ background: theme.primary, color: '#fff' }}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium"
+          >
+            <Plus size={14} />
+            New Sale
+          </button>
+        )}
       </div>
 
       <div
@@ -192,13 +197,15 @@ export default function Sales(): ReactElement {
             <p style={{ color: theme.muted }} className="text-sm">
               No sales yet.
             </p>
-            <button
-              onClick={() => setScreen('new-sale')}
-              style={{ background: theme.primary, color: '#fff' }}
-              className="mt-1 px-3 py-1.5 rounded-lg text-xs font-medium"
-            >
-              Process first sale
-            </button>
+            {canSell && (
+              <button
+                onClick={() => setScreen('new-sale')}
+                style={{ background: theme.primary, color: '#fff' }}
+                className="mt-1 px-3 py-1.5 rounded-lg text-xs font-medium"
+              >
+                Process first sale
+              </button>
+            )}
           </div>
         ) : filtered.length === 0 ? (
           <div className="py-12 flex flex-col items-center gap-2">

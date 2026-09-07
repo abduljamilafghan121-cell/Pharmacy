@@ -52,7 +52,7 @@ const navItems: NavItem[] = [
   { label: "Medicines", href: "/medicines", icon: Pill, roles: ["admin", "pharmacist", "viewer"] },
   { label: "Patients", href: "/patients", icon: Users, roles: ["admin", "pharmacist", "cashier"] },
   { label: "Suppliers", href: "/suppliers", icon: Truck, roles: ["admin", "pharmacist", "viewer"] },
-  { label: "Purchase Orders", href: "/purchase-orders", icon: PackageSearch, roles: ["admin", "pharmacist", "viewer"] },
+  { label: "Purchase Orders", href: "/purchase-orders", icon: PackageSearch, roles: ["admin", "pharmacist"] },
   { label: "Supplier Ledger", href: "/supplier-ledger", icon: BookOpen, roles: ["admin"] },
   { label: "Supplier Returns", href: "/supplier-returns", icon: RotateCcw, roles: ["admin", "pharmacist"] },
   { label: "Cash Register", href: "/cash-register", icon: CreditCard, roles: ["admin", "pharmacist", "cashier"] },

@@ -125,6 +125,7 @@ export default function MedicineDetail(): ReactElement {
   const isLowStock = medicine.quantity > 0 && medicine.quantity <= 10
   const isExpired = Boolean(medicine.expiryDate && medicine.expiryDate < new Date().toISOString().slice(0, 10))
   const canEdit = user?.role === 'admin' || user?.role === 'pharmacist'
+  const canSell = !!user && ['admin', 'pharmacist', 'cashier'].includes(user.role)
   const units = medicine.units
   const row = medicine as MedicineDetailRow
 
@@ -244,17 +245,19 @@ export default function MedicineDetail(): ReactElement {
           )}
 
           {/* Quick sale link */}
-          <button
-            disabled={isExpired || isOutOfStock}
-            onClick={() => {
-              useUiStore.getState().setPendingCheckoutMedicineId(medicine.id)
-              setScreen('new-sale')
-            }}
-            style={{ background: 'linear-gradient(135deg, #22B57F 0%, #0E8A64 100%)', opacity: isExpired || isOutOfStock ? 0.5 : 1 }}
-            className="flex items-center justify-center gap-2 rounded-lg py-2.5 text-white text-sm font-semibold mb-3 transition-all duration-150 hover:brightness-110 hover:shadow-lg active:scale-[0.98] disabled:active:scale-100 disabled:hover:scale-100 disabled:hover:brightness-100"
-          >
-            <ShoppingCart size={15} /> Add to Checkout
-          </button>
+          {canSell && (
+            <button
+              disabled={isExpired || isOutOfStock}
+              onClick={() => {
+                useUiStore.getState().setPendingCheckoutMedicineId(medicine.id)
+                setScreen('new-sale')
+              }}
+              style={{ background: 'linear-gradient(135deg, #22B57F 0%, #0E8A64 100%)', opacity: isExpired || isOutOfStock ? 0.5 : 1 }}
+              className="flex items-center justify-center gap-2 rounded-lg py-2.5 text-white text-sm font-semibold mb-3 transition-all duration-150 hover:brightness-110 hover:shadow-lg active:scale-[0.98] disabled:active:scale-100 disabled:hover:scale-100 disabled:hover:brightness-100"
+            >
+              <ShoppingCart size={15} /> Add to Checkout
+            </button>
+          )}
 
           {/* Admin actions */}
           {canEdit && (

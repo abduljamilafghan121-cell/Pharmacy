@@ -163,7 +163,7 @@ function Router() {
           <ProtectedRoute component={SupplierLedger} roles={['admin']} />
         </Route>
         <Route path="/purchase-orders">
-          <ProtectedRoute component={PurchaseOrders} />
+          <ProtectedRoute component={PurchaseOrders} roles={['admin', 'pharmacist']} />
         </Route>
         <Route path="/reports">
           <ProtectedRoute component={Reports} />
