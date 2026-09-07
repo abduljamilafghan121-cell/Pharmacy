@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import bcrypt from "bcryptjs";
 import { randomBytes } from "crypto";
-import { eq, and, gt } from "drizzle-orm";
+import { eq, and, gt, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db, usersTable } from "@workspace/db";
 import { RegisterUserBody, LoginUserBody } from "@workspace/api-zod";
@@ -27,8 +27,19 @@ router.post("/auth/register", async (req, res): Promise<void> => {
   logger.info({ email }, "register: validation passed, checking for existing user");
 
   try {
-    const [existing] = await db.select().from(usersTable).where(eq(usersTable.email, email));
+    const [existing] = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.email, email));
     if (existing) {
+      res.status(409).json({ error: "An account with this email already exists." });
+      return;
+    }
+
+    // Registration is only for the very first admin during initial setup —
+    // once any account exists it must be closed, otherwise anyone could walk
+    // in and register themselves as an admin.
+    const [userCountRow] = await db
+      .select({ count: sql<number>`cast(count(*) as int)` })
+      .from(usersTable);
+    if ((userCountRow?.count ?? 0) > 0) {
       logger.warn({ email }, "register: public registration blocked after initial setup");
       res.status(403).json({ error: "Public registration is closed. Ask an administrator to create your account." });
       return;

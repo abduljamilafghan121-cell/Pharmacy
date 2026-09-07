@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq, sql } from "drizzle-orm";
 import { db, stocktakesTable, stocktakeItemsTable, medicinesTable, usersTable } from "@workspace/db";
 import { z } from "zod";
-import { requireAuth } from "../middlewares/auth";
+import { requireAuth, requireRole } from "../middlewares/auth";
 import { logAudit } from "../lib/audit";
 import { getDbErrorMessage } from "../lib/api-errors";
 
@@ -38,7 +38,7 @@ router.get("/stocktakes", requireAuth, async (req, res): Promise<void> => {
 });
 
 // Create a new stocktake — seeds items from current medicine stock
-router.post("/stocktakes", requireAuth, async (req, res): Promise<void> => {
+router.post("/stocktakes", requireAuth, requireRole("admin", "pharmacist"), async (req, res): Promise<void> => {
   const bodySchema = z.object({
     reference: z.string().trim().min(1).optional(),
     notes: z.string().optional(),
@@ -108,7 +108,7 @@ router.get("/stocktakes/:id", requireAuth, async (req, res): Promise<void> => {
 });
 
 // Update counted quantity for a single item
-router.patch("/stocktakes/:id/items/:itemId", requireAuth, async (req, res): Promise<void> => {
+router.patch("/stocktakes/:id/items/:itemId", requireAuth, requireRole("admin", "pharmacist"), async (req, res): Promise<void> => {
   const stocktakeId = parseInt(paramId(req.params.id), 10);
   const itemId = parseInt(paramId(req.params.itemId), 10);
   const bodySchema = z.object({
@@ -141,7 +141,7 @@ router.patch("/stocktakes/:id/items/:itemId", requireAuth, async (req, res): Pro
 });
 
 // Finalize — apply all counted quantities to medicine stock and lock the stocktake
-router.post("/stocktakes/:id/finalize", requireAuth, async (req, res): Promise<void> => {
+router.post("/stocktakes/:id/finalize", requireAuth, requireRole("admin", "pharmacist"), async (req, res): Promise<void> => {
   const id = parseInt(paramId(req.params.id), 10);
   if (!id) { res.status(400).json({ error: "Invalid ID." }); return; }
 

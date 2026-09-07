@@ -7,7 +7,7 @@ import {
   CreateOrderBody, UpdateOrderStatusBody,
   GetOrderParams, UpdateOrderStatusParams,
 } from "@workspace/api-zod";
-import { requireAuth } from "../middlewares/auth";
+import { requireAuth, requireRole } from "../middlewares/auth";
 import { logAudit } from "../lib/audit";
 
 const router: IRouter = Router();
@@ -57,7 +57,7 @@ const OrderItemInputExtended = z.object({
   sig: z.string().max(500).optional(),
 });
 
-router.post("/orders", requireAuth, async (req, res): Promise<void> => {
+router.post("/orders", requireAuth, requireRole("admin", "pharmacist", "cashier"), async (req, res): Promise<void> => {
   const parsed = CreateOrderBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -372,7 +372,7 @@ router.get("/orders/:id", requireAuth, async (req, res): Promise<void> => {
   res.json({ ...order, items });
 });
 
-router.patch("/orders/:id/status", requireAuth, async (req, res): Promise<void> => {
+router.patch("/orders/:id/status", requireAuth, requireRole("admin", "pharmacist", "cashier"), async (req, res): Promise<void> => {
   const params = UpdateOrderStatusParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -467,7 +467,7 @@ const ReturnItemBody = z.object({
   reason: z.string().optional(),
 });
 
-router.post("/orders/:id/items/:itemId/return", requireAuth, async (req, res): Promise<void> => {
+router.post("/orders/:id/items/:itemId/return", requireAuth, requireRole("admin", "pharmacist", "cashier"), async (req, res): Promise<void> => {
   const params = ReturnItemParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
   const body = ReturnItemBody.safeParse(req.body);

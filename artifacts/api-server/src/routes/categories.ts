@@ -8,7 +8,7 @@ import { logAudit } from "../lib/audit";
 
 const router: IRouter = Router();
 
-router.get("/categories", async (_req, res): Promise<void> => {
+router.get("/categories", requireAuth, async (_req, res): Promise<void> => {
   try {
     const rows = await db.select().from(categoriesTable).orderBy(categoriesTable.name);
     res.json(rows);

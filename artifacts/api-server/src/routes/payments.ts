@@ -2,12 +2,12 @@ import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { db, paymentsTable, ordersTable } from "@workspace/db";
 import { CreatePaymentBody, GetPaymentParams } from "@workspace/api-zod";
-import { requireAuth } from "../middlewares/auth";
+import { requireAuth, requireRole } from "../middlewares/auth";
 import { logAudit } from "../lib/audit";
 
 const router: IRouter = Router();
 
-router.post("/payments", requireAuth, async (req, res): Promise<void> => {
+router.post("/payments", requireAuth, requireRole("admin", "pharmacist", "cashier"), async (req, res): Promise<void> => {
   const parsed = CreatePaymentBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });

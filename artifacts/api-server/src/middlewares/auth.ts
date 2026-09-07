@@ -52,16 +52,20 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     const decoded = jwt.verify(token, JWT_SECRET) as AuthPayload;
 
     // A JWT can stay valid for up to 7 days — without this check, deactivating
-    // a staff account wouldn't take effect until their token happened to
-    // expire. This is a single indexed lookup by primary key, so the cost is
-    // small relative to the correctness it buys.
-    const [user] = await db.select({ isActive: usersTable.isActive }).from(usersTable).where(eq(usersTable.id, decoded.userId));
+    // a staff account or changing their role wouldn't take effect until their
+    // token happened to expire. The DB is the source of truth for both values,
+    // so either change applies on the very next request. This is a single
+    // indexed lookup by primary key, so the cost is small relative to the
+    // correctness it buys.
+    const [user] = await db.select({ isActive: usersTable.isActive, role: usersTable.role }).from(usersTable).where(eq(usersTable.id, decoded.userId));
     if (!user || !user.isActive) {
       res.status(401).json({ error: "This account is no longer active." });
       return;
     }
 
-    req.auth = decoded;
+    // The token only proves identity; the current role always comes from the
+    // DB so demotions/promotions apply immediately instead of at token expiry.
+    req.auth = { userId: decoded.userId, role: user.role };
     next();
   } catch {
     res.status(401).json({ error: "Invalid or expired token" });
