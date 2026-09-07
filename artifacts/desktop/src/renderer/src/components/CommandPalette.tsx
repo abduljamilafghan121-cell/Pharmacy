@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Search, LayoutDashboard, Package, ShoppingCart, Settings, Cog, Sun, Moon, DollarSign, Receipt, Pill, Users, Truck, FileText, ClipboardList, BookOpen, UserCog, Undo2, ShieldCheck, FileCheck, History, BarChart3, ClipboardCheck, Zap, Lock, CornerDownLeft } from 'lucide-react'
+import { Search, LayoutDashboard, Package, ShoppingCart, Settings, Cog, Sun, Moon, DollarSign, Receipt, Pill, Users, Truck, FileText, ClipboardList, BookOpen, UserCog, Undo2, ShieldCheck, FileCheck, History, BarChart3, ClipboardCheck, Zap, Lock, CornerDownLeft, ReceiptText } from 'lucide-react'
 import { useUiStore, canAccessScreen, type Screen } from '../store/uiStore'
 import { getTheme } from '../theme'
 import { useAuth } from '../hooks/useAuth'
@@ -34,6 +34,7 @@ export default function CommandPalette(): ReactElement | null {
       { label: 'Go to Suppliers', icon: Truck, screen: 'suppliers' as Screen, run: () => setScreen('suppliers') },
       { label: 'Go to Purchase Orders', icon: ClipboardList, screen: 'purchase-orders' as Screen, run: () => setScreen('purchase-orders') },
       { label: 'Go to Supplier Ledger', icon: BookOpen, screen: 'supplier-ledger' as Screen, run: () => setScreen('supplier-ledger') },
+      { label: 'Go to Expenses', icon: ReceiptText, screen: 'expenses' as Screen, run: () => setScreen('expenses') },
       { label: 'Go to Supplier Returns', icon: Undo2, screen: 'supplier-returns' as Screen, run: () => setScreen('supplier-returns') },
       { label: 'Go to Insurance Claims', icon: ShieldCheck, screen: 'insurance-claims' as Screen, run: () => setScreen('insurance-claims') },
       { label: 'Go to Pre-Authorizations', icon: FileCheck, screen: 'pre-authorizations' as Screen, run: () => setScreen('pre-authorizations') },

@@ -1135,6 +1135,78 @@ export const CreateSupplierPaymentResponse = zod.object({
 
 
 /**
+ * @summary List expenses with summary totals (admin only)
+ */
+export const ListExpensesResponse = zod.object({
+  "entries": zod.array(zod.object({
+  "id": zod.number(),
+  "category": zod.enum(['rent', 'utilities', 'salaries', 'supplies', 'maintenance', 'marketing', 'transport', 'insurance', 'miscellaneous']),
+  "description": zod.string(),
+  "amount": zod.string(),
+  "method": zod.enum(['cash', 'bank', 'cheque', 'transfer', 'credit']),
+  "expenseDate": zod.coerce.date(),
+  "note": zod.string().nullish(),
+  "recordedById": zod.number().optional(),
+  "recordedByName": zod.string().nullish(),
+  "createdAt": zod.coerce.date().optional(),
+  "voided": zod.boolean().optional(),
+  "voidReason": zod.string().nullish()
+})),
+  "summary": zod.object({
+  "total": zod.string(),
+  "thisMonth": zod.string(),
+  "byCategory": zod.record(zod.string(), zod.string())
+})
+})
+
+
+/**
+ * @summary Record a business expense (admin only)
+ */
+export const CreateExpenseBody = zod.object({
+  "category": zod.enum(['rent', 'utilities', 'salaries', 'supplies', 'maintenance', 'marketing', 'transport', 'insurance', 'miscellaneous']),
+  "description": zod.string(),
+  "amount": zod.string(),
+  "method": zod.enum(['cash', 'bank', 'cheque', 'transfer', 'credit']).optional(),
+  "expenseDate": zod.coerce.date().nullish(),
+  "note": zod.string().nullish()
+})
+
+export const CreateExpenseResponse = zod.object({
+  "id": zod.number(),
+  "category": zod.enum(['rent', 'utilities', 'salaries', 'supplies', 'maintenance', 'marketing', 'transport', 'insurance', 'miscellaneous']),
+  "description": zod.string(),
+  "amount": zod.string(),
+  "method": zod.enum(['cash', 'bank', 'cheque', 'transfer', 'credit']),
+  "expenseDate": zod.coerce.date(),
+  "note": zod.string().nullish(),
+  "recordedById": zod.number().optional(),
+  "recordedByName": zod.string().nullish(),
+  "createdAt": zod.coerce.date().optional(),
+  "voided": zod.boolean().optional(),
+  "voidReason": zod.string().nullish()
+})
+
+
+/**
+ * @summary Void a mistakenly-recorded expense (admin only)
+ */
+export const VoidExpenseParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const VoidExpenseBody = zod.object({
+  "reason": zod.string()
+})
+
+export const VoidExpenseResponse = zod.object({
+  "id": zod.number(),
+  "voidedAt": zod.coerce.date(),
+  "voidReason": zod.string()
+})
+
+
+/**
  * @summary Sales summary — orders by day/range
  */
 export const GetSalesReportQueryParams = zod.object({

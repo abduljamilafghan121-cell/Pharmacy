@@ -64,6 +64,7 @@ export default function MoreScreen() {
     ...(user?.role === 'admin' ? [{
       title: 'Administration',
       items: [
+        { label: 'Expenses', icon: 'credit-card', route: '/expenses' },
         { label: 'Pharmacy Settings', icon: 'settings', route: '/settings' },
         { label: 'Staff Accounts', icon: 'user-check', route: '/users' },
         { label: 'Audit Log', icon: 'shield', route: '/audit-log' },

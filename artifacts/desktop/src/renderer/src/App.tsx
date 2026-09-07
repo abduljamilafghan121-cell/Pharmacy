@@ -29,6 +29,7 @@ const Suppliers = lazy(() => import('./screens/Suppliers'))
 const Prescriptions = lazy(() => import('./screens/Prescriptions'))
 const PurchaseOrders = lazy(() => import('./screens/PurchaseOrders'))
 const SupplierLedger = lazy(() => import('./screens/SupplierLedger'))
+const Expenses = lazy(() => import('./screens/Expenses'))
 const SupplierReturns = lazy(() => import('./screens/SupplierReturns'))
 const InsuranceClaims = lazy(() => import('./screens/InsuranceClaims'))
 const PreAuthorizations = lazy(() => import('./screens/PreAuthorizations'))
@@ -54,6 +55,7 @@ const SCREENS = {
   prescriptions: Prescriptions,
   'purchase-orders': PurchaseOrders,
   'supplier-ledger': SupplierLedger,
+  expenses: Expenses,
   'supplier-returns': SupplierReturns,
   'insurance-claims': InsuranceClaims,
   'pre-authorizations': PreAuthorizations,

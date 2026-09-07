@@ -575,6 +575,110 @@ export interface SupplierPayment {
   createdAt: string;
 }
 
+export type ExpenseCategory = typeof ExpenseCategory[keyof typeof ExpenseCategory];
+
+
+export const ExpenseCategory = {
+  rent: 'rent',
+  utilities: 'utilities',
+  salaries: 'salaries',
+  supplies: 'supplies',
+  maintenance: 'maintenance',
+  marketing: 'marketing',
+  transport: 'transport',
+  insurance: 'insurance',
+  miscellaneous: 'miscellaneous',
+} as const;
+
+export type ExpenseMethod = typeof ExpenseMethod[keyof typeof ExpenseMethod];
+
+
+export const ExpenseMethod = {
+  cash: 'cash',
+  bank: 'bank',
+  cheque: 'cheque',
+  transfer: 'transfer',
+  credit: 'credit',
+} as const;
+
+export interface Expense {
+  id: number;
+  category: ExpenseCategory;
+  description: string;
+  amount: string;
+  method: ExpenseMethod;
+  expenseDate: string;
+  /** @nullable */
+  note?: string | null;
+  recordedById?: number;
+  /** @nullable */
+  recordedByName?: string | null;
+  createdAt?: string;
+  voided?: boolean;
+  /** @nullable */
+  voidReason?: string | null;
+}
+
+export type ExpenseInputCategory = typeof ExpenseInputCategory[keyof typeof ExpenseInputCategory];
+
+
+export const ExpenseInputCategory = {
+  rent: 'rent',
+  utilities: 'utilities',
+  salaries: 'salaries',
+  supplies: 'supplies',
+  maintenance: 'maintenance',
+  marketing: 'marketing',
+  transport: 'transport',
+  insurance: 'insurance',
+  miscellaneous: 'miscellaneous',
+} as const;
+
+export type ExpenseInputMethod = typeof ExpenseInputMethod[keyof typeof ExpenseInputMethod];
+
+
+export const ExpenseInputMethod = {
+  cash: 'cash',
+  bank: 'bank',
+  cheque: 'cheque',
+  transfer: 'transfer',
+  credit: 'credit',
+} as const;
+
+export interface ExpenseInput {
+  category: ExpenseInputCategory;
+  description: string;
+  amount: string;
+  method?: ExpenseInputMethod;
+  /** @nullable */
+  expenseDate?: string | null;
+  /** @nullable */
+  note?: string | null;
+}
+
+export type ExpenseSummaryByCategory = {[key: string]: string};
+
+export interface ExpenseSummary {
+  total: string;
+  thisMonth: string;
+  byCategory: ExpenseSummaryByCategory;
+}
+
+export interface ExpensesResponse {
+  entries: Expense[];
+  summary: ExpenseSummary;
+}
+
+export interface VoidExpenseInput {
+  reason: string;
+}
+
+export interface VoidExpenseResult {
+  id: number;
+  voidedAt: string;
+  voidReason: string;
+}
+
 export interface SalesByDay {
   date: string;
   orders: number;

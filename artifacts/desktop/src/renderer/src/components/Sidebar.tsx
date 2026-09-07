@@ -22,7 +22,8 @@ import {
   ClipboardCheck,
   Zap,
   Lock,
-  Wrench
+  Wrench,
+  ReceiptText
 } from 'lucide-react'
 import { useUiStore, canAccessScreen, type Screen } from '../store/uiStore'
 import { getTheme } from '../theme'
@@ -85,6 +86,7 @@ const SECTIONS: { label: string; items: NavItem[] }[] = [
     label: 'Admin',
     items: [
       { key: 'reports', label: 'Reports', icon: BarChart3 },
+      { key: 'expenses', label: 'Expenses', icon: ReceiptText },
       { key: 'users', label: 'User Management', icon: UserCog },
       { key: 'hardware', label: 'Hardware', icon: Wrench }
     ]

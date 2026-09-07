@@ -12,6 +12,7 @@ export type Screen =
   | 'prescriptions'
   | 'purchase-orders'
   | 'supplier-ledger'
+  | 'expenses'
   | 'supplier-returns'
   | 'insurance-claims'
   | 'pre-authorizations'
@@ -60,6 +61,7 @@ interface UiState {
 // second, nav-specific permission list.
 export const SCREEN_ROLES: Partial<Record<Screen, string[]>> = {
   'supplier-ledger': ['admin'],
+  expenses: ['admin'],
   users: ['admin'],
   'audit-log': ['admin'],
   'cash-register': ['admin', 'pharmacist', 'cashier'],

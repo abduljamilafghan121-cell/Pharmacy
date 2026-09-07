@@ -90,6 +90,7 @@ function RootLayoutNav() {
       <Stack.Screen name="purchase-orders/[id]" options={{ title: 'Purchase Order' }} />
       <Stack.Screen name="suppliers/index" options={{ title: 'Suppliers' }} />
       <Stack.Screen name="suppliers/[id]" options={{ title: 'Supplier Ledger' }} />
+      <Stack.Screen name="expenses/index" options={{ title: 'Expenses' }} />
       <Stack.Screen name="reports/index" options={{ title: 'Reports' }} />
       <Stack.Screen name="users/index" options={{ title: 'Staff Accounts' }} />
       <Stack.Screen name="stocktakes/index" options={{ title: 'Stocktakes' }} />

@@ -12,6 +12,7 @@ export * from "./payments";
 export * from "./purchase-orders";
 export * from "./supplier-payments";
 export * from "./supplier-returns";
+export * from "./expenses";
 export * from "./pharmacy-settings";
 export * from "./audit-logs";
 export * from "./cash-shifts";
