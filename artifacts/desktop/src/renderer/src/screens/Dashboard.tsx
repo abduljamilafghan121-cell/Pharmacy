@@ -170,7 +170,7 @@ export default function Dashboard(): ReactElement {
     sendDigest.mutate(undefined, {
       onSuccess: (data) =>
         showToast(
-          `Digest logged — ${data.summary.lowStockCount} low-stock, ${data.summary.expiringCount} expiring, ${data.summary.pendingPrescriptionCount} prescriptions pending (no email provider connected yet)`
+          `Digest sent — ${data.summary.lowStockCount} low-stock, ${data.summary.expiringCount} expiring, ${data.summary.pendingPrescriptionCount} prescriptions pending`
         ),
       onError: (err) => showToast(err.message || "Couldn't send digest")
     })
@@ -182,7 +182,7 @@ export default function Dashboard(): ReactElement {
       disabled={sendDigest.isPending}
       style={{ border: `1px solid ${theme.borderStrong}`, color: theme.text }}
       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-opacity hover:opacity-80 disabled:opacity-60 shrink-0"
-      title="Log an operations digest for today (admin)"
+      title="Email today's operations digest (admin)"
     >
       {sendDigest.isPending ? <Loader2 size={13} className="animate-spin" /> : <Mail size={13} />}
       Email Digest

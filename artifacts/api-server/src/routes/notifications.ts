@@ -7,10 +7,9 @@ import { getDbErrorMessage } from "../lib/api-errors";
 
 const router: IRouter = Router();
 
-// Manually triggered for now (no email provider or cron scheduler is wired
-// up yet — see lib/mailer.ts). Once you add a cron service (e.g. a daily
-// Vercel Cron hitting this endpoint with an admin-scoped token), this same
-// route works unchanged for automatic daily digests.
+// Manually triggered for now (admin-role only). Once you add a cron service
+// (e.g. a daily Vercel Cron hitting this endpoint with an admin-scoped token),
+// this same route works unchanged for automatic daily digests.
 router.post("/notifications/send-digest", requireAuth, requireRole("admin"), async (req, res): Promise<void> => {
   try {
     const [inventoryRow] = await db
@@ -38,7 +37,7 @@ router.post("/notifications/send-digest", requireAuth, requireRole("admin"), asy
     };
     await sendDigestEmail(recipient, summary);
 
-    res.json({ message: "Digest sent (see server logs — no email provider is connected yet).", summary });
+    res.json({ message: "Digest sent by email.", summary });
   } catch (err) {
     res.status(500).json({ error: "Failed to send digest.", detail: getDbErrorMessage(err) });
   }

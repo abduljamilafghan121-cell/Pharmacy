@@ -185,6 +185,167 @@ This is an automated message — please do not reply.
 `;
 }
 
+// ── Digest templates ──────────────────────────────────────────────────────────
+
+function buildDigestStatCell(count: number, label: string, color: string): string {
+  return `
+    <td width="33%" style="padding:8px;">
+      <table width="100%" cellpadding="0" cellspacing="0" role="presentation"
+             style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;">
+        <tr>
+          <td align="center" style="padding:14px 8px;">
+            <p style="margin:0;font-size:32px;font-weight:800;line-height:1;color:${color};">${count}</p>
+            <p style="margin:8px 0 0;color:#64748b;font-size:12px;line-height:1.35;">${label}</p>
+          </td>
+        </tr>
+      </table>
+    </td>`;
+}
+
+function buildDigestHtml(summary: {
+  lowStockCount: number;
+  expiringCount: number;
+  pendingPrescriptionCount: number;
+}): string {
+  const day = new Date().toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
+
+  const attention = (n: number): string =>
+    n === 0
+      ? "Nothing needs your attention here."
+      : `${n === 1 ? "An item" : `${n} items`} need${n === 1 ? "s" : ""} your attention.`;
+
+  const dashboardLink = process.env["APP_URL"];
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PharmaCore – Daily Operations Digest</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f1f5f9;font-family:Arial,Helvetica,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation"
+         style="background-color:#f1f5f9;padding:40px 16px;">
+    <tr>
+      <td align="center">
+
+        <!-- Card -->
+        <table width="600" cellpadding="0" cellspacing="0" role="presentation"
+               style="max-width:600px;width:100%;background:#ffffff;border-radius:12px;
+                      overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,0.08);">
+
+          <!-- ── Header ─────────────────────────────────────────────────── -->
+          <tr>
+            <td style="background-color:#0f766e;padding:36px 40px;text-align:center;">
+              <h1 style="margin:0;color:#ffffff;font-size:28px;font-weight:700;
+                         letter-spacing:-0.5px;line-height:1.2;">PharmaCore</h1>
+              <p style="margin:8px 0 0;color:#99f6e4;font-size:13px;letter-spacing:0.3px;">
+                Smart Pharmacy. Better Care.
+              </p>
+            </td>
+          </tr>
+
+          <!-- ── Body ──────────────────────────────────────────────────── -->
+          <tr>
+            <td style="padding:40px 40px 32px;">
+
+              <h2 style="margin:0 0 6px;color:#0f172a;font-size:22px;font-weight:700;">
+                Daily Operations Digest – ${day}
+              </h2>
+              <p style="margin:0 0 28px;color:#64748b;font-size:13px;">
+                Here's a snapshot of your pharmacy right now.
+              </p>
+
+              <!-- Stat tiles -->
+              <table width="100%" cellpadding="0" cellspacing="0" role="presentation"
+                     style="margin-bottom:28px;">
+                <tr>
+                  ${buildDigestStatCell(summary.lowStockCount, "Low stock", "#d97706")}
+                  ${buildDigestStatCell(summary.expiringCount, "Expiring ≤ 30 days", "#ea580c")}
+                  ${buildDigestStatCell(summary.pendingPrescriptionCount, "Pending prescriptions", "#2563eb")}
+                </tr>
+              </table>
+
+              <p style="margin:0 0 10px;color:#334155;font-size:15px;line-height:1.65;">
+                ${attention(summary.lowStockCount)} Low stock: reorder before you run out.
+              </p>
+              <p style="margin:0 0 10px;color:#334155;font-size:15px;line-height:1.65;">
+                ${attention(summary.expiringCount)} Expiring soon: plan markdowns or returns.
+              </p>
+              <p style="margin:0 0 28px;color:#334155;font-size:15px;line-height:1.65;">
+                ${attention(summary.pendingPrescriptionCount)} Pending prescriptions: decide and notify patients.
+              </p>
+
+              ${
+                dashboardLink
+                  ? `<p style="margin:0 0 6px;color:#64748b;font-size:13px;">
+                       Open the dashboard for details:
+                     </p>
+                     <p style="margin:0;">
+                       <a href="${dashboardLink}" style="color:#0f766e;font-size:14px;font-weight:600;text-decoration:underline;">
+                         ${dashboardLink}
+                       </a>
+                     </p>`
+                  : ""
+              }
+
+            </td>
+          </tr>
+
+          <!-- ── Footer ─────────────────────────────────────────────────── -->
+          <tr>
+            <td style="background-color:#f8fafc;padding:22px 40px;
+                       border-top:1px solid #e2e8f0;text-align:center;">
+              <p style="margin:0;color:#94a3b8;font-size:12px;">
+                © PharmaCore. All rights reserved.
+              </p>
+              <p style="margin:6px 0 0;color:#cbd5e1;font-size:11px;">
+                This is an automated message — please do not reply to this email.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+        <!-- /Card -->
+
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
+function buildDigestText(summary: {
+  lowStockCount: number;
+  expiringCount: number;
+  pendingPrescriptionCount: number;
+}): string {
+  const day = new Date().toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
+
+  return `PharmaCore – Daily Operations Digest (${day})
+==================================================
+
+Here's a snapshot of your pharmacy right now:
+
+  Low stock:               ${summary.lowStockCount}
+  Expiring within 30 days: ${summary.expiringCount}
+  Pending prescriptions:   ${summary.pendingPrescriptionCount}
+
+${summary.lowStockCount === 0 ? "" : `Action: ${summary.lowStockCount} low-stock item(s) to reorder.\n`}${summary.expiringCount === 0 ? "" : `Action: ${summary.expiringCount} item(s) expiring soon — plan markdowns or returns.\n`}${summary.pendingPrescriptionCount === 0 ? "" : `Action: ${summary.pendingPrescriptionCount} pending prescription(s) to review.\n`}
+--
+© PharmaCore. All rights reserved.
+This is an automated message — please do not reply.
+`;
+}
+
 // ── Exported functions ────────────────────────────────────────────────────────
 
 /**
@@ -222,16 +383,41 @@ export async function sendPasswordResetEmail(to: string, resetLink: string): Pro
 }
 
 /**
- * Low-stock / expiring-stock / pending-prescription digest.
- * (Stub — real delivery not yet implemented. Wire up when an email schedule
- * is configured.)
+ * Send the daily operations digest (low stock / expiring stock / pending
+ * prescriptions) to the given address via Gmail SMTP.
+ *
+ * In production (GMAIL_USER + GMAIL_PASS set): delivers via Gmail SMTP; the
+ * digests can be triggered manually from the desktop dashboard or by an
+ * external scheduler (e.g. a Vercel Cron) hitting POST /notifications/send-digest.
+ *
+ * In development (credentials absent): throws so callers know no real
+ * delivery happened — the summary is logged at INFO so the flow can be
+ * exercised without credentials.
+ *
+ * Throws if the SMTP send fails so callers can handle the error explicitly.
  */
 export async function sendDigestEmail(
   to: string,
   summary: { lowStockCount: number; expiringCount: number; pendingPrescriptionCount: number },
 ): Promise<void> {
-  logger.info(
-    { to, ...summary },
-    "mailer: digest stub called — no email sent (not yet implemented)",
-  );
+  const transporter = createTransporter();
+
+  if (!transporter) {
+    // Credentials are not configured — same contract as password-reset mail.
+    throw new Error(
+      "Email delivery is not configured: GMAIL_USER and GMAIL_PASS environment variables are required.",
+    );
+  }
+
+  logger.info({ to, ...summary }, "mailer: sending operations digest");
+
+  await transporter.sendMail({
+    from: `"PharmaCore" <${process.env["GMAIL_USER"]}>`,
+    to,
+    subject: "PharmaCore – Daily Operations Digest",
+    html: buildDigestHtml(summary),
+    text: buildDigestText(summary),
+  });
+
+  logger.info({ to, ...summary }, "mailer: operations digest delivered");
 }
