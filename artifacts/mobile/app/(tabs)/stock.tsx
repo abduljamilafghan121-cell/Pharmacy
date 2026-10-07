@@ -7,9 +7,9 @@ import {
   getListMedicinesQueryKey,
 } from '@workspace/api-client-react';
 import { Feather, Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -36,6 +36,13 @@ export default function StockScreen() {
   const [search, setSearch] = useState('');
   const [catId, setCatId] = useState<number | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  // Dashboard's "Add Medicine" quick action lands here with ?add=<timestamp>
+  // so the sheet opens straight away; the timestamp makes repeat taps
+  // re-trigger the effect even when we're already on this screen.
+  const { add } = useLocalSearchParams<{ add?: string }>();
+  useEffect(() => {
+    if (add) setAddOpen(true);
+  }, [add]);
   const emptyForm = {
     name: '', genericName: '', barcode: '', price: '', quantity: '', expiryDate: '',
     manufacturer: '', batchNumber: '', categoryId: null as number | null,
