@@ -256,7 +256,7 @@ export default function ExpensesScreen() {
 
   return (
     <View style={s.container}>
-      <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 96 + insets.bottom }}>
         <View style={s.header}>
           <TouchableOpacity style={s.headerRow} onPress={() => router.back()}>
             <Feather name="arrow-left" size={20} color="rgba(255,255,255,0.8)" />
@@ -409,7 +409,7 @@ export default function ExpensesScreen() {
       <TouchableOpacity
         activeOpacity={1}
         onPress={() => setAddOpen(true)}
-        style={{ position: 'absolute', right: 16, bottom: 20, width: 56, height: 56, borderRadius: 28, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 8, shadowOffset: { width: 0, height: 3 } }}
+        style={{ position: 'absolute', right: 16, bottom: insets.bottom + 16, width: 56, height: 56, borderRadius: 28, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 8, shadowOffset: { width: 0, height: 3 } }}
       >
         <Feather name="plus" size={26} color="#fff" />
       </TouchableOpacity>
