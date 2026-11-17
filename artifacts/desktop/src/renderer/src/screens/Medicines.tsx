@@ -1,6 +1,6 @@
 ﻿import type { ReactElement } from 'react'
 import { useEffect, useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useQueryClient } from '@tanstack/react-query'
 import {
   useListMedicines,
   useListCategories,
@@ -62,9 +62,12 @@ export default function Medicines(): ReactElement {
   const [addOpen, setAddOpen] = useState(false)
   const [unitsFor, setUnitsFor] = useState<MedicineRow | null>(null)
 
-  const { data: medicines = [], isLoading, isError, refetch } = useListMedicines({
+  const medicinesParams = {
     search: debouncedSearch.trim() || undefined,
     categoryId: categoryId || undefined
+  }
+  const { data: medicines = [], isLoading, isError, refetch } = useListMedicines(medicinesParams, {
+    query: { queryKey: getListMedicinesQueryKey(medicinesParams), placeholderData: keepPreviousData }
   })
   const { data: categories = [] } = useListCategories()
 

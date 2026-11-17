@@ -8,7 +8,7 @@ import {
 } from '@workspace/api-client-react';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQueryClient } from '@tanstack/react-query';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -34,6 +34,11 @@ export default function StockScreen() {
   const topInset = insets.top + (Platform.OS === 'web' ? 67 : 0);
 
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 200);
+    return () => clearTimeout(t);
+  }, [search]);
   const [catId, setCatId] = useState<number | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   // Dashboard's "Add Medicine" quick action lands here with ?add=<timestamp>
@@ -50,7 +55,11 @@ export default function StockScreen() {
   };
   const [form, setForm] = useState(emptyForm);
 
-  const { data: medicines, isLoading, refetch } = useListMedicines({ search: search || undefined, categoryId: catId ?? undefined }, {});
+  const medicinesParams = { search: debouncedSearch.trim() || undefined, categoryId: catId ?? undefined };
+  const { data: medicines, isLoading, refetch } = useListMedicines(
+    medicinesParams,
+    { query: { queryKey: getListMedicinesQueryKey(medicinesParams), placeholderData: keepPreviousData } }
+  );
   const { data: categories } = useListCategories({});
   const createMed = useCreateMedicine({ mutation: { onSuccess: () => { qc.invalidateQueries({ queryKey: getListMedicinesQueryKey() }); setAddOpen(false); setForm(emptyForm); } } });
 

@@ -32,7 +32,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
-import { useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQueryClient } from '@tanstack/react-query';
 import { getListOrdersQueryKey, getListMedicinesQueryKey } from '@workspace/api-client-react';
 
 type CartItem = {
@@ -272,8 +272,18 @@ export default function SalesScreen() {
   // History search
   const [historySearch, setHistorySearch] = useState('');
 
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 200);
+    return () => clearTimeout(t);
+  }, [search]);
+
   const { data: categories } = useListCategories({});
-  const { data: medicines, isLoading } = useListMedicines({ search: search || undefined, categoryId: catId ?? undefined }, {});
+  const medicinesParams = { search: debouncedSearch.trim() || undefined, categoryId: catId ?? undefined };
+  const { data: medicines, isLoading } = useListMedicines(
+    medicinesParams,
+    { query: { queryKey: getListMedicinesQueryKey(medicinesParams), placeholderData: keepPreviousData } }
+  );
 
   // FlatList keeps its scroll offset when `data` shrinks (e.g. switching from
   // "All" to a narrow category like "Antibiotics") — without this, the view

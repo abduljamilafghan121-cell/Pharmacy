@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import {
@@ -7,7 +7,7 @@ import {
   getListMedicinesQueryKey, getListMedicineUnitsQueryKey,
   type Medicine, type MedicineUnit,
 } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,10 +24,17 @@ import { formatStockDisplay } from "@/lib/stock-format";
 export default function Medicines() {
   const { user } = useAuth();
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 200);
+    return () => clearTimeout(t);
+  }, [search]);
   const [categoryId, setCategoryId] = useState<number | "">("");
 
+  const medicinesParams = { search: debouncedSearch.trim() || undefined, categoryId: categoryId || undefined };
   const { data: medicines, isLoading, isError, error, refetch } = useListMedicines(
-    { search: search || undefined, categoryId: categoryId || undefined }
+    medicinesParams,
+    { query: { queryKey: getListMedicinesQueryKey(medicinesParams), placeholderData: keepPreviousData } }
   );
   const { data: categories } = useListCategories();
   const isAdmin = user?.role === "admin" || user?.role === "pharmacist";
