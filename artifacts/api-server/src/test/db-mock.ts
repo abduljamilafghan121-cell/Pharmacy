@@ -261,6 +261,18 @@ function inlineParams(text: string, values: unknown[], colTypes: Record<string, 
 
 let bundlePromise: Promise<TestDbBundle> | null = null;
 
+// Count of statements executed through the pg-mem adapter. Lets tests assert
+// that an endpoint uses a bounded number of queries instead of N+1.
+let statementCount = 0;
+
+export function resetStatementCount(): void {
+  statementCount = 0;
+}
+
+export function getStatementCount(): number {
+  return statementCount;
+}
+
 function createBundle(): Promise<TestDbBundle> {
   const mem = newDb();
 
@@ -290,6 +302,7 @@ function createBundle(): Promise<TestDbBundle> {
   // Patch the pg-mem adapter at its two choke points to accommodate drizzle.
   const colTypes = buildColTypes();
   (Pool as any).prototype.adaptQuery = function (this: any, query: any, values: any) {
+    statementCount += 1;
     if (query && typeof query === "object" && query.types) {
       const { types: _types, ...rest } = query;
       query = rest;

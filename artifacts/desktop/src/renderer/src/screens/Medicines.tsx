@@ -62,7 +62,7 @@ export default function Medicines(): ReactElement {
   const [addOpen, setAddOpen] = useState(false)
   const [unitsFor, setUnitsFor] = useState<MedicineRow | null>(null)
 
-  const { data: medicines = [], isLoading } = useListMedicines({
+  const { data: medicines = [], isLoading, isError, refetch } = useListMedicines({
     search: debouncedSearch.trim() || undefined,
     categoryId: categoryId || undefined
   })
@@ -140,6 +140,23 @@ export default function Medicines(): ReactElement {
           {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
             <div key={i} style={{ background: theme.hover }} className="h-64 rounded-xl animate-pulse" />
           ))}
+        </div>
+      ) : isError ? (
+        <div className="flex flex-col items-center gap-2 py-16 text-center">
+          <AlertCircle size={30} color={theme.red} strokeWidth={1.6} />
+          <p style={{ color: theme.text }} className="text-sm font-medium">
+            Couldn't load medicines
+          </p>
+          <p style={{ color: theme.muted }} className="text-xs">
+            The server didn't respond. Check your connection, then retry.
+          </p>
+          <button
+            onClick={() => refetch()}
+            style={{ border: `1px solid ${theme.borderStrong}`, color: theme.text }}
+            className="mt-2 rounded-lg px-3.5 py-1.5 text-xs font-medium"
+          >
+            Retry
+          </button>
         </div>
       ) : rows.length === 0 ? (
         <div className="flex flex-col items-center gap-2 py-16 text-center">

@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, ilike, or, and, sql, gte, asc, isNull, ne } from "drizzle-orm";
+import { eq, ilike, inArray, or, and, sql, gte, asc, isNull, ne } from "drizzle-orm";
 import { db, medicinesTable, categoriesTable, medicineUnitsTable, ordersTable, orderItemsTable, medicineBatchesTable } from "@workspace/db";
 import {
   CreateMedicineBody, UpdateMedicineBody,
@@ -50,6 +50,26 @@ async function fetchUnitsForMedicine(medicineId: number) {
     .orderBy(medicineUnitsTable.conversionFactorToBase);
 }
 
+// The serverless pool holds a single connection per instance (see lib/db), so
+// querying units per medicine turns a list request into N+1 serialized
+// round-trips and blows the Vercel timeout once the catalog grows. Fetch all
+// units for the page in one query and group them in memory instead.
+async function attachUnits<T extends { id: number }>(rows: T[]) {
+  if (rows.length === 0) return [] as (T & { units: Awaited<ReturnType<typeof fetchUnitsForMedicine>> })[];
+  const unitRows = await db
+    .select()
+    .from(medicineUnitsTable)
+    .where(inArray(medicineUnitsTable.medicineId, rows.map((r) => r.id)))
+    .orderBy(medicineUnitsTable.conversionFactorToBase);
+  const byMedicine = new Map<number, typeof unitRows>();
+  for (const unit of unitRows) {
+    const list = byMedicine.get(unit.medicineId);
+    if (list) list.push(unit);
+    else byMedicine.set(unit.medicineId, [unit]);
+  }
+  return rows.map((r) => ({ ...r, units: byMedicine.get(r.id) ?? [] }));
+}
+
 async function fetchMedicineWithUnits(id: number) {
   const [row] = await db.select(MEDICINE_SELECT).from(medicinesTable)
     .leftJoin(categoriesTable, eq(medicinesTable.categoryId, categoriesTable.id))
@@ -66,11 +86,7 @@ router.get("/medicines/low-stock", requireAuth, async (_req, res): Promise<void>
       .from(medicinesTable)
       .leftJoin(categoriesTable, eq(medicinesTable.categoryId, categoriesTable.id))
       .where(sql`${medicinesTable.quantity} <= ${medicinesTable.reorderLevel}`);
-    // Attach units
-    const withUnits = await Promise.all(rows.map(async (r) => ({
-      ...r, units: await fetchUnitsForMedicine(r.id),
-    })));
-    res.json(withUnits);
+    res.json(await attachUnits(rows));
   } catch (err) {
     res.status(500).json({ error: "Failed to load low-stock medicines.", detail: getDbErrorMessage(err) });
   }
@@ -93,10 +109,7 @@ router.get("/medicines/expiring", requireAuth, async (_req, res): Promise<void> 
           sql`${medicinesTable.expiryDate} <= ${cutoff}`,
         )
       );
-    const withUnits = await Promise.all(rows.map(async (r) => ({
-      ...r, units: await fetchUnitsForMedicine(r.id),
-    })));
-    res.json(withUnits);
+    res.json(await attachUnits(rows));
   } catch (err) {
     res.status(500).json({ error: "Failed to load expiring medicines.", detail: getDbErrorMessage(err) });
   }
@@ -280,16 +293,9 @@ router.get("/medicines", requireAuth, async (req, res): Promise<void> => {
         baseQuery.limit(limit).offset(offset),
         db.select({ count: sql<number>`count(*)::int` }).from(medicinesTable).where(whereClause),
       ]);
-      const withUnits = await Promise.all(rows.map(async (r) => ({
-        ...r, units: await fetchUnitsForMedicine(r.id),
-      })));
-      res.json({ data: withUnits, total: countResult[0]?.count ?? 0, page, limit });
+      res.json({ data: await attachUnits(rows), total: countResult[0]?.count ?? 0, page, limit });
     } else {
-      const rows = await baseQuery;
-      const withUnits = await Promise.all(rows.map(async (r) => ({
-        ...r, units: await fetchUnitsForMedicine(r.id),
-      })));
-      res.json(withUnits);
+      res.json(await attachUnits(await baseQuery));
     }
   } catch (err) {
     res.status(500).json({ error: "Failed to load medicines.", detail: getDbErrorMessage(err) });
@@ -529,10 +535,7 @@ router.get("/medicines/:id/generics", requireAuth, async (req, res): Promise<voi
       )
       .orderBy(medicinesTable.price);
 
-    const withUnits = await Promise.all(alts.map(async (r) => ({
-      ...r, units: await fetchUnitsForMedicine(r.id),
-    })));
-    res.json(withUnits);
+    res.json(await attachUnits(alts));
   } catch (err) {
     res.status(500).json({ error: "Failed to load generic alternatives.", detail: getDbErrorMessage(err) });
   }
