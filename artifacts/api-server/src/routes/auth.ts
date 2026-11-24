@@ -342,13 +342,13 @@ router.post("/auth/forgot-password", async (req, res): Promise<void> => {
 
     logger.info({ userId: user.id }, "forgot-password: reset token issued, sending email");
 
-    // If the mailer throws (e.g. bad credentials, SMTP timeout) we log the
-    // failure but still confirm receipt — the token is already stored so the
-    // user can retry the request.
     try {
       await sendPasswordResetEmail(user.email, resetLink);
     } catch (mailErr) {
       logger.error({ err: mailErr, userId: user.id }, "forgot-password: email delivery failed");
+      const detail = mailErr instanceof Error ? mailErr.message : "Email delivery failed.";
+      res.status(503).json({ error: "Password reset email could not be sent.", detail });
+      return;
     }
 
     res.json({ message: "A password reset link has been sent. It expires in 1 hour." });
