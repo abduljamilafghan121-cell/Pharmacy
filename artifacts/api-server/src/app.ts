@@ -28,14 +28,13 @@ app.use(
 );
 // CORS is locked to an explicit allow-list instead of echoing back whatever
 // Origin a request sends. Requests without an Origin header (same-origin
-// browsers, native/CLI clients) are always allowed — browsers only send
-// Origin on genuinely cross-origin requests, which is exactly what we gate.
-// The desktop app renders from file://, which sends "Origin: null"; that is
-// allowed by default (CORS_ALLOW_NULL_ORIGIN=false to disable). The web SPA
-// is same-origin through the root /api rewrites, so its session rides on the
-// httpOnly pharma_token cookie — browsers send same-origin cookies regardless
-// of CORS. Desktop/mobile call cross-origin with an explicit Authorization
-// header — not cookies — so credentials stays false.
+// browsers, native/CLI clients) are always allowed. Browsers may also send
+// an Origin header on same-origin POST/PUT/PATCH/DELETE requests, so we
+// also allow the request's own origin. The desktop app renders from
+// file://, which sends "Origin: null"; that is allowed by default
+// (CORS_ALLOW_NULL_ORIGIN=false to disable). Desktop/mobile call
+// cross-origin with an explicit Authorization header — not cookies — so
+// credentials stays false.
 const allowedOrigins = (process.env["CORS_ORIGINS"] ?? "")
   .split(",")
   .map((s) => s.trim())
@@ -51,8 +50,16 @@ const isLocalhost = (origin: string): boolean => {
   }
 };
 
-app.use(
-  cors({
+app.use((req, res, next) => {
+  const forwardedProto = req.headers["x-forwarded-proto"];
+  const proto =
+    (Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto)
+      ?.split(",")[0]
+      ?.trim() || req.protocol;
+  const host = req.headers["x-forwarded-host"] ?? req.headers.host;
+  const selfOrigin = host ? `${proto}://${host}` : null;
+
+  return cors({
     origin: (origin, cb) => {
       if (!origin) return cb(null, true);
       if (allowNullOrigin && origin === "null") return cb(null, true);
@@ -62,6 +69,7 @@ app.use(
       // localhost, so it is not an open proxy risk.
       if (isLocalhost(origin)) return cb(null, true);
       if (allowedOrigins.includes(origin)) return cb(null, true);
+      if (selfOrigin && origin === selfOrigin) return cb(null, true);
       const error = new Error(`Origin not allowed by CORS policy: ${origin}`);
       (error as { status?: number }).status = 403;
       return cb(error, false);
@@ -71,8 +79,8 @@ app.use(
     // dev web) skip the extra OPTIONS round-trip per request.
     maxAge: 86400,
     credentials: false,
-  }),
-);
+  })(req, res, next);
+});
 // Raise the JSON body limit to 4 MB so that base64-encoded logo images
 // and prescription attachments (stored as data URIs, ~33% larger than
 // the original binary) don't hit the default 100 KB Express limit.
