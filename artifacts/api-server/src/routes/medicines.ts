@@ -313,7 +313,23 @@ router.post("/medicines", requireAuth, requireRole("admin", "pharmacist"), async
       ...parsed.data,
       expiryDate: parsed.data.expiryDate ? parsed.data.expiryDate.toISOString().slice(0, 10) : null,
     };
-    const [row] = await db.insert(medicinesTable).values(values).returning();
+    const row = await db.transaction(async (tx) => {
+      const [inserted] = await tx.insert(medicinesTable).values(values).returning();
+      // Keep batch tracking in sync: medicines.quantity is a cache derived from
+      // sellable batch rows. Without an initial batch, FEFO allocation fails with
+      // "Insufficient stock" even when quantity shows available.
+      if ((inserted.quantity ?? 0) > 0 || inserted.batchNumber || inserted.expiryDate) {
+        await tx.insert(medicineBatchesTable).values({
+          medicineId: inserted.id,
+          batchNumber: inserted.batchNumber ?? null,
+          expiryDate: inserted.expiryDate ?? null,
+          quantity: inserted.quantity ?? 0,
+          supplierId: inserted.supplierId ?? null,
+        });
+        await refreshMedicineAggregate(tx, inserted.id);
+      }
+      return inserted;
+    });
     const full = await fetchMedicineWithUnits(row.id);
     await logAudit(req.auth!.userId, "CREATE", "medicine", row.id, `Created medicine "${row.name}"`);
     res.status(201).json(full);
@@ -350,7 +366,42 @@ router.patch("/medicines/:id", requireAuth, requireRole("admin", "pharmacist"), 
         ? { expiryDate: expiryDate ? expiryDate.toISOString().slice(0, 10) : null }
         : {}),
     };
-    const [updated] = await db.update(medicinesTable).set(values).where(eq(medicinesTable.id, params.data.id)).returning();
+    const updated = await db.transaction(async (tx) => {
+      const [row] = await tx.update(medicinesTable).set(values).where(eq(medicinesTable.id, params.data.id)).returning();
+      if (!row) return null;
+
+      // Batch-aware stock: if quantity changed but no batch rows exist (legacy/manual
+      // stock), create/sync a batch so FEFO allocation sees sellable stock.
+      const quantityChanged = medicineFields.quantity !== undefined;
+      if (quantityChanged) {
+        const batches = await tx.select({ id: medicineBatchesTable.id })
+          .from(medicineBatchesTable)
+          .where(eq(medicineBatchesTable.medicineId, row.id));
+        if (batches.length === 0) {
+          if ((row.quantity ?? 0) > 0) {
+            await tx.insert(medicineBatchesTable).values({
+              medicineId: row.id,
+              batchNumber: row.batchNumber ?? null,
+              expiryDate: row.expiryDate ?? null,
+              quantity: row.quantity,
+              supplierId: row.supplierId ?? null,
+            });
+          }
+        } else if (batches.length === 1) {
+          // Single-batch medicine: keep the batch quantity aligned with manual edits.
+          await tx.update(medicineBatchesTable)
+            .set({
+              quantity: row.quantity ?? 0,
+              batchNumber: row.batchNumber ?? null,
+              expiryDate: row.expiryDate ?? null,
+              supplierId: row.supplierId ?? null,
+            })
+            .where(eq(medicineBatchesTable.id, batches[0].id));
+        }
+        await refreshMedicineAggregate(tx, row.id);
+      }
+      return row;
+    });
     if (!updated) { res.status(404).json({ error: "Medicine not found." }); return; }
     const full = await fetchMedicineWithUnits(updated.id);
     await logAudit(req.auth!.userId, "UPDATE", "medicine", updated.id, `Updated medicine "${updated.name}"`);
